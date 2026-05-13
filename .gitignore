@@ -37,6 +37,7 @@ npm-debug.log*
 hostinger/dist-backend/
 hostinger/dist-frontend/
 hostinger/dist-backend.tar.gz
+hostinger/dist-backend.zip
 hostinger/dist-frontend.zip
 
 # Prisma local schema (generated)
