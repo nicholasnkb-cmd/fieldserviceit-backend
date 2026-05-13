@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  mysql-test:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: fieldserviceit-test
+      MYSQL_USER: app
+      MYSQL_PASSWORD: devpassword
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailhog-test:
+    image: mailhog/mailhog
+    ports:
+      - "1026:1025"
+      - "8026:8025"

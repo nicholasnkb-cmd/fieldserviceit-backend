@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: fieldserviceit
+data:
+  NODE_ENV: production
+  CORS_ORIGIN: https://app.fieldserviceit.com
+  API_URL: https://api.fieldserviceit.com

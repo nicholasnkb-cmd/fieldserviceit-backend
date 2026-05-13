@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+backend/dist/
+frontend/.next/
+
+# Environment
+.env
+.env.local
+.env*.local
+backend/.env
+backend/.env.prod.bak
+
+# Database
+*.db
+*.db-journal
+prisma/dev.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Hostinger build artifacts
+hostinger/dist-backend/
+hostinger/dist-frontend/
+hostinger/dist-backend.tar.gz
+hostinger/dist-frontend.zip
+
+# Prisma local schema (generated)
+backend/prisma/schema.local.prisma
+
+# Seed lock
+backend/prisma/seed.lock
+
+# Docker
+docker-data/
+
+# Coverage
+coverage/
