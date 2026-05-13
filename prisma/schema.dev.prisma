@@ -1,0 +1,335 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id              String         @id @default(uuid())
+  name            String
+  slug            String         @unique
+  domain          String?
+  logo            String?
+  settings        String?
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+  branding        String?
+  inviteCode      String?        @unique
+  inviteExpiresAt DateTime?
+  assets          Asset[]
+  auditLogs       AuditLog[]
+  contracts       Contract[]
+  dispatches      Dispatch[]
+  notifications   Notification[]
+  slas            SLA[]
+  tickets         Ticket[]
+  users           User[]
+  workflows       Workflow[]
+  workflowRuns    WorkflowRun[]
+}
+
+model User {
+  id                 String                  @id @default(uuid())
+  email              String                  @unique
+  passwordHash       String?
+  firstName          String
+  lastName           String
+  phone              String?
+  avatarUrl          String?
+  role               String                  @default("CLIENT")
+  userType           String                  @default("BUSINESS")
+  companyId          String?
+  isActive           Boolean                 @default(true)
+  emailVerified      Boolean                 @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  deletedAt          DateTime?
+  auditLogs          AuditLog[]
+  dispatches         Dispatch[]
+  notifications      Notification[]
+  notificationPrefs  NotificationPreference?
+  slaEscalations     SLA[]
+  sessions           Session[]
+  assignedTickets    Ticket[]                @relation("AssignedTo")
+  createdTickets     Ticket[]                @relation("CreatedBy")
+  timelineEntries    TicketTimeline[]
+  company            Company?                @relation(fields: [companyId], references: [id])
+  workflowRunActions WorkflowRunStep[]
+
+  @@index([companyId])
+  @@index([email])
+  @@index([userType])
+}
+
+model Ticket {
+  id            String           @id @default(uuid())
+  ticketNumber  String           @unique
+  title         String
+  description   String?
+  status        String           @default("OPEN")
+  priority      String           @default("MEDIUM")
+  type          String           @default("INCIDENT")
+  companyId     String?
+  createdById   String
+  assignedToId  String?
+  assetId       String?
+  slaId         String?
+  contractId    String?
+  trackingToken String?
+  resolution    String?
+  resolvedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  deletedAt     DateTime?
+  dispatches    Dispatch[]
+  contract      Contract?        @relation(fields: [contractId], references: [id])
+  sla           SLA?             @relation(fields: [slaId], references: [id])
+  asset         Asset?           @relation(fields: [assetId], references: [id])
+  assignedTo    User?            @relation("AssignedTo", fields: [assignedToId], references: [id])
+  createdBy     User             @relation("CreatedBy", fields: [createdById], references: [id])
+  company       Company?         @relation(fields: [companyId], references: [id])
+  timeline      TicketTimeline[]
+  workflowRuns  WorkflowRun[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([ticketNumber])
+}
+
+model TicketTimeline {
+  id        String   @id @default(uuid())
+  ticketId  String
+  action    String
+  actorId   String
+  oldValue  String?
+  newValue  String?
+  comment   String?
+  createdAt DateTime @default(now())
+  actor     User     @relation(fields: [actorId], references: [id])
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId])
+}
+
+model Asset {
+  id           String     @id @default(uuid())
+  name         String
+  assetType    String
+  serialNumber String?
+  manufacturer String?
+  model        String?
+  location     String?
+  ipAddress    String?
+  macAddress   String?
+  os           String?
+  cpu          String?
+  ram          String?
+  storage      String?
+  status       String     @default("active")
+  notes        String?
+  companyId    String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+  company      Company    @relation(fields: [companyId], references: [id])
+  tickets      Ticket[]
+  contracts    Contract[] @relation("AssetToContract")
+
+  @@index([companyId])
+  @@index([assetType])
+}
+
+model Contract {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  companyId   String
+  startDate   DateTime
+  endDate     DateTime
+  value       Float?
+  status      String    @default("active")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  company     Company   @relation(fields: [companyId], references: [id])
+  tickets     Ticket[]
+  assets      Asset[]   @relation("AssetToContract")
+
+  @@index([companyId])
+}
+
+model SLA {
+  id                String   @id @default(uuid())
+  name              String
+  companyId         String
+  responseTimeMin   Int
+  resolutionTimeMin Int
+  priority          String
+  escalateAfterMin  Int?
+  escalateToId      String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  escalateTo        User?    @relation(fields: [escalateToId], references: [id])
+  company           Company  @relation(fields: [companyId], references: [id])
+  tickets           Ticket[]
+
+  @@index([companyId])
+}
+
+model Workflow {
+  id          String         @id @default(uuid())
+  name        String
+  description String?
+  triggerOn   String         @default("ticket.created")
+  companyId   String
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deletedAt   DateTime?
+  company     Company        @relation(fields: [companyId], references: [id])
+  runs        WorkflowRun[]
+  steps       WorkflowStep[]
+
+  @@index([companyId])
+}
+
+model WorkflowStep {
+  id         String            @id @default(uuid())
+  workflowId String
+  stepOrder  Int
+  action     String
+  config     String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  runs       WorkflowRunStep[]
+  workflow   Workflow          @relation(fields: [workflowId], references: [id])
+
+  @@index([workflowId])
+}
+
+model WorkflowRun {
+  id          String            @id @default(uuid())
+  workflowId  String
+  ticketId    String
+  companyId   String
+  status      String            @default("running")
+  startedAt   DateTime          @default(now())
+  completedAt DateTime?
+  company     Company           @relation(fields: [companyId], references: [id])
+  ticket      Ticket            @relation(fields: [ticketId], references: [id])
+  workflow    Workflow          @relation(fields: [workflowId], references: [id])
+  steps       WorkflowRunStep[]
+
+  @@index([workflowId])
+  @@index([ticketId])
+  @@index([companyId])
+}
+
+model WorkflowRunStep {
+  id           String       @id @default(uuid())
+  runId        String
+  stepId       String
+  status       String       @default("pending")
+  executedById String?
+  output       String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  executedBy   User?        @relation(fields: [executedById], references: [id])
+  step         WorkflowStep @relation(fields: [stepId], references: [id])
+  run          WorkflowRun  @relation(fields: [runId], references: [id])
+
+  @@index([runId])
+}
+
+model Dispatch {
+  id                String    @id @default(uuid())
+  ticketId          String
+  technicianId      String
+  companyId         String
+  status            String    @default("PENDING")
+  scheduledAt       DateTime?
+  arrivedAt         DateTime?
+  completedAt       DateTime?
+  notes             String?
+  customerSignature String?
+  photoUrls         String    @default("[]")
+  latitude          Float?
+  longitude         Float?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  company           Company   @relation(fields: [companyId], references: [id])
+  technician        User      @relation(fields: [technicianId], references: [id])
+  ticket            Ticket    @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId])
+  @@index([technicianId])
+  @@index([companyId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  companyId String
+  title     String
+  body      String?
+  type      String   @default("info")
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+  company   Company  @relation(fields: [companyId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([companyId])
+}
+
+model NotificationPreference {
+  id           String  @id @default(uuid())
+  userId       String  @unique
+  emailEnabled Boolean @default(true)
+  pushEnabled  Boolean @default(true)
+  smsEnabled   Boolean @default(false)
+  digestDaily  Boolean @default(false)
+  user         User    @relation(fields: [userId], references: [id])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  refreshToken String   @unique
+  deviceInfo   String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([refreshToken])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  companyId    String
+  actorId      String
+  action       String
+  resourceType String
+  resourceId   String
+  diff         String?
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+  actor        User     @relation(fields: [actorId], references: [id])
+  company      Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([actorId])
+}
