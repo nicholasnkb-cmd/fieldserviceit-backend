@@ -1,0 +1,161 @@
+import { FieldServiceService } from '../services/field-service.service';
+export declare class FieldServiceController {
+    private fieldService;
+    constructor(fieldService: FieldServiceService);
+    dispatch(body: {
+        ticketId: string;
+        technicianId: string;
+    }, user: any): Promise<{
+        ticket: {
+            createdAt: Date;
+            id: string;
+            description: string | null;
+            companyId: string | null;
+            updatedAt: Date;
+            priority: string;
+            deletedAt: Date | null;
+            ticketNumber: string;
+            title: string;
+            contactName: string | null;
+            contactEmail: string | null;
+            contactPhone: string | null;
+            category: string | null;
+            subcategory: string | null;
+            location: string | null;
+            latitude: number | null;
+            longitude: number | null;
+            status: string;
+            type: string;
+            createdById: string;
+            assignedToId: string | null;
+            assetId: string | null;
+            slaId: string | null;
+            contractId: string | null;
+            trackingToken: string | null;
+            onHoldReason: string | null;
+            resolution: string | null;
+            resolvedAt: Date | null;
+            resolvedById: string | null;
+        };
+        technician: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
+    } & {
+        createdAt: Date;
+        id: string;
+        companyId: string;
+        updatedAt: Date;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        ticketId: string;
+        notes: string | null;
+        completedAt: Date | null;
+        scheduledAt: Date | null;
+        arrivedAt: Date | null;
+        customerSignature: string | null;
+        photoUrls: string;
+        technicianId: string;
+    }>;
+    getBoard(user: any): Promise<({
+        ticket: {
+            id: string;
+            priority: string;
+            ticketNumber: string;
+            title: string;
+            status: string;
+        };
+        technician: {
+            id: string;
+            firstName: string;
+            lastName: string;
+            avatarUrl: string;
+        };
+    } & {
+        createdAt: Date;
+        id: string;
+        companyId: string;
+        updatedAt: Date;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        ticketId: string;
+        notes: string | null;
+        completedAt: Date | null;
+        scheduledAt: Date | null;
+        arrivedAt: Date | null;
+        customerSignature: string | null;
+        photoUrls: string;
+        technicianId: string;
+    })[]>;
+    updateStatus(id: string, status: string, user: any): Promise<{
+        createdAt: Date;
+        id: string;
+        companyId: string;
+        updatedAt: Date;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        ticketId: string;
+        notes: string | null;
+        completedAt: Date | null;
+        scheduledAt: Date | null;
+        arrivedAt: Date | null;
+        customerSignature: string | null;
+        photoUrls: string;
+        technicianId: string;
+    }>;
+    addNotes(id: string, notes: string, user: any): Promise<{
+        createdAt: Date;
+        id: string;
+        companyId: string;
+        updatedAt: Date;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        ticketId: string;
+        notes: string | null;
+        completedAt: Date | null;
+        scheduledAt: Date | null;
+        arrivedAt: Date | null;
+        customerSignature: string | null;
+        photoUrls: string;
+        technicianId: string;
+    }>;
+    addSignature(id: string, signature: string, user: any): Promise<{
+        createdAt: Date;
+        id: string;
+        companyId: string;
+        updatedAt: Date;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        ticketId: string;
+        notes: string | null;
+        completedAt: Date | null;
+        scheduledAt: Date | null;
+        arrivedAt: Date | null;
+        customerSignature: string | null;
+        photoUrls: string;
+        technicianId: string;
+    }>;
+    addPhotos(id: string, photoUrls: string[], user: any): Promise<{
+        createdAt: Date;
+        id: string;
+        companyId: string;
+        updatedAt: Date;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        ticketId: string;
+        notes: string | null;
+        completedAt: Date | null;
+        scheduledAt: Date | null;
+        arrivedAt: Date | null;
+        customerSignature: string | null;
+        photoUrls: string;
+        technicianId: string;
+    }>;
+}
