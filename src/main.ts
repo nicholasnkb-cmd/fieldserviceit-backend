@@ -74,11 +74,13 @@ async function bootstrap() {
 
 }
 
+process.on('unhandledRejection', (reason) => {
+  console.error('[Process] Unhandled Rejection:', reason instanceof Error ? reason.message : String(reason));
+});
+
 bootstrap().catch((err) => {
   console.error('[Bootstrap] FATAL: Application failed to start');
   console.error('[Bootstrap]', err instanceof Error ? err.message : String(err));
   console.error('[Bootstrap]', err instanceof Error ? err.stack : '');
   process.exit(1);
 });
-
-bootstrap();
