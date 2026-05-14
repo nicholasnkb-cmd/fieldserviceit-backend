@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "nest build",
+    "build": "node node_modules/@nestjs/cli/bin/nest.js build",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/src/main.js",
@@ -12,11 +12,11 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:e2e:ci": "npx prisma migrate deploy && npx prisma db seed && jest --config ./test/jest-e2e.json",
+    "test:e2e:ci": "node node_modules/prisma/build/index.js migrate deploy && node node_modules/prisma/build/index.js db seed && jest --config ./test/jest-e2e.json",
     "test:db:up": "docker compose -f ../infra/docker-compose.test.yml up -d",
     "test:db:down": "docker compose -f ../infra/docker-compose.test.yml down",
     "test:ci": "npm test && npm run test:e2e:ci",
-    "prisma:generate": "prisma generate",
+    "prisma:generate": "node node_modules/prisma/build/index.js generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:studio": "prisma studio"
