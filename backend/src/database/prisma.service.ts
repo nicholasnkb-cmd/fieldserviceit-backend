@@ -12,16 +12,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleInit() {
-    try {
-      await Promise.race([
-        this.$connect(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timed out after 10s')), 10000)),
-      ]);
-      this.logger.log('Database connected successfully');
-    } catch (err) {
-      this.logger.error('Database connection failed, continuing without DB');
-      this.logger.error(err instanceof Error ? err.message : String(err));
-    }
+    this.logger.log('PrismaService initialized (lazy connection on first query)');
   }
 
   async onModuleDestroy() {
