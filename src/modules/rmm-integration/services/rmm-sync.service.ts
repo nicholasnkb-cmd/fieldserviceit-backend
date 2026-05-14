@@ -15,7 +15,12 @@ export class RmmSyncService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.registerDynamicSyncJobs();
+    try {
+      await this.registerDynamicSyncJobs();
+    } catch (err) {
+      this.logger.error('Failed to register dynamic sync jobs, continuing without them');
+      this.logger.error(err instanceof Error ? err.message : String(err));
+    }
   }
 
   private async registerDynamicSyncJobs() {
