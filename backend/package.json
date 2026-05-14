@@ -36,6 +36,7 @@
     "@nestjs/swagger": "^7.4.2",
     "@nestjs/throttler": "^6.2.0",
     "@nestjs/websockets": "^10.4.0",
+    "@nestjs/cli": "^10.3.0",
     "@prisma/client": "^5.14.0",
     "bcrypt": "^5.1.1",
     "class-transformer": "^0.5.1",
@@ -54,7 +55,6 @@
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@nestjs/cli": "^10.3.0",
     "@nestjs/schematics": "^10.1.0",
     "@nestjs/testing": "^10.4.0",
     "@types/bcrypt": "^5.0.2",
