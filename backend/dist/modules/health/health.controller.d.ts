@@ -5,5 +5,10 @@ export declare class HealthController {
     check(): Promise<{
         status: string;
         timestamp: string;
+        message?: undefined;
+    } | {
+        status: string;
+        timestamp: string;
+        message: any;
     }>;
 }

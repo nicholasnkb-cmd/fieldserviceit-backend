@@ -10,8 +10,12 @@ export class HealthController {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
       return { status: 'ok', timestamp: new Date().toISOString() };
-    } catch {
-      return { status: 'error', timestamp: new Date().toISOString() };
+    } catch (err: any) {
+      return {
+        status: 'error',
+        timestamp: new Date().toISOString(),
+        message: err?.message || String(err),
+      };
     }
   }
 }

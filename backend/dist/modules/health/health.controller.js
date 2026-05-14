@@ -21,8 +21,12 @@ let HealthController = class HealthController {
             await this.prisma.$queryRaw `SELECT 1`;
             return { status: 'ok', timestamp: new Date().toISOString() };
         }
-        catch {
-            return { status: 'error', timestamp: new Date().toISOString() };
+        catch (err) {
+            return {
+                status: 'error',
+                timestamp: new Date().toISOString(),
+                message: err?.message || String(err),
+            };
         }
     }
 };
