@@ -1,7 +1,8 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "strictNullChecks": false
   },
   "exclude": ["node_modules", "dist", "test", "prisma", "**/*spec.ts", "**/*.spec.ts"]
 }
