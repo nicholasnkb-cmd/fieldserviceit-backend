@@ -10,6 +10,7 @@ frontend/.next/
 .env.local
 .env*.local
 backend/.env
+backend/.env.production
 backend/.env.prod.bak
 
 # Database
