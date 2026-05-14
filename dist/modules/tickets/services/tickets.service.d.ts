@@ -1,0 +1,430 @@
+import { PrismaService } from '../../../database/prisma.service';
+import { CreateTicketDto } from '../dto/create-ticket.dto';
+import { UpdateTicketDto } from '../dto/update-ticket.dto';
+import { TicketsGateway } from '../events/tickets.gateway';
+import { TicketTimelineService } from './ticket-timeline.service';
+import { EmailService } from '../../notifications/services/email.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
+export declare class TicketsService {
+    private prisma;
+    private gateway;
+    private timeline;
+    private emailService;
+    private notificationsService;
+    constructor(prisma: PrismaService, gateway: TicketsGateway, timeline: TicketTimelineService, emailService: EmailService, notificationsService: NotificationsService);
+    private validateTransition;
+    create(dto: CreateTicketDto, companyId: string | null, userId: string, userType: string): Promise<{
+        asset: {
+            createdAt: Date;
+            name: string;
+            id: string;
+            companyId: string;
+            updatedAt: Date;
+            deletedAt: Date | null;
+            location: string | null;
+            status: string;
+            ipAddress: string | null;
+            assetType: string;
+            serialNumber: string | null;
+            manufacturer: string | null;
+            model: string | null;
+            macAddress: string | null;
+            os: string | null;
+            cpu: string | null;
+            ram: string | null;
+            storage: string | null;
+            notes: string | null;
+        };
+        assignedTo: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
+        createdBy: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
+    } & {
+        createdAt: Date;
+        id: string;
+        description: string | null;
+        companyId: string | null;
+        updatedAt: Date;
+        priority: string;
+        deletedAt: Date | null;
+        ticketNumber: string;
+        title: string;
+        contactName: string | null;
+        contactEmail: string | null;
+        contactPhone: string | null;
+        category: string | null;
+        subcategory: string | null;
+        location: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        type: string;
+        createdById: string;
+        assignedToId: string | null;
+        assetId: string | null;
+        slaId: string | null;
+        contractId: string | null;
+        trackingToken: string | null;
+        onHoldReason: string | null;
+        resolution: string | null;
+        resolvedAt: Date | null;
+        resolvedById: string | null;
+    }>;
+    findAll(user: any, query: {
+        page?: number;
+        limit?: number;
+        status?: string;
+        search?: string;
+    }): Promise<{
+        data: ({
+            asset: {
+                name: string;
+                id: string;
+                assetType: string;
+            };
+            assignedTo: {
+                id: string;
+                firstName: string;
+                lastName: string;
+            };
+            createdBy: {
+                id: string;
+                firstName: string;
+                lastName: string;
+            };
+            resolvedBy: {
+                id: string;
+                firstName: string;
+                lastName: string;
+            };
+        } & {
+            createdAt: Date;
+            id: string;
+            description: string | null;
+            companyId: string | null;
+            updatedAt: Date;
+            priority: string;
+            deletedAt: Date | null;
+            ticketNumber: string;
+            title: string;
+            contactName: string | null;
+            contactEmail: string | null;
+            contactPhone: string | null;
+            category: string | null;
+            subcategory: string | null;
+            location: string | null;
+            latitude: number | null;
+            longitude: number | null;
+            status: string;
+            type: string;
+            createdById: string;
+            assignedToId: string | null;
+            assetId: string | null;
+            slaId: string | null;
+            contractId: string | null;
+            trackingToken: string | null;
+            onHoldReason: string | null;
+            resolution: string | null;
+            resolvedAt: Date | null;
+            resolvedById: string | null;
+        })[];
+        meta: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+        };
+    }>;
+    findOne(id: string, user: any): Promise<{
+        asset: {
+            createdAt: Date;
+            name: string;
+            id: string;
+            companyId: string;
+            updatedAt: Date;
+            deletedAt: Date | null;
+            location: string | null;
+            status: string;
+            ipAddress: string | null;
+            assetType: string;
+            serialNumber: string | null;
+            manufacturer: string | null;
+            model: string | null;
+            macAddress: string | null;
+            os: string | null;
+            cpu: string | null;
+            ram: string | null;
+            storage: string | null;
+            notes: string | null;
+        };
+        attachments: ({
+            uploadedBy: {
+                id: string;
+                firstName: string;
+                lastName: string;
+            };
+        } & {
+            createdAt: Date;
+            id: string;
+            ticketId: string;
+            fileUrl: string;
+            fileName: string;
+            fileSize: number;
+            mimeType: string;
+            uploadedById: string;
+        })[];
+        dispatches: {
+            createdAt: Date;
+            id: string;
+            companyId: string;
+            updatedAt: Date;
+            latitude: number | null;
+            longitude: number | null;
+            status: string;
+            ticketId: string;
+            notes: string | null;
+            completedAt: Date | null;
+            scheduledAt: Date | null;
+            arrivedAt: Date | null;
+            customerSignature: string | null;
+            photoUrls: string;
+            technicianId: string;
+        }[];
+        sla: {
+            createdAt: Date;
+            name: string;
+            id: string;
+            companyId: string;
+            updatedAt: Date;
+            priority: string;
+            isActive: boolean;
+            responseTimeMin: number;
+            resolutionTimeMin: number;
+            escalateAfterMin: number | null;
+            escalateToId: string | null;
+        };
+        assignedTo: {
+            id: string;
+            email: string;
+            firstName: string;
+            lastName: string;
+        };
+        createdBy: {
+            id: string;
+            email: string;
+            firstName: string;
+            lastName: string;
+        };
+        resolvedBy: {
+            id: string;
+            email: string;
+            firstName: string;
+            lastName: string;
+        };
+        timeline: ({
+            actor: {
+                id: string;
+                firstName: string;
+                lastName: string;
+            };
+        } & {
+            createdAt: Date;
+            id: string;
+            ticketId: string;
+            action: string;
+            actorId: string;
+            oldValue: string | null;
+            newValue: string | null;
+            comment: string | null;
+            isInternal: boolean;
+        })[];
+    } & {
+        createdAt: Date;
+        id: string;
+        description: string | null;
+        companyId: string | null;
+        updatedAt: Date;
+        priority: string;
+        deletedAt: Date | null;
+        ticketNumber: string;
+        title: string;
+        contactName: string | null;
+        contactEmail: string | null;
+        contactPhone: string | null;
+        category: string | null;
+        subcategory: string | null;
+        location: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        type: string;
+        createdById: string;
+        assignedToId: string | null;
+        assetId: string | null;
+        slaId: string | null;
+        contractId: string | null;
+        trackingToken: string | null;
+        onHoldReason: string | null;
+        resolution: string | null;
+        resolvedAt: Date | null;
+        resolvedById: string | null;
+    }>;
+    update(id: string, dto: UpdateTicketDto, companyId: string, userId?: string): Promise<{
+        assignedTo: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
+        createdBy: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
+        resolvedBy: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
+    } & {
+        createdAt: Date;
+        id: string;
+        description: string | null;
+        companyId: string | null;
+        updatedAt: Date;
+        priority: string;
+        deletedAt: Date | null;
+        ticketNumber: string;
+        title: string;
+        contactName: string | null;
+        contactEmail: string | null;
+        contactPhone: string | null;
+        category: string | null;
+        subcategory: string | null;
+        location: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        type: string;
+        createdById: string;
+        assignedToId: string | null;
+        assetId: string | null;
+        slaId: string | null;
+        contractId: string | null;
+        trackingToken: string | null;
+        onHoldReason: string | null;
+        resolution: string | null;
+        resolvedAt: Date | null;
+        resolvedById: string | null;
+    }>;
+    remove(id: string, companyId: string): Promise<{
+        createdAt: Date;
+        id: string;
+        description: string | null;
+        companyId: string | null;
+        updatedAt: Date;
+        priority: string;
+        deletedAt: Date | null;
+        ticketNumber: string;
+        title: string;
+        contactName: string | null;
+        contactEmail: string | null;
+        contactPhone: string | null;
+        category: string | null;
+        subcategory: string | null;
+        location: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        type: string;
+        createdById: string;
+        assignedToId: string | null;
+        assetId: string | null;
+        slaId: string | null;
+        contractId: string | null;
+        trackingToken: string | null;
+        onHoldReason: string | null;
+        resolution: string | null;
+        resolvedAt: Date | null;
+        resolvedById: string | null;
+    }>;
+    assign(id: string, targetUserId: string, companyId: string, actorUserId?: string): Promise<{
+        assignedTo: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
+    } & {
+        createdAt: Date;
+        id: string;
+        description: string | null;
+        companyId: string | null;
+        updatedAt: Date;
+        priority: string;
+        deletedAt: Date | null;
+        ticketNumber: string;
+        title: string;
+        contactName: string | null;
+        contactEmail: string | null;
+        contactPhone: string | null;
+        category: string | null;
+        subcategory: string | null;
+        location: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        type: string;
+        createdById: string;
+        assignedToId: string | null;
+        assetId: string | null;
+        slaId: string | null;
+        contractId: string | null;
+        trackingToken: string | null;
+        onHoldReason: string | null;
+        resolution: string | null;
+        resolvedAt: Date | null;
+        resolvedById: string | null;
+    }>;
+    resolve(id: string, resolution: string, companyId: string, userId?: string): Promise<{
+        resolvedBy: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
+    } & {
+        createdAt: Date;
+        id: string;
+        description: string | null;
+        companyId: string | null;
+        updatedAt: Date;
+        priority: string;
+        deletedAt: Date | null;
+        ticketNumber: string;
+        title: string;
+        contactName: string | null;
+        contactEmail: string | null;
+        contactPhone: string | null;
+        category: string | null;
+        subcategory: string | null;
+        location: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        type: string;
+        createdById: string;
+        assignedToId: string | null;
+        assetId: string | null;
+        slaId: string | null;
+        contractId: string | null;
+        trackingToken: string | null;
+        onHoldReason: string | null;
+        resolution: string | null;
+        resolvedAt: Date | null;
+        resolvedById: string | null;
+    }>;
+}

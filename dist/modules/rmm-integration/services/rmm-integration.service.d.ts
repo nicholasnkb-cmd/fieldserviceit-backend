@@ -1,0 +1,73 @@
+import { PrismaService } from '../../../database/prisma.service';
+import { RmmProviderFactory } from './rmm-provider-factory.service';
+import { TicketTimelineService } from '../../tickets/services/ticket-timeline.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
+import { TicketsGateway } from '../../tickets/events/tickets.gateway';
+export declare class RmmIntegrationService {
+    private prisma;
+    private providerFactory;
+    private timeline;
+    private notificationsService;
+    private gateway;
+    private readonly logger;
+    constructor(prisma: PrismaService, providerFactory: RmmProviderFactory, timeline: TicketTimelineService, notificationsService: NotificationsService, gateway: TicketsGateway);
+    syncAsset(provider: string, assetData: any, companyId: string): Promise<{
+        createdAt: Date;
+        name: string;
+        id: string;
+        companyId: string;
+        updatedAt: Date;
+        deletedAt: Date | null;
+        location: string | null;
+        status: string;
+        ipAddress: string | null;
+        assetType: string;
+        serialNumber: string | null;
+        manufacturer: string | null;
+        model: string | null;
+        macAddress: string | null;
+        os: string | null;
+        cpu: string | null;
+        ram: string | null;
+        storage: string | null;
+        notes: string | null;
+    }>;
+    createTicketFromAlert(provider: string, alert: any, companyId: string): Promise<{
+        createdBy: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
+    } & {
+        createdAt: Date;
+        id: string;
+        description: string | null;
+        companyId: string | null;
+        updatedAt: Date;
+        priority: string;
+        deletedAt: Date | null;
+        ticketNumber: string;
+        title: string;
+        contactName: string | null;
+        contactEmail: string | null;
+        contactPhone: string | null;
+        category: string | null;
+        subcategory: string | null;
+        location: string | null;
+        latitude: number | null;
+        longitude: number | null;
+        status: string;
+        type: string;
+        createdById: string;
+        assignedToId: string | null;
+        assetId: string | null;
+        slaId: string | null;
+        contractId: string | null;
+        trackingToken: string | null;
+        onHoldReason: string | null;
+        resolution: string | null;
+        resolvedAt: Date | null;
+        resolvedById: string | null;
+    }>;
+    private mapPriority;
+}
