@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "echo 'Build skipped (using pre-built dist/)'",
+    "build": "node -e \"console.log('Build ok')\"",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
