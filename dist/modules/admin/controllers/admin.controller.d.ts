@@ -2,215 +2,36 @@ import { AdminService } from '../services/admin.service';
 export declare class AdminController {
     private adminService;
     constructor(adminService: AdminService);
-    listPermissions(): Promise<(import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        group: string | null;
-        description: string | null;
-        createdAt: Date;
-    }, unknown> & {})[]>;
-    listRoles(user: any): Promise<({
-        permissions: ({
-            permission: import("@prisma/client/runtime").GetResult<{
-                id: string;
-                name: string;
-                slug: string;
-                group: string | null;
-                description: string | null;
-                createdAt: Date;
-            }, unknown> & {};
-        } & import("@prisma/client/runtime").GetResult<{
-            roleId: string;
-            permissionId: string;
-            createdAt: Date;
-        }, unknown> & {})[];
-        _count: {
-            userRoles: number;
-        };
-    } & import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        description: string | null;
-        companyId: string | null;
-        isSystem: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-    }, unknown> & {})[]>;
-    getRole(id: string): Promise<{
-        permissions: ({
-            permission: import("@prisma/client/runtime").GetResult<{
-                id: string;
-                name: string;
-                slug: string;
-                group: string | null;
-                description: string | null;
-                createdAt: Date;
-            }, unknown> & {};
-        } & import("@prisma/client/runtime").GetResult<{
-            roleId: string;
-            permissionId: string;
-            createdAt: Date;
-        }, unknown> & {})[];
-        _count: {
-            userRoles: number;
-        };
-    } & import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        description: string | null;
-        companyId: string | null;
-        isSystem: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-    }, unknown> & {}>;
+    listPermissions(): Promise<import("mysql2").RowDataPacket[]>;
+    listRoles(user: any): Promise<import("mysql2").RowDataPacket[]>;
+    getRole(id: string): Promise<import("mysql2").RowDataPacket>;
     createRole(dto: {
         name: string;
         slug: string;
         description?: string;
         companyId?: string;
         permissionSlugs?: string[];
-    }): Promise<{
-        permissions: ({
-            permission: import("@prisma/client/runtime").GetResult<{
-                id: string;
-                name: string;
-                slug: string;
-                group: string | null;
-                description: string | null;
-                createdAt: Date;
-            }, unknown> & {};
-        } & import("@prisma/client/runtime").GetResult<{
-            roleId: string;
-            permissionId: string;
-            createdAt: Date;
-        }, unknown> & {})[];
-    } & import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        description: string | null;
-        companyId: string | null;
-        isSystem: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-    }, unknown> & {}>;
+    }): Promise<import("mysql2").RowDataPacket>;
     updateRole(id: string, dto: {
         name?: string;
         description?: string;
         permissionSlugs?: string[];
-    }): Promise<{
-        permissions: ({
-            permission: import("@prisma/client/runtime").GetResult<{
-                id: string;
-                name: string;
-                slug: string;
-                group: string | null;
-                description: string | null;
-                createdAt: Date;
-            }, unknown> & {};
-        } & import("@prisma/client/runtime").GetResult<{
-            roleId: string;
-            permissionId: string;
-            createdAt: Date;
-        }, unknown> & {})[];
-    } & import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        description: string | null;
-        companyId: string | null;
-        isSystem: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-    }, unknown> & {}>;
-    deleteRole(id: string): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        description: string | null;
-        companyId: string | null;
-        isSystem: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-    }, unknown> & {}>;
-    assignUserRole(userId: string, roleId: string): Promise<{
-        role: import("@prisma/client/runtime").GetResult<{
-            id: string;
-            name: string;
-            slug: string;
-            description: string | null;
-            companyId: string | null;
-            isSystem: boolean;
-            createdAt: Date;
-            updatedAt: Date;
-        }, unknown> & {};
-    } & import("@prisma/client/runtime").GetResult<{
-        userId: string;
-        roleId: string;
-        createdAt: Date;
-    }, unknown> & {}>;
-    removeUserRole(userId: string, roleId: string): Promise<import("@prisma/client/runtime").GetResult<{
-        userId: string;
-        roleId: string;
-        createdAt: Date;
-    }, unknown> & {}>;
-    getUserRoles(id: string): Promise<({
-        role: {
-            permissions: ({
-                permission: import("@prisma/client/runtime").GetResult<{
-                    id: string;
-                    name: string;
-                    slug: string;
-                    group: string | null;
-                    description: string | null;
-                    createdAt: Date;
-                }, unknown> & {};
-            } & import("@prisma/client/runtime").GetResult<{
-                roleId: string;
-                permissionId: string;
-                createdAt: Date;
-            }, unknown> & {})[];
-        } & import("@prisma/client/runtime").GetResult<{
-            id: string;
-            name: string;
-            slug: string;
-            description: string | null;
-            companyId: string | null;
-            isSystem: boolean;
-            createdAt: Date;
-            updatedAt: Date;
-        }, unknown> & {};
-    } & import("@prisma/client/runtime").GetResult<{
-        userId: string;
-        roleId: string;
-        createdAt: Date;
-    }, unknown> & {})[]>;
+    }): Promise<import("mysql2").RowDataPacket>;
+    deleteRole(id: string): Promise<{
+        success: boolean;
+    }>;
+    assignUserRole(userId: string, roleId: string): Promise<any>;
+    removeUserRole(userId: string, roleId: string): Promise<{
+        success: boolean;
+    }>;
+    getUserRoles(id: string): Promise<import("mysql2").RowDataPacket[]>;
     listRolesLegacy(): {
         id: number;
         name: string;
         description: string;
     }[];
     listUsers(query: any): Promise<{
-        data: {
-            id: string;
-            email: string;
-            firstName: string;
-            lastName: string;
-            role: string;
-            userType: string;
-            companyId: string;
-            company: {
-                id: string;
-                name: string;
-            };
-            isActive: boolean;
-            emailVerified: boolean;
-            lastLoginAt: Date;
-            createdAt: Date;
-        }[];
+        data: import("mysql2").RowDataPacket[];
         meta: {
             page: number;
             limit: number;
@@ -218,24 +39,7 @@ export declare class AdminController {
             totalPages: number;
         };
     }>;
-    getUser(id: string): Promise<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role: string;
-        userType: string;
-        companyId: string;
-        company: {
-            id: string;
-            name: string;
-        };
-        isActive: boolean;
-        emailVerified: boolean;
-        phone: string;
-        lastLoginAt: Date;
-        createdAt: Date;
-    }>;
+    getUser(id: string): Promise<import("mysql2").RowDataPacket>;
     createUser(dto: {
         email: string;
         password: string;
@@ -243,60 +47,16 @@ export declare class AdminController {
         lastName: string;
         role?: string;
         companyId: string;
-    }): Promise<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role: string;
-        companyId: string;
-    }>;
-    updateUserRole(id: string, role: string): Promise<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role: string;
-    }>;
-    updateUser(id: string, dto: any): Promise<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role: string;
-        isActive: boolean;
-        companyId: string;
-    }>;
-    removeUser(id: string): Promise<{
-        id: string;
-        email: string;
-    }>;
+    }): Promise<import("mysql2").RowDataPacket>;
+    updateUserRole(id: string, role: string): Promise<import("mysql2").RowDataPacket>;
+    updateUser(id: string, dto: any): Promise<import("mysql2").RowDataPacket>;
+    removeUser(id: string): Promise<import("mysql2").RowDataPacket>;
     listCompanies(query: any): Promise<{
-        data: ({
-            _count: {
-                users: number;
-                tickets: number;
-                assets: number;
-            };
-        } & import("@prisma/client/runtime").GetResult<{
-            id: string;
-            name: string;
-            slug: string;
-            domain: string | null;
-            logo: string | null;
-            settings: string | null;
-            isActive: boolean;
-            createdAt: Date;
-            updatedAt: Date;
-            deletedAt: Date | null;
-            branding: string | null;
-            inviteCode: string | null;
-            inviteExpiresAt: Date | null;
-        }, unknown> & {})[];
+        data: any;
         meta: {
             page: number;
             limit: number;
-            total: number;
+            total: any;
             totalPages: number;
         };
     }>;
@@ -304,81 +64,12 @@ export declare class AdminController {
         name: string;
         slug: string;
         domain?: string;
-    }): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        domain: string | null;
-        logo: string | null;
-        settings: string | null;
-        isActive: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        branding: string | null;
-        inviteCode: string | null;
-        inviteExpiresAt: Date | null;
-    }, unknown> & {}>;
-    updateCompany(id: string, dto: any): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        domain: string | null;
-        logo: string | null;
-        settings: string | null;
-        isActive: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        branding: string | null;
-        inviteCode: string | null;
-        inviteExpiresAt: Date | null;
-    }, unknown> & {}>;
-    removeCompany(id: string): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        domain: string | null;
-        logo: string | null;
-        settings: string | null;
-        isActive: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        branding: string | null;
-        inviteCode: string | null;
-        inviteExpiresAt: Date | null;
-    }, unknown> & {}>;
-    generateInviteCode(id: string, expiresInDays?: number): Promise<{
-        id: string;
-        name: string;
-        inviteCode: string;
-        inviteExpiresAt: Date;
-    }>;
+    }): Promise<import("mysql2").RowDataPacket>;
+    updateCompany(id: string, dto: any): Promise<import("mysql2").RowDataPacket>;
+    removeCompany(id: string): Promise<import("mysql2").RowDataPacket>;
+    generateInviteCode(id: string, expiresInDays?: number): Promise<import("mysql2").RowDataPacket>;
     listAuditLogs(query: any): Promise<{
-        data: ({
-            actor: {
-                id: string;
-                firstName: string;
-                lastName: string;
-                email: string;
-            };
-            company: {
-                id: string;
-                name: string;
-            };
-        } & import("@prisma/client/runtime").GetResult<{
-            id: string;
-            companyId: string;
-            actorId: string;
-            action: string;
-            resourceType: string;
-            resourceId: string;
-            diff: string | null;
-            ip: string | null;
-            userAgent: string | null;
-            createdAt: Date;
-        }, unknown> & {})[];
+        data: import("mysql2").RowDataPacket[];
         meta: {
             page: number;
             limit: number;
@@ -387,125 +78,30 @@ export declare class AdminController {
         };
     }>;
     getStats(): Promise<{
-        totalUsers: number;
-        totalCompanies: number;
-        totalTickets: number;
-        totalAssets: number;
-        usersByType: (import(".prisma/client").Prisma.PickArray<import(".prisma/client").Prisma.UserGroupByOutputType, "userType"[]> & {
-            _count: number;
-        })[];
-        ticketsByStatus: (import(".prisma/client").Prisma.PickArray<import(".prisma/client").Prisma.TicketGroupByOutputType, "status"[]> & {
-            _count: number;
-        })[];
+        totalUsers: any;
+        totalCompanies: any;
+        totalTickets: any;
+        totalAssets: any;
+        usersByType: any;
+        ticketsByStatus: any;
     }>;
-    listCompanyRoles(user: any): Promise<({
-        permissions: ({
-            permission: import("@prisma/client/runtime").GetResult<{
-                id: string;
-                name: string;
-                slug: string;
-                group: string | null;
-                description: string | null;
-                createdAt: Date;
-            }, unknown> & {};
-        } & import("@prisma/client/runtime").GetResult<{
-            roleId: string;
-            permissionId: string;
-            createdAt: Date;
-        }, unknown> & {})[];
-        _count: {
-            userRoles: number;
-        };
-    } & import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        description: string | null;
-        companyId: string | null;
-        isSystem: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-    }, unknown> & {})[]>;
+    listCompanyRoles(user: any): Promise<import("mysql2").RowDataPacket[]>;
     createCompanyRole(dto: {
         name: string;
         slug: string;
         description?: string;
         permissionSlugs?: string[];
-    }, user: any): Promise<{
-        permissions: ({
-            permission: import("@prisma/client/runtime").GetResult<{
-                id: string;
-                name: string;
-                slug: string;
-                group: string | null;
-                description: string | null;
-                createdAt: Date;
-            }, unknown> & {};
-        } & import("@prisma/client/runtime").GetResult<{
-            roleId: string;
-            permissionId: string;
-            createdAt: Date;
-        }, unknown> & {})[];
-    } & import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        description: string | null;
-        companyId: string | null;
-        isSystem: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-    }, unknown> & {}>;
+    }, user: any): Promise<import("mysql2").RowDataPacket>;
     updateCompanyRole(id: string, dto: {
         name?: string;
         description?: string;
         permissionSlugs?: string[];
-    }, user: any): Promise<{
-        permissions: ({
-            permission: import("@prisma/client/runtime").GetResult<{
-                id: string;
-                name: string;
-                slug: string;
-                group: string | null;
-                description: string | null;
-                createdAt: Date;
-            }, unknown> & {};
-        } & import("@prisma/client/runtime").GetResult<{
-            roleId: string;
-            permissionId: string;
-            createdAt: Date;
-        }, unknown> & {})[];
-    } & import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        description: string | null;
-        companyId: string | null;
-        isSystem: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-    }, unknown> & {}>;
-    deleteCompanyRole(id: string): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        description: string | null;
-        companyId: string | null;
-        isSystem: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-    }, unknown> & {}>;
+    }, user: any): Promise<import("mysql2").RowDataPacket>;
+    deleteCompanyRole(id: string): Promise<{
+        success: boolean;
+    }>;
     listCompanyUsers(query: any, user: any): Promise<{
-        data: {
-            id: string;
-            email: string;
-            firstName: string;
-            lastName: string;
-            role: string;
-            isActive: boolean;
-            lastLoginAt: Date;
-            createdAt: Date;
-        }[];
+        data: import("mysql2").RowDataPacket[];
         meta: {
             page: number;
             limit: number;
@@ -519,60 +115,17 @@ export declare class AdminController {
         firstName: string;
         lastName: string;
         role?: string;
-    }, user: any): Promise<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role: string;
-    }>;
-    getCompanyUser(id: string, user: any): Promise<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role: string;
-        userType: string;
-        isActive: boolean;
-        emailVerified: boolean;
-        phone: string;
-        lastLoginAt: Date;
-        createdAt: Date;
-    }>;
-    updateCompanyUserRole(id: string, role: string, user: any): Promise<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role: string;
-    }>;
-    removeCompanyUser(id: string, user: any): Promise<{
-        id: string;
-        email: string;
-    }>;
-    generateCompanyInviteCode(user: any, expiresInDays?: number): Promise<{
-        id: string;
-        name: string;
-        inviteCode: string;
-        inviteExpiresAt: Date;
-    }>;
+    }, user: any): Promise<import("mysql2").RowDataPacket>;
+    getCompanyUser(id: string, user: any): Promise<import("mysql2").RowDataPacket>;
+    updateCompanyUserRole(id: string, role: string, user: any): Promise<import("mysql2").RowDataPacket>;
+    removeCompanyUser(id: string, user: any): Promise<import("mysql2").RowDataPacket>;
+    generateCompanyInviteCode(user: any, expiresInDays?: number): Promise<import("mysql2").RowDataPacket>;
     getCompanySettings(user: any): Promise<{
         settings: any;
         branding: any;
-        id: string;
-        name: string;
-        slug: string;
-        domain: string;
-        logo: string;
-        inviteCode: string;
-        inviteExpiresAt: Date;
+        constructor: {
+            name: "RowDataPacket";
+        };
     }>;
-    updateCompanySettings(dto: any, user: any): Promise<{
-        id: string;
-        name: string;
-        domain: string;
-        logo: string;
-        branding: string;
-        settings: string;
-    }>;
+    updateCompanySettings(dto: any, user: any): Promise<import("mysql2").RowDataPacket>;
 }

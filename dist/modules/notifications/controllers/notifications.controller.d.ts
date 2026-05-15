@@ -3,17 +3,7 @@ export declare class NotificationsController {
     private notificationsService;
     constructor(notificationsService: NotificationsService);
     findAll(query: any, user: any): Promise<{
-        data: (import("@prisma/client/runtime").GetResult<{
-            id: string;
-            userId: string;
-            companyId: string;
-            title: string;
-            body: string | null;
-            type: string;
-            isRead: boolean;
-            link: string | null;
-            createdAt: Date;
-        }, unknown> & {})[];
+        data: import("mysql2").RowDataPacket[];
         meta: {
             page: number;
             limit: number;
@@ -21,8 +11,8 @@ export declare class NotificationsController {
             totalPages: number;
         };
     }>;
-    markAsRead(id: string, user: any): Promise<import(".prisma/client").Prisma.BatchPayload>;
-    markAllAsRead(user: any): Promise<import(".prisma/client").Prisma.BatchPayload>;
+    markAsRead(id: string, user: any): Promise<any>;
+    markAllAsRead(user: any): Promise<any>;
     unreadCount(user: any): Promise<{
         count: number;
     }>;

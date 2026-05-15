@@ -11,63 +11,7 @@ export declare class RmmIntegrationService {
     private gateway;
     private readonly logger;
     constructor(prisma: PrismaService, providerFactory: RmmProviderFactory, timeline: TicketTimelineService, notificationsService: NotificationsService, gateway: TicketsGateway);
-    syncAsset(provider: string, assetData: any, companyId: string): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        assetType: string;
-        serialNumber: string | null;
-        manufacturer: string | null;
-        model: string | null;
-        location: string | null;
-        ipAddress: string | null;
-        macAddress: string | null;
-        os: string | null;
-        cpu: string | null;
-        ram: string | null;
-        storage: string | null;
-        status: string;
-        notes: string | null;
-        companyId: string;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-    }, unknown> & {}>;
-    createTicketFromAlert(provider: string, alert: any, companyId: string): Promise<{
-        createdBy: {
-            id: string;
-            firstName: string;
-            lastName: string;
-        };
-    } & import("@prisma/client/runtime").GetResult<{
-        id: string;
-        ticketNumber: string;
-        title: string;
-        description: string | null;
-        contactName: string | null;
-        contactEmail: string | null;
-        contactPhone: string | null;
-        category: string | null;
-        subcategory: string | null;
-        location: string | null;
-        latitude: number | null;
-        longitude: number | null;
-        status: string;
-        priority: string;
-        type: string;
-        companyId: string | null;
-        createdById: string;
-        assignedToId: string | null;
-        assetId: string | null;
-        slaId: string | null;
-        contractId: string | null;
-        trackingToken: string | null;
-        onHoldReason: string | null;
-        resolution: string | null;
-        resolvedAt: Date | null;
-        resolvedById: string | null;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-    }, unknown> & {}>;
+    syncAsset(provider: string, assetData: any, companyId: string): Promise<import("mysql2").RowDataPacket>;
+    createTicketFromAlert(provider: string, alert: any, companyId: string): Promise<any>;
     private mapPriority;
 }

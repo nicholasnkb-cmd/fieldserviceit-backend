@@ -9,8 +9,8 @@ var PrismaService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PrismaService = void 0;
 const common_1 = require("@nestjs/common");
-const client_1 = require("@prisma/client");
-let PrismaService = PrismaService_1 = class PrismaService extends client_1.PrismaClient {
+const database_service_1 = require("./database.service");
+let PrismaService = PrismaService_1 = class PrismaService extends database_service_1.DatabaseService {
     constructor() {
         super(...arguments);
         this.logger = new common_1.Logger(PrismaService_1.name);
@@ -18,7 +18,7 @@ let PrismaService = PrismaService_1 = class PrismaService extends client_1.Prism
     async onModuleInit() {
         try {
             await this.$connect();
-            this.logger.log('Database connected');
+            this.logger.log('Database connected (mysql2)');
         }
         catch (err) {
             this.logger.warn('Database unavailable: ' + (err instanceof Error ? err.message : String(err)));

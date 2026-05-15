@@ -9,33 +9,13 @@ export declare class NotificationsService {
         body?: string;
         type?: string;
         link?: string;
-    }): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        userId: string;
-        companyId: string;
-        title: string;
-        body: string | null;
-        type: string;
-        isRead: boolean;
-        link: string | null;
-        createdAt: Date;
-    }, unknown> & {}>;
+    }): Promise<import("mysql2").RowDataPacket>;
     findAll(userId: string, query: {
         page?: number;
         limit?: number;
         unreadOnly?: boolean;
     }): Promise<{
-        data: (import("@prisma/client/runtime").GetResult<{
-            id: string;
-            userId: string;
-            companyId: string;
-            title: string;
-            body: string | null;
-            type: string;
-            isRead: boolean;
-            link: string | null;
-            createdAt: Date;
-        }, unknown> & {})[];
+        data: import("mysql2").RowDataPacket[];
         meta: {
             page: number;
             limit: number;
@@ -43,8 +23,8 @@ export declare class NotificationsService {
             totalPages: number;
         };
     }>;
-    markAsRead(id: string, userId: string): Promise<import(".prisma/client").Prisma.BatchPayload>;
-    markAllAsRead(userId: string): Promise<import(".prisma/client").Prisma.BatchPayload>;
+    markAsRead(id: string, userId: string): Promise<any>;
+    markAllAsRead(userId: string): Promise<any>;
     unreadCount(userId: string): Promise<{
         count: number;
     }>;

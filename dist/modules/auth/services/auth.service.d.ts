@@ -13,14 +13,14 @@ export declare class AuthService {
         refreshToken: string;
         expiresIn: number;
         user: {
-            id: string;
-            email: string;
-            firstName: string;
-            lastName: string;
-            role: string;
-            userType: string;
-            companyId: string;
-            emailVerified: boolean;
+            id: any;
+            email: any;
+            firstName: any;
+            lastName: any;
+            role: any;
+            userType: any;
+            companyId: any;
+            emailVerified: any;
         };
     }>;
     registerPublic(dto: {
@@ -33,12 +33,12 @@ export declare class AuthService {
         refreshToken: string;
         expiresIn: number;
         user: {
-            id: string;
-            email: string;
-            firstName: string;
-            lastName: string;
-            role: string;
-            userType: string;
+            id: any;
+            email: any;
+            firstName: any;
+            lastName: any;
+            role: any;
+            userType: any;
             companyId: any;
             emailVerified: boolean;
         };
@@ -55,13 +55,13 @@ export declare class AuthService {
         refreshToken: string;
         expiresIn: number;
         user: {
-            id: string;
-            email: string;
-            firstName: string;
-            lastName: string;
-            role: string;
-            userType: string;
-            companyId: string;
+            id: any;
+            email: any;
+            firstName: any;
+            lastName: any;
+            role: any;
+            userType: any;
+            companyId: any;
             emailVerified: boolean;
         };
     }>;
@@ -78,73 +78,7 @@ export declare class AuthService {
     resetPassword(token: string, password: string): Promise<{
         message: string;
     }>;
-    trackTicket(email: string, ticketNumber: string): Promise<{
-        createdBy: {
-            id: string;
-            firstName: string;
-            lastName: string;
-            email: string;
-        };
-        assignedTo: {
-            id: string;
-            firstName: string;
-            lastName: string;
-            email: string;
-        };
-        resolvedBy: {
-            id: string;
-            firstName: string;
-            lastName: string;
-            email: string;
-        };
-        timeline: ({
-            actor: {
-                id: string;
-                firstName: string;
-                lastName: string;
-            };
-        } & import("@prisma/client/runtime").GetResult<{
-            id: string;
-            ticketId: string;
-            action: string;
-            actorId: string;
-            oldValue: string | null;
-            newValue: string | null;
-            comment: string | null;
-            isInternal: boolean;
-            createdAt: Date;
-        }, unknown> & {})[];
-    } & import("@prisma/client/runtime").GetResult<{
-        id: string;
-        ticketNumber: string;
-        title: string;
-        description: string | null;
-        contactName: string | null;
-        contactEmail: string | null;
-        contactPhone: string | null;
-        category: string | null;
-        subcategory: string | null;
-        location: string | null;
-        latitude: number | null;
-        longitude: number | null;
-        status: string;
-        priority: string;
-        type: string;
-        companyId: string | null;
-        createdById: string;
-        assignedToId: string | null;
-        assetId: string | null;
-        slaId: string | null;
-        contractId: string | null;
-        trackingToken: string | null;
-        onHoldReason: string | null;
-        resolution: string | null;
-        resolvedAt: Date | null;
-        resolvedById: string | null;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-    }, unknown> & {}>;
+    trackTicket(email: string, ticketNumber: string): Promise<any>;
     refresh(refreshToken: string): Promise<{
         accessToken: string;
         refreshToken: string;

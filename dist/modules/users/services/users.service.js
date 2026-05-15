@@ -12,7 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../../database/prisma.service");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 var UserRole;
 (function (UserRole) {
     UserRole["SUPER_ADMIN"] = "SUPER_ADMIN";
@@ -26,7 +26,7 @@ let UsersService = class UsersService {
         this.prisma = prisma;
     }
     async create(dto, companyId) {
-        const passwordHash = await bcrypt.hash(dto.password, 12);
+        const passwordHash = await bcrypt.hash(dto.password, 10);
         return this.prisma.user.create({
             data: {
                 email: dto.email,
@@ -56,7 +56,7 @@ let UsersService = class UsersService {
         return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
     }
     async findById(id) {
-        const user = await this.prisma.user.findUnique({
+        const user = await this.prisma.user.findFirst({
             where: { id, deletedAt: null },
             select: {
                 id: true, email: true, firstName: true, lastName: true, role: true, userType: true,
@@ -85,7 +85,7 @@ let UsersService = class UsersService {
         });
     }
     async updateMe(id, dto) {
-        const user = await this.prisma.user.findUnique({ where: { id, deletedAt: null } });
+        const user = await this.prisma.user.findFirst({ where: { id, deletedAt: null } });
         if (!user)
             throw new common_1.NotFoundException('User not found');
         return this.prisma.user.update({
@@ -95,7 +95,7 @@ let UsersService = class UsersService {
         });
     }
     async changePassword(id, oldPassword, newPassword) {
-        const user = await this.prisma.user.findUnique({ where: { id, deletedAt: null } });
+        const user = await this.prisma.user.findFirst({ where: { id, deletedAt: null } });
         if (!user)
             throw new common_1.NotFoundException('User not found');
         if (!user.passwordHash)
@@ -103,7 +103,7 @@ let UsersService = class UsersService {
         const valid = await bcrypt.compare(oldPassword, user.passwordHash);
         if (!valid)
             throw new common_1.BadRequestException('Current password is incorrect');
-        const passwordHash = await bcrypt.hash(newPassword, 12);
+        const passwordHash = await bcrypt.hash(newPassword, 10);
         await this.prisma.user.update({ where: { id }, data: { passwordHash } });
         return { message: 'Password changed successfully' };
     }

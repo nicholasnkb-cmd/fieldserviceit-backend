@@ -96,8 +96,8 @@ let RmmSyncService = RmmSyncService_1 = class RmmSyncService {
         if (this.schedulerRegistry.doesExist('interval', jobName)) {
             this.schedulerRegistry.deleteInterval(jobName);
         }
-        const config = await this.prisma.rmmProviderConfig.findUnique({
-            where: { companyId_provider: { companyId, provider } },
+        const config = await this.prisma.rmmProviderConfig.findFirst({
+            where: { companyId, provider },
         });
         if (config && config.isActive) {
             const intervalMs = (config.syncIntervalMin || 60) * 60 * 1000;
@@ -115,8 +115,8 @@ let RmmSyncService = RmmSyncService_1 = class RmmSyncService {
     }
     async syncProviderNow(companyId, provider) {
         this.logger.log(`syncProviderNow called: companyId=${companyId} provider=${provider}`);
-        const config = await this.prisma.rmmProviderConfig.findUnique({
-            where: { companyId_provider: { companyId, provider } },
+        const config = await this.prisma.rmmProviderConfig.findFirst({
+            where: { companyId, provider },
         });
         if (!config) {
             return { synced: false, error: `No RMM configuration found for ${provider} in this company` };
