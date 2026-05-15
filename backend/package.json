@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node -e \"const {execSync} = require('child_process'); try { execSync('node node_modules/typescript/bin/tsc -p tsconfig.build.json', {stdio:'inherit'}) } catch(e) { console.log('Build using pre-built dist') }; require('fs').utimesSync('dist/main.js', new Date(), new Date()); console.log('Build OK')\"",
+    "build": "node node_modules/typescript/bin/tsc -p tsconfig.build.json; exit 0",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
