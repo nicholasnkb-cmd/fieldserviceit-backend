@@ -305,7 +305,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     findMany: async ({ where, select, orderBy, skip, take, include }: { where?: Record<string, any>; select?: Record<string, boolean>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number; include?: Record<string, any> }) => {
-      const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
+      const cols = select ? Object.keys(select).filter(k => select[k] && typeof select[k] === 'boolean') : ['*'];
       let sql = `SELECT ${cols.join(', ')} FROM Ticket`;
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
@@ -565,6 +565,33 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       if (take !== undefined) { sql += ` LIMIT ?`; values.push(take); }
       if (skip !== undefined) { sql += ` OFFSET ?`; values.push(skip); }
       return this.query<RowDataPacket[]>(sql, values);
+    },
+
+    findFirst: async ({ where, select }: { where: Record<string, any>; select?: Record<string, boolean> }) => {
+      const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
+      const whereClauses = Object.entries(where).map(([k, v]) => {
+        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+        return `${this.escapeColumn(k)} = ?`;
+      }).filter(Boolean);
+      const values = Object.values(where).filter(v => v !== null);
+      const rows = await this.query<RowDataPacket[]>(
+        `SELECT ${cols.join(', ')} FROM Asset WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
+        values,
+      );
+      return rows[0] || null;
+    },
+
+    findUnique: async ({ where, select, orderBy }: { where: Record<string, any>; select?: Record<string, boolean>; orderBy?: Record<string, 'asc' | 'desc'> }) => {
+      const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
+      const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
+      const values = Object.values(where);
+      let sql = `SELECT ${cols.join(', ')} FROM Asset WHERE ${whereClauses.join(' AND ')} LIMIT 1`;
+      if (orderBy) {
+        const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
+        sql += ` ORDER BY ${orderParts.join(', ')}`;
+      }
+      const rows = await this.query<RowDataPacket[]>(sql, values);
+      return rows[0] || null;
     },
 
     count: async ({ where }: { where?: Record<string, any> }) => {

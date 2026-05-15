@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node node_modules/prisma/build/index.js generate; node node_modules/typescript/bin/tsc -p tsconfig.build.json; exit 0",
+    "build": "node node_modules/typescript/bin/tsc -p tsconfig.build.json; exit 0",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
