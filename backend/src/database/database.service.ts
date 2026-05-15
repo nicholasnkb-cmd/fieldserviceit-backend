@@ -160,7 +160,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data, select }: { data: Record<string, any>; select?: Record<string, boolean> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const now = new Date();
+      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -252,7 +253,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const now = new Date();
+      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -345,7 +347,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data, select, include }: { data: Record<string, any>; select?: Record<string, boolean>; include?: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const now = new Date();
+      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData).filter(k => insertData[k] !== undefined);
       const values = cols.map(k => insertData[k]);
       const placeholders = cols.map(() => '?').join(', ');
@@ -391,7 +394,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const insertData = { id: this.generateUuid(), createdAt: new Date(), ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -422,7 +425,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   ticketAttachment = {
     create: async ({ data, include }: { data: Record<string, any>; include?: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const insertData = { id: this.generateUuid(), createdAt: new Date(), ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -466,7 +469,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const now = new Date();
+      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -489,7 +493,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   timeEntry = {
     create: async ({ data }: { data: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const insertData = { id: this.generateUuid(), createdAt: new Date(), ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -614,7 +618,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const now = new Date();
+      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -663,7 +668,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   notification = {
     create: async ({ data }: { data: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const insertData = { id: this.generateUuid(), createdAt: new Date(), ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -753,7 +758,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const now = new Date();
+      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -994,7 +1000,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     create: async ({ data, include }: { data: Record<string, any>; include?: Record<string, any> }) => {
       const { steps, ...workflowData } = data;
       const workflowId = this.generateUuid();
-      const insertData = { id: workflowId, ...workflowData };
+      const now = new Date();
+      const insertData = { id: workflowId, createdAt: now, updatedAt: now, ...workflowData };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -1035,7 +1042,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     create: async ({ data }: { data: Record<string, any> }) => {
       const { steps, ...runData } = data;
       const runId = this.generateUuid();
-      const insertData = { id: runId, ...runData };
+      const now = new Date();
+      const insertData = { id: runId, startedAt: now, ...runData };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -1127,7 +1135,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const now = new Date();
+      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -1197,12 +1206,12 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data, include }: { data: Record<string, any>; include?: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), ...data };
+      const insertData = { id: this.generateUuid(), createdAt: new Date(), ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO TicketTimeline (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
+      await this.execute(sql, values);
       const rows = await this.query<RowDataPacket[]>(`SELECT * FROM TicketTimeline WHERE id = ? LIMIT 1`, [insertData.id]);
       const entry = rows[0];
       if (entry && include?.actor) {
