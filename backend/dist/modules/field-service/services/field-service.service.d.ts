@@ -51,12 +51,12 @@ export declare class FieldServiceService {
         status: string;
         ticketId: string;
         notes: string | null;
-        technicianId: string;
+        completedAt: Date | null;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
-        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
+        technicianId: string;
     }>;
     getDispatchBoard(companyId: string): Promise<({
         ticket: {
@@ -82,12 +82,12 @@ export declare class FieldServiceService {
         status: string;
         ticketId: string;
         notes: string | null;
-        technicianId: string;
+        completedAt: Date | null;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
-        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
+        technicianId: string;
     })[]>;
     updateStatus(id: string, status: string, companyId: string): Promise<{
         createdAt: Date;
@@ -99,12 +99,12 @@ export declare class FieldServiceService {
         status: string;
         ticketId: string;
         notes: string | null;
-        technicianId: string;
+        completedAt: Date | null;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
-        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
+        technicianId: string;
     }>;
     addNotes(id: string, notes: string, companyId: string): Promise<{
         createdAt: Date;
@@ -116,12 +116,12 @@ export declare class FieldServiceService {
         status: string;
         ticketId: string;
         notes: string | null;
-        technicianId: string;
+        completedAt: Date | null;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
-        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
+        technicianId: string;
     }>;
     addSignature(id: string, signature: string, companyId: string): Promise<{
         createdAt: Date;
@@ -133,12 +133,12 @@ export declare class FieldServiceService {
         status: string;
         ticketId: string;
         notes: string | null;
-        technicianId: string;
+        completedAt: Date | null;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
-        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
+        technicianId: string;
     }>;
     addPhotos(id: string, photoUrls: string[], companyId: string): Promise<{
         createdAt: Date;
@@ -150,11 +150,11 @@ export declare class FieldServiceService {
         status: string;
         ticketId: string;
         notes: string | null;
-        technicianId: string;
+        completedAt: Date | null;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
-        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
+        technicianId: string;
     }>;
 }

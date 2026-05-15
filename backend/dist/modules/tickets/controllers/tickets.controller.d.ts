@@ -204,12 +204,12 @@ export declare class TicketsController {
             status: string;
             ticketId: string;
             notes: string | null;
-            technicianId: string;
+            completedAt: Date | null;
             scheduledAt: Date | null;
             arrivedAt: Date | null;
-            completedAt: Date | null;
             customerSignature: string | null;
             photoUrls: string;
+            technicianId: string;
         }[];
         sla: {
             createdAt: Date;
