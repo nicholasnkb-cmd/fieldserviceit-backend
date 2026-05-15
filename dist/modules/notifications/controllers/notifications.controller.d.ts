@@ -3,17 +3,17 @@ export declare class NotificationsController {
     private notificationsService;
     constructor(notificationsService: NotificationsService);
     findAll(query: any, user: any): Promise<{
-        data: {
-            userId: string;
-            createdAt: Date;
+        data: (import("@prisma/client/runtime").GetResult<{
             id: string;
+            userId: string;
             companyId: string;
-            link: string | null;
             title: string;
-            type: string;
             body: string | null;
+            type: string;
             isRead: boolean;
-        }[];
+            link: string | null;
+            createdAt: Date;
+        }, unknown> & {})[];
         meta: {
             page: number;
             limit: number;

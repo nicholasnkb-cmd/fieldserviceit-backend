@@ -11,43 +11,38 @@ export declare class RmmIntegrationService {
     private gateway;
     private readonly logger;
     constructor(prisma: PrismaService, providerFactory: RmmProviderFactory, timeline: TicketTimelineService, notificationsService: NotificationsService, gateway: TicketsGateway);
-    syncAsset(provider: string, assetData: any, companyId: string): Promise<{
-        createdAt: Date;
-        name: string;
+    syncAsset(provider: string, assetData: any, companyId: string): Promise<import("@prisma/client/runtime").GetResult<{
         id: string;
-        companyId: string;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        location: string | null;
-        status: string;
-        ipAddress: string | null;
+        name: string;
         assetType: string;
         serialNumber: string | null;
         manufacturer: string | null;
         model: string | null;
+        location: string | null;
+        ipAddress: string | null;
         macAddress: string | null;
         os: string | null;
         cpu: string | null;
         ram: string | null;
         storage: string | null;
+        status: string;
         notes: string | null;
-    }>;
+        companyId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
     createTicketFromAlert(provider: string, alert: any, companyId: string): Promise<{
         createdBy: {
             id: string;
             firstName: string;
             lastName: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        description: string | null;
-        companyId: string | null;
-        updatedAt: Date;
-        priority: string;
-        deletedAt: Date | null;
         ticketNumber: string;
         title: string;
+        description: string | null;
         contactName: string | null;
         contactEmail: string | null;
         contactPhone: string | null;
@@ -57,7 +52,9 @@ export declare class RmmIntegrationService {
         latitude: number | null;
         longitude: number | null;
         status: string;
+        priority: string;
         type: string;
+        companyId: string | null;
         createdById: string;
         assignedToId: string | null;
         assetId: string | null;
@@ -68,6 +65,9 @@ export declare class RmmIntegrationService {
         resolution: string | null;
         resolvedAt: Date | null;
         resolvedById: string | null;
-    }>;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
     private mapPriority;
 }

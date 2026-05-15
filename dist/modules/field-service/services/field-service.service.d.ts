@@ -5,16 +5,11 @@ export declare class FieldServiceService {
     private gateway;
     constructor(prisma: PrismaService, gateway: TicketsGateway);
     dispatch(ticketId: string, technicianId: string, companyId: string): Promise<{
-        ticket: {
-            createdAt: Date;
+        ticket: import("@prisma/client/runtime").GetResult<{
             id: string;
-            description: string | null;
-            companyId: string | null;
-            updatedAt: Date;
-            priority: string;
-            deletedAt: Date | null;
             ticketNumber: string;
             title: string;
+            description: string | null;
             contactName: string | null;
             contactEmail: string | null;
             contactPhone: string | null;
@@ -24,7 +19,9 @@ export declare class FieldServiceService {
             latitude: number | null;
             longitude: number | null;
             status: string;
+            priority: string;
             type: string;
+            companyId: string | null;
             createdById: string;
             assignedToId: string | null;
             assetId: string | null;
@@ -35,35 +32,38 @@ export declare class FieldServiceService {
             resolution: string | null;
             resolvedAt: Date | null;
             resolvedById: string | null;
-        };
+            createdAt: Date;
+            updatedAt: Date;
+            deletedAt: Date | null;
+        }, unknown> & {};
         technician: {
             id: string;
             firstName: string;
             lastName: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        companyId: string;
-        updatedAt: Date;
-        latitude: number | null;
-        longitude: number | null;
-        status: string;
         ticketId: string;
-        notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
+        companyId: string;
+        status: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
+        notes: string | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
-    }>;
+        latitude: number | null;
+        longitude: number | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {}>;
     getDispatchBoard(companyId: string): Promise<({
         ticket: {
             id: string;
-            priority: string;
             ticketNumber: string;
             title: string;
+            priority: string;
             status: string;
         };
         technician: {
@@ -72,89 +72,89 @@ export declare class FieldServiceService {
             lastName: string;
             avatarUrl: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        companyId: string;
-        updatedAt: Date;
-        latitude: number | null;
-        longitude: number | null;
-        status: string;
         ticketId: string;
-        notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
+        companyId: string;
+        status: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
+        notes: string | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
-    })[]>;
-    updateStatus(id: string, status: string, companyId: string): Promise<{
-        createdAt: Date;
-        id: string;
-        companyId: string;
-        updatedAt: Date;
         latitude: number | null;
         longitude: number | null;
-        status: string;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {})[]>;
+    updateStatus(id: string, status: string, companyId: string): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
         ticketId: string;
-        notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
+        companyId: string;
+        status: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
+        notes: string | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
-    }>;
-    addNotes(id: string, notes: string, companyId: string): Promise<{
-        createdAt: Date;
-        id: string;
-        companyId: string;
-        updatedAt: Date;
         latitude: number | null;
         longitude: number | null;
-        status: string;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {}>;
+    addNotes(id: string, notes: string, companyId: string): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
         ticketId: string;
-        notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
+        companyId: string;
+        status: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
+        notes: string | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
-    }>;
-    addSignature(id: string, signature: string, companyId: string): Promise<{
-        createdAt: Date;
-        id: string;
-        companyId: string;
-        updatedAt: Date;
         latitude: number | null;
         longitude: number | null;
-        status: string;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {}>;
+    addSignature(id: string, signature: string, companyId: string): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
         ticketId: string;
-        notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
+        companyId: string;
+        status: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
+        notes: string | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
-    }>;
-    addPhotos(id: string, photoUrls: string[], companyId: string): Promise<{
-        createdAt: Date;
-        id: string;
-        companyId: string;
-        updatedAt: Date;
         latitude: number | null;
         longitude: number | null;
-        status: string;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {}>;
+    addPhotos(id: string, photoUrls: string[], companyId: string): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
         ticketId: string;
-        notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
+        companyId: string;
+        status: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
+        notes: string | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
-    }>;
+        latitude: number | null;
+        longitude: number | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {}>;
 }

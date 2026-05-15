@@ -4,10 +4,10 @@ export declare class ReportingController {
     constructor(reportingService: ReportingService);
     getTicketSummary(from: string, to: string, user: any): Promise<{
         total: number;
-        byStatus: (import(".prisma/client").Prisma.PickEnumerable<import(".prisma/client").Prisma.TicketGroupByOutputType, "status"[]> & {
+        byStatus: (import(".prisma/client").Prisma.PickArray<import(".prisma/client").Prisma.TicketGroupByOutputType, "status"[]> & {
             _count: number;
         })[];
-        byPriority: (import(".prisma/client").Prisma.PickEnumerable<import(".prisma/client").Prisma.TicketGroupByOutputType, "priority"[]> & {
+        byPriority: (import(".prisma/client").Prisma.PickArray<import(".prisma/client").Prisma.TicketGroupByOutputType, "priority"[]> & {
             _count: number;
         })[];
         resolvedToday: number;
@@ -25,23 +25,22 @@ export declare class ReportingController {
         avgResolutionTime: number;
         totalDispatches: number;
     }[]>;
-    getAssetInventory(user: any): Promise<(import(".prisma/client").Prisma.PickEnumerable<import(".prisma/client").Prisma.AssetGroupByOutputType, "assetType"[]> & {
+    getAssetInventory(user: any): Promise<(import(".prisma/client").Prisma.PickArray<import(".prisma/client").Prisma.AssetGroupByOutputType, "assetType"[]> & {
         _count: number;
     })[]>;
     getActivityFeed(user: any): Promise<({
+        actor: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
         ticket: {
             id: string;
             ticketNumber: string;
             title: string;
             status: string;
         };
-        actor: {
-            id: string;
-            firstName: string;
-            lastName: string;
-        };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
         ticketId: string;
         action: string;
@@ -50,5 +49,6 @@ export declare class ReportingController {
         newValue: string | null;
         comment: string | null;
         isInternal: boolean;
-    })[]>;
+        createdAt: Date;
+    }, unknown> & {})[]>;
 }

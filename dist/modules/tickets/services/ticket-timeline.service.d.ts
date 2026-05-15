@@ -8,8 +8,7 @@ export declare class TicketTimelineService {
             firstName: string;
             lastName: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
         ticketId: string;
         action: string;
@@ -18,15 +17,15 @@ export declare class TicketTimelineService {
         newValue: string | null;
         comment: string | null;
         isInternal: boolean;
-    }>;
+        createdAt: Date;
+    }, unknown> & {}>;
     getTimeline(ticketId: string): Promise<({
         actor: {
             id: string;
             firstName: string;
             lastName: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
         ticketId: string;
         action: string;
@@ -35,5 +34,6 @@ export declare class TicketTimelineService {
         newValue: string | null;
         comment: string | null;
         isInternal: boolean;
-    })[]>;
+        createdAt: Date;
+    }, unknown> & {})[]>;
 }

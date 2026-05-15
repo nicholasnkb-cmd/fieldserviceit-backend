@@ -4,21 +4,21 @@ export declare class SearchController {
     constructor(searchService: SearchService);
     search(q: string, user: any): Promise<{
         tickets: {
-            createdAt: Date;
             id: string;
-            priority: string;
             ticketNumber: string;
             title: string;
-            category: string;
             status: string;
+            priority: string;
+            category: string;
+            createdAt: Date;
         }[];
         assets: {
-            name: string;
             id: string;
-            location: string;
-            status: string;
+            name: string;
             assetType: string;
             serialNumber: string;
+            status: string;
+            location: string;
         }[];
     }> | {
         tickets: any[];

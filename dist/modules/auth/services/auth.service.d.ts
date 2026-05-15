@@ -79,23 +79,23 @@ export declare class AuthService {
         message: string;
     }>;
     trackTicket(email: string, ticketNumber: string): Promise<{
-        assignedTo: {
-            id: string;
-            email: string;
-            firstName: string;
-            lastName: string;
-        };
         createdBy: {
             id: string;
-            email: string;
             firstName: string;
             lastName: string;
+            email: string;
+        };
+        assignedTo: {
+            id: string;
+            firstName: string;
+            lastName: string;
+            email: string;
         };
         resolvedBy: {
             id: string;
-            email: string;
             firstName: string;
             lastName: string;
+            email: string;
         };
         timeline: ({
             actor: {
@@ -103,8 +103,7 @@ export declare class AuthService {
                 firstName: string;
                 lastName: string;
             };
-        } & {
-            createdAt: Date;
+        } & import("@prisma/client/runtime").GetResult<{
             id: string;
             ticketId: string;
             action: string;
@@ -113,17 +112,13 @@ export declare class AuthService {
             newValue: string | null;
             comment: string | null;
             isInternal: boolean;
-        })[];
-    } & {
-        createdAt: Date;
+            createdAt: Date;
+        }, unknown> & {})[];
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        description: string | null;
-        companyId: string | null;
-        updatedAt: Date;
-        priority: string;
-        deletedAt: Date | null;
         ticketNumber: string;
         title: string;
+        description: string | null;
         contactName: string | null;
         contactEmail: string | null;
         contactPhone: string | null;
@@ -133,7 +128,9 @@ export declare class AuthService {
         latitude: number | null;
         longitude: number | null;
         status: string;
+        priority: string;
         type: string;
+        companyId: string | null;
         createdById: string;
         assignedToId: string | null;
         assetId: string | null;
@@ -144,7 +141,10 @@ export declare class AuthService {
         resolution: string | null;
         resolvedAt: Date | null;
         resolvedById: string | null;
-    }>;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
     refresh(refreshToken: string): Promise<{
         accessToken: string;
         refreshToken: string;

@@ -9,33 +9,33 @@ export declare class NotificationsService {
         body?: string;
         type?: string;
         link?: string;
-    }): Promise<{
-        userId: string;
-        createdAt: Date;
+    }): Promise<import("@prisma/client/runtime").GetResult<{
         id: string;
+        userId: string;
         companyId: string;
-        link: string | null;
         title: string;
-        type: string;
         body: string | null;
+        type: string;
         isRead: boolean;
-    }>;
+        link: string | null;
+        createdAt: Date;
+    }, unknown> & {}>;
     findAll(userId: string, query: {
         page?: number;
         limit?: number;
         unreadOnly?: boolean;
     }): Promise<{
-        data: {
-            userId: string;
-            createdAt: Date;
+        data: (import("@prisma/client/runtime").GetResult<{
             id: string;
+            userId: string;
             companyId: string;
-            link: string | null;
             title: string;
-            type: string;
             body: string | null;
+            type: string;
             isRead: boolean;
-        }[];
+            link: string | null;
+            createdAt: Date;
+        }, unknown> & {})[];
         meta: {
             page: number;
             limit: number;

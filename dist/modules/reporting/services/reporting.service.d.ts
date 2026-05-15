@@ -4,10 +4,10 @@ export declare class ReportingService {
     constructor(prisma: PrismaService);
     getTicketSummary(companyId: string, from?: string, to?: string): Promise<{
         total: number;
-        byStatus: (import(".prisma/client").Prisma.PickEnumerable<import(".prisma/client").Prisma.TicketGroupByOutputType, "status"[]> & {
+        byStatus: (import(".prisma/client").Prisma.PickArray<import(".prisma/client").Prisma.TicketGroupByOutputType, "status"[]> & {
             _count: number;
         })[];
-        byPriority: (import(".prisma/client").Prisma.PickEnumerable<import(".prisma/client").Prisma.TicketGroupByOutputType, "priority"[]> & {
+        byPriority: (import(".prisma/client").Prisma.PickArray<import(".prisma/client").Prisma.TicketGroupByOutputType, "priority"[]> & {
             _count: number;
         })[];
         resolvedToday: number;
@@ -25,23 +25,22 @@ export declare class ReportingService {
         avgResolutionTime: number;
         totalDispatches: number;
     }[]>;
-    getAssetInventory(companyId: string): Promise<(import(".prisma/client").Prisma.PickEnumerable<import(".prisma/client").Prisma.AssetGroupByOutputType, "assetType"[]> & {
+    getAssetInventory(companyId: string): Promise<(import(".prisma/client").Prisma.PickArray<import(".prisma/client").Prisma.AssetGroupByOutputType, "assetType"[]> & {
         _count: number;
     })[]>;
     getActivityFeed(companyId: string, limit?: number): Promise<({
+        actor: {
+            id: string;
+            firstName: string;
+            lastName: string;
+        };
         ticket: {
             id: string;
             ticketNumber: string;
             title: string;
             status: string;
         };
-        actor: {
-            id: string;
-            firstName: string;
-            lastName: string;
-        };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
         ticketId: string;
         action: string;
@@ -50,6 +49,7 @@ export declare class ReportingService {
         newValue: string | null;
         comment: string | null;
         isInternal: boolean;
-    })[]>;
+        createdAt: Date;
+    }, unknown> & {})[]>;
     private calculateAvgResolution;
 }
