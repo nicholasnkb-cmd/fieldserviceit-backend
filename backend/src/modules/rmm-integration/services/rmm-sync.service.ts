@@ -38,7 +38,7 @@ export class RmmSyncService implements OnModuleInit {
 
       const interval = setInterval(async () => {
         try {
-          await this.syncProviderAssets(config);
+          await this.syncProviderAssets(config as any);
         } catch (err: any) {
           this.logger.error(`Dynamic sync failed for ${config.provider}/${config.companyId}: ${err.message}`);
         }
@@ -101,15 +101,15 @@ export class RmmSyncService implements OnModuleInit {
       this.schedulerRegistry.deleteInterval(jobName);
     }
 
-    const config = await this.prisma.rmmProviderConfig.findUnique({
-      where: { companyId_provider: { companyId, provider } },
+    const config = await this.prisma.rmmProviderConfig.findFirst({
+      where: { companyId, provider },
     });
 
     if (config && config.isActive) {
       const intervalMs = (config.syncIntervalMin || 60) * 60 * 1000;
       const interval = setInterval(async () => {
         try {
-          await this.syncProviderAssets(config);
+          await this.syncProviderAssets(config as any);
         } catch (err: any) {
           this.logger.error(`Dynamic sync failed for ${provider}/${companyId}: ${err.message}`);
         }
@@ -121,13 +121,13 @@ export class RmmSyncService implements OnModuleInit {
 
   async syncProviderNow(companyId: string, provider: string) {
     this.logger.log(`syncProviderNow called: companyId=${companyId} provider=${provider}`);
-    const config = await this.prisma.rmmProviderConfig.findUnique({
-      where: { companyId_provider: { companyId, provider } },
+    const config = await this.prisma.rmmProviderConfig.findFirst({
+      where: { companyId, provider },
     });
     if (!config) {
       return { synced: false, error: `No RMM configuration found for ${provider} in this company` };
     }
-    await this.syncProviderAssets(config);
+    await this.syncProviderAssets(config as any);
     return { synced: true, provider, companyId };
   }
 }

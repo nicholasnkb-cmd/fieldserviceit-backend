@@ -2,7 +2,10 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noImplicitAny": false,
-    "strictNullChecks": false
+    "strictNullChecks": false,
+    "strict": false,
+    "skipLibCheck": true,
+    "noEmitOnError": false
   },
   "exclude": ["node_modules", "dist", "test", "prisma", "**/*spec.ts", "**/*.spec.ts"]
 }

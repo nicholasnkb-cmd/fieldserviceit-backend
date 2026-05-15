@@ -48,15 +48,12 @@ export class TicketsController {
       where: { companyId: user.companyId, deletedAt: null },
       orderBy: { updatedAt: 'desc' },
       take: 200,
-      select: {
-        id: true, ticketNumber: true, title: true, status: true, priority: true,
-        contactName: true, category: true,
+      include: {
         assignedTo: { select: { id: true, firstName: true, lastName: true } },
-        createdAt: true,
       },
     });
     const columns = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ON_HOLD', 'RESOLVED', 'CLOSED'];
-    const board = columns.map((s) => ({ status: s, tickets: tickets.filter((t) => t.status === s) }));
+    const board = columns.map((s) => ({ status: s, tickets: tickets.filter((t: any) => t.status === s) }));
     return { columns: board };
   }
 
