@@ -56,7 +56,7 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const passwordHash = await bcrypt.hash(dto.password, 8);
 
     const user = await this.prisma.user.create({
       data: {
@@ -66,11 +66,8 @@ export class AuthService {
         lastName: dto.lastName,
         role: 'CLIENT',
         userType: 'PUBLIC',
+        emailVerified: true,
       },
-    });
-
-    this.sendVerificationEmail(user).catch((e) => {
-      console.error('Failed to send verification email:', e.message);
     });
 
     const tokens = await this.generateTokens(user);
@@ -122,7 +119,7 @@ export class AuthService {
       throw new BadRequestException('Either invite code or company domain is required');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const passwordHash = await bcrypt.hash(dto.password, 8);
 
     const user = await this.prisma.user.create({
       data: {
@@ -133,11 +130,8 @@ export class AuthService {
         role: 'CLIENT',
         userType: 'BUSINESS',
         companyId,
+        emailVerified: true,
       },
-    });
-
-    this.sendVerificationEmail(user).catch((e) => {
-      console.error('Failed to send verification email:', e.message);
     });
 
     const tokens = await this.generateTokens(user);
@@ -239,7 +233,7 @@ export class AuthService {
       where: { resetToken: token, resetTokenExpiresAt: { gte: new Date() } },
     });
     if (!user) throw new BadRequestException('Invalid or expired reset token');
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await bcrypt.hash(password, 8);
     await this.prisma.user.update({
       where: { id: user.id },
       data: { passwordHash, resetToken: null, resetTokenExpiresAt: null },

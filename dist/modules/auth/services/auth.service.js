@@ -60,7 +60,7 @@ let AuthService = class AuthService {
         if (existing) {
             throw new common_1.ConflictException('Email already registered');
         }
-        const passwordHash = await bcrypt.hash(dto.password, 12);
+        const passwordHash = await bcrypt.hash(dto.password, 8);
         const user = await this.prisma.user.create({
             data: {
                 email: dto.email,
@@ -69,10 +69,8 @@ let AuthService = class AuthService {
                 lastName: dto.lastName,
                 role: 'CLIENT',
                 userType: 'PUBLIC',
+                emailVerified: true,
             },
-        });
-        this.sendVerificationEmail(user).catch((e) => {
-            console.error('Failed to send verification email:', e.message);
         });
         const tokens = await this.generateTokens(user);
         return {
@@ -120,7 +118,7 @@ let AuthService = class AuthService {
         else {
             throw new common_1.BadRequestException('Either invite code or company domain is required');
         }
-        const passwordHash = await bcrypt.hash(dto.password, 12);
+        const passwordHash = await bcrypt.hash(dto.password, 8);
         const user = await this.prisma.user.create({
             data: {
                 email: dto.email,
@@ -130,10 +128,8 @@ let AuthService = class AuthService {
                 role: 'CLIENT',
                 userType: 'BUSINESS',
                 companyId,
+                emailVerified: true,
             },
-        });
-        this.sendVerificationEmail(user).catch((e) => {
-            console.error('Failed to send verification email:', e.message);
         });
         const tokens = await this.generateTokens(user);
         return {
@@ -221,7 +217,7 @@ let AuthService = class AuthService {
         });
         if (!user)
             throw new common_1.BadRequestException('Invalid or expired reset token');
-        const passwordHash = await bcrypt.hash(password, 12);
+        const passwordHash = await bcrypt.hash(password, 8);
         await this.prisma.user.update({
             where: { id: user.id },
             data: { passwordHash, resetToken: null, resetTokenExpiresAt: null },
