@@ -5,14 +5,13 @@ import { PrismaClient } from '@prisma/client';
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
-  constructor() {
-    super({
-      log: [],
-    });
-  }
-
   async onModuleInit() {
-    this.logger.log('PrismaService initialized (lazy connection on first query)');
+    try {
+      await this.$connect();
+      this.logger.log('Database connected');
+    } catch (err) {
+      this.logger.warn('Database unavailable: ' + (err instanceof Error ? err.message : String(err)));
+    }
   }
 
   async onModuleDestroy() {
