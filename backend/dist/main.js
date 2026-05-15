@@ -43,5 +43,8 @@ async function bootstrap() {
     await app.listen(port, '0.0.0.0');
     logger.log(`Server running on port ${port}`);
 }
-bootstrap();
+bootstrap().catch((err) => {
+    console.error('FATAL:', err?.message || err);
+    process.exit(1);
+});
 //# sourceMappingURL=main.js.map
