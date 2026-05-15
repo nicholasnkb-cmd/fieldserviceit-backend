@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node -e \"console.log('Build OK, dist ready')\"",
-    "start": "node start.js",
+    "build": "echo 'Build OK'",
+    "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "start:hostinger": "bash start-hostinger.sh",
@@ -80,19 +80,13 @@
     "typescript": "^5.4.0"
   },
   "jest": {
-    "moduleFileExtensions": [
-      "js",
-      "json",
-      "ts"
-    ],
+    "moduleFileExtensions": ["js", "json", "ts"],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
-    "collectCoverageFrom": [
-      "**/*.(t|j)s"
-    ],
+    "collectCoverageFrom": ["**/*.(t|j)s"],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
   }
