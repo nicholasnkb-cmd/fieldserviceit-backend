@@ -1,35 +1,63 @@
 name: Deploy
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    branches: [main]
-    types:
-      - completed
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  push:
+    branches: [master]
 
 jobs:
-  deploy-staging:
-    if: github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy to staging
-        run: |
-          echo "Deploying to staging cluster..."
-          # kubectl set image deployment/backend backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
-          # kubectl set image deployment/frontend frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ github.sha }}
-
-  deploy-production:
-    if: github.ref == 'refs/heads/main'
+  deploy-backend:
+    name: Deploy Backend to hPanel
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy to production (canary)
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.DEPLOY_TOKEN }}
+
+      - name: Configure Git
         run: |
-          echo "Deploying to production cluster (canary)..."
-          # Canary: 10% traffic → 50% → 100%
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add backend remote
+        run: |
+          git remote add backend-origin https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/nicholasnkb-cmd/fieldserviceit-backend.git || true
+
+      - name: Push backend subtree
+        run: |
+          git subtree push --prefix=backend backend-origin master
+
+      - name: Trigger hPanel redeploy
+        run: |
+          echo "Backend pushed to GitHub. Trigger hPanel redeploy manually or via API."
+          echo "API endpoint: POST https://developers.hostinger.com/api/hosting/v1/nodejs/redeploy"
+        if: success()
+
+  deploy-frontend:
+    name: Deploy Frontend to hPanel
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.DEPLOY_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add frontend remote
+        run: |
+          git remote add frontend-origin https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/nicholasnkb-cmd/fieldserviceit-frontend.git || true
+
+      - name: Push frontend subtree
+        run: |
+          git subtree push --prefix=frontend frontend-origin master
+
+      - name: Trigger hPanel redeploy
+        run: |
+          echo "Frontend pushed to GitHub. Trigger hPanel redeploy manually or via API."
+        if: success()

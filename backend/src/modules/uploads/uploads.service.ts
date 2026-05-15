@@ -6,6 +6,24 @@ import * as fs from 'fs';
 import { v4 as uuid } from 'uuid';
 import { getS3Client, getS3Bucket } from '../../config/s3.config';
 
+const ALLOWED_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.gif', '.webp',
+  '.pdf', '.txt', '.doc', '.docx',
+  '.csv', '.xlsx', '.xls',
+]);
+
+function sanitizeFilename(originalname: string): string {
+  const base = path.basename(originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+  return base || 'unnamed';
+}
+
+function validateExtension(filename: string): void {
+  const ext = path.extname(filename).toLowerCase();
+  if (!ext || !ALLOWED_EXTENSIONS.has(ext)) {
+    throw new BadRequestException(`File extension "${ext || 'none'}" not allowed. Allowed: ${[...ALLOWED_EXTENSIONS].join(', ')}`);
+  }
+}
+
 @Injectable()
 export class UploadsService {
   private readonly logger = new Logger(UploadsService.name);
@@ -25,7 +43,9 @@ export class UploadsService {
   async saveFile(file: Express.Multer.File, subfolder: string): Promise<string> {
     if (!file) throw new BadRequestException('No file provided');
 
-    const ext = path.extname(file.originalname) || '.bin';
+    const sanitized = sanitizeFilename(file.originalname);
+    validateExtension(sanitized);
+    const ext = path.extname(sanitized) || '.bin';
     const filename = `${uuid()}${ext}`;
 
     if (this.storageType === 's3' && this.s3Client) {

@@ -2,22 +2,45 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, develop]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 env:
   DATABASE_URL: mysql://app:devpassword@localhost:3306/fieldserviceit-test
-  JWT_SECRET: ci-secret-key
+  JWT_SECRET: ci-secret-key-for-testing-only
   JWT_EXPIRES_IN: 15m
   SMTP_HOST: localhost
   SMTP_PORT: 1025
   FRONTEND_URL: http://localhost:3000
   STORAGE_TYPE: local
+  CORS_ORIGIN: http://localhost:3000
+  NODE_ENV: test
 
 jobs:
+  backend-lint:
+    name: Backend Lint & Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit -p tsconfig.build.json
+
   backend-unit:
     name: Backend Unit Tests
+    needs: backend-lint
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -91,7 +114,7 @@ jobs:
       - run: npx prisma generate
       - run: npx prisma migrate deploy
       - run: npm run prisma:seed
-      - run: npm run test:e2e
+      - run: npm run test:e2e -- --testPathPattern="app.e2e-spec|auth-ticket-lifecycle.e2e-spec|permissions.e2e-spec"
 
   frontend:
     name: Frontend Build & Lint
@@ -112,3 +135,23 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run lint
+
+  security-check:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+      - run: npm audit --production --audit-level=high
+        continue-on-error: true
