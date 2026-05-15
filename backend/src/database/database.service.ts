@@ -160,17 +160,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data, select }: { data: Record<string, any>; select?: Record<string, boolean> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO User (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const id = data.id || this.generateUuid();
-      if (!data.id) {
-        await this.execute(`UPDATE User SET id = ? WHERE id IS NULL ORDER BY id DESC LIMIT 1`, [id]);
-      }
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM User WHERE id = ? LIMIT 1`, [result.insertId || id]);
-      return rows[0] || { ...data, id: result.insertId };
+      await this.execute(sql, values);
+      const selCols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
+      const rows = await this.query<RowDataPacket[]>(`SELECT ${selCols.join(', ')} FROM User WHERE id = ? LIMIT 1`, [insertData.id]);
+      return rows[0];
     },
 
     update: async ({ where, data, select }: { where: Record<string, any>; data: Record<string, any>; select?: Record<string, boolean> }) => {
@@ -254,12 +252,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO Company (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Company WHERE id = ? LIMIT 1`, [result.insertId]);
+      await this.execute(sql, values);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Company WHERE id = ? LIMIT 1`, [insertData.id]);
       return rows[0];
     },
 
@@ -346,12 +345,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data, select, include }: { data: Record<string, any>; select?: Record<string, boolean>; include?: Record<string, any> }) => {
-      const cols = Object.keys(data).filter(k => data[k] !== undefined);
-      const values = cols.map(k => data[k]);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData).filter(k => insertData[k] !== undefined);
+      const values = cols.map(k => insertData[k]);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO Ticket (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Ticket WHERE id = ? LIMIT 1`, [result.insertId]);
+      await this.execute(sql, values);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Ticket WHERE id = ? LIMIT 1`, [insertData.id]);
       return this.enrichTicket(rows[0], include);
     },
 
@@ -391,12 +391,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO Session (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Session WHERE id = ? LIMIT 1`, [result.insertId]);
+      await this.execute(sql, values);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Session WHERE id = ? LIMIT 1`, [insertData.id]);
       return rows[0];
     },
 
@@ -421,12 +422,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   ticketAttachment = {
     create: async ({ data, include }: { data: Record<string, any>; include?: Record<string, any> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO TicketAttachment (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM TicketAttachment WHERE id = ? LIMIT 1`, [result.insertId]);
+      await this.execute(sql, values);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM TicketAttachment WHERE id = ? LIMIT 1`, [insertData.id]);
       const attachment = rows[0];
       if (attachment && include?.uploadedBy) {
         const userRows = await this.query<RowDataPacket[]>(`SELECT id, firstName, lastName FROM User WHERE id = ? LIMIT 1`, [attachment.uploadedById]);
@@ -464,12 +466,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO TicketTemplate (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM TicketTemplate WHERE id = ? LIMIT 1`, [result.insertId]);
+      await this.execute(sql, values);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM TicketTemplate WHERE id = ? LIMIT 1`, [insertData.id]);
       return rows[0];
     },
 
@@ -486,12 +489,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   timeEntry = {
     create: async ({ data }: { data: Record<string, any> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO TimeEntry (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM TimeEntry WHERE id = ? LIMIT 1`, [result.insertId]);
+      await this.execute(sql, values);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM TimeEntry WHERE id = ? LIMIT 1`, [insertData.id]);
       return rows[0];
     },
 
@@ -610,12 +614,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO Asset (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Asset WHERE id = ? LIMIT 1`, [result.insertId]);
+      await this.execute(sql, values);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Asset WHERE id = ? LIMIT 1`, [insertData.id]);
       return rows[0];
     },
 
@@ -658,12 +663,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   notification = {
     create: async ({ data }: { data: Record<string, any> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO Notification (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Notification WHERE id = ? LIMIT 1`, [result.insertId]);
+      await this.execute(sql, values);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Notification WHERE id = ? LIMIT 1`, [insertData.id]);
       return rows[0];
     },
 
@@ -747,12 +753,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO Role (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Role WHERE id = ? LIMIT 1`, [result.insertId]);
+      await this.execute(sql, values);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Role WHERE id = ? LIMIT 1`, [insertData.id]);
       return rows[0];
     },
 
@@ -986,12 +993,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     create: async ({ data, include }: { data: Record<string, any>; include?: Record<string, any> }) => {
       const { steps, ...workflowData } = data;
-      const cols = Object.keys(workflowData);
-      const values = Object.values(workflowData);
+      const workflowId = this.generateUuid();
+      const insertData = { id: workflowId, ...workflowData };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO Workflow (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const workflowId = result.insertId;
+      await this.execute(sql, values);
 
       if (steps?.create) {
         for (const step of steps.create) {
@@ -1026,12 +1034,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   workflowRun = {
     create: async ({ data }: { data: Record<string, any> }) => {
       const { steps, ...runData } = data;
-      const cols = Object.keys(runData);
-      const values = Object.values(runData);
+      const runId = this.generateUuid();
+      const insertData = { id: runId, ...runData };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO WorkflowRun (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const runId = result.insertId;
+      await this.execute(sql, values);
 
       if (steps?.create) {
         for (const step of steps.create) {
@@ -1118,12 +1127,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO RmmProviderConfig (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
-      const result = await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM RmmProviderConfig WHERE id = ? LIMIT 1`, [result.insertId]);
+      await this.execute(sql, values);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM RmmProviderConfig WHERE id = ? LIMIT 1`, [insertData.id]);
       return rows[0];
     },
 
@@ -1187,12 +1197,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data, include }: { data: Record<string, any>; include?: Record<string, any> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const insertData = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO TicketTimeline (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
       const result = await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM TicketTimeline WHERE id = ? LIMIT 1`, [result.insertId]);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM TicketTimeline WHERE id = ? LIMIT 1`, [insertData.id]);
       const entry = rows[0];
       if (entry && include?.actor) {
         const actorRows = await this.query<RowDataPacket[]>(`SELECT id, firstName, lastName FROM User WHERE id = ? LIMIT 1`, [entry.actorId]);
