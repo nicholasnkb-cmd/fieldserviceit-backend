@@ -708,9 +708,6 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
             },
         };
         this.permission = {
-            findMany: async () => {
-                return this.query('SELECT * FROM Permission');
-            },
             findMany: async ({ where }) => {
                 let sql = 'SELECT * FROM Permission';
                 const values = [];
@@ -1132,8 +1129,6 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
             waitForConnections: true,
             connectionLimit: 10,
             queueLimit: 0,
-            acquireTimeout: 10000,
-            timeout: 10000,
         });
     }
     async onModuleInit() {

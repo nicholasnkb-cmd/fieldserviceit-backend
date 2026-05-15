@@ -23,8 +23,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
-      acquireTimeout: 10000,
-      timeout: 10000,
     });
   }
 
@@ -789,10 +787,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   };
 
   permission = {
-    findMany: async () => {
-      return this.query<RowDataPacket[]>('SELECT * FROM Permission');
-    },
-
     findMany: async ({ where }: { where?: Record<string, any> }) => {
       let sql = 'SELECT * FROM Permission';
       const values: any[] = [];
