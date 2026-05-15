@@ -56,6 +56,10 @@ let EmailService = class EmailService {
         }
     }
     async sendNotificationEmail(to, subject, html) {
+        if (!this.transporter) {
+            console.log(`[EmailService] SMTP not configured, skipping email to ${to}: ${subject}`);
+            return;
+        }
         await this.transporter.sendMail({
             from: process.env.SMTP_FROM || 'noreply@fieldserviceit.com',
             to,
