@@ -51,18 +51,18 @@ export class AuthService {
   }
 
   async registerPublic(dto: { email: string; password: string; firstName: string; lastName: string }) {
-    console.log('[registerPublic] Step 1: checking existing user for', dto.email);
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    console.log('[registerPublic] Step 2: existing user =', !!existing);
-    if (existing) {
-      throw new ConflictException('Email already registered');
-    }
-
-    console.log('[registerPublic] Step 3: hashing password');
-    const passwordHash = await bcrypt.hash(dto.password, 4);
-    console.log('[registerPublic] Step 4: password hashed, creating user');
-
     try {
+      console.log('[registerPublic] Step 1: checking existing user for', dto.email);
+      const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+      console.log('[registerPublic] Step 2: existing user =', !!existing);
+      if (existing) {
+        throw new ConflictException('Email already registered');
+      }
+
+      console.log('[registerPublic] Step 3: hashing password');
+      const passwordHash = await bcrypt.hash(dto.password, 4);
+      console.log('[registerPublic] Step 4: password hashed, creating user');
+
       const user = await this.prisma.user.create({
         data: {
           email: dto.email,
@@ -93,9 +93,9 @@ export class AuthService {
         ...tokens,
       };
     } catch (err: any) {
-      console.error('[registerPublic] DB error:', err?.message || String(err));
-      console.error('[registerPublic] DB error stack:', err?.stack || 'no stack');
-      throw new Error('Registration failed: ' + (err?.message || String(err)));
+      console.error('[registerPublic] FULL ERROR:', err?.message || String(err));
+      console.error('[registerPublic] FULL ERROR STACK:', err?.stack || 'no stack');
+      throw err;
     }
   }
 
