@@ -5,8 +5,8 @@ export declare class SettingsService {
     getSettings(companyId: string): Promise<{
         settings: any;
         branding: any;
-        name: string;
         id: string;
+        name: string;
         slug: string;
         domain: string;
         logo: string;
@@ -18,20 +18,20 @@ export declare class SettingsService {
         branding?: string;
         settings?: string;
     }): Promise<{
-        name: string;
         id: string;
+        name: string;
         domain: string;
         logo: string;
-        settings: string;
         branding: string;
+        settings: string;
     }>;
     updateBranding(companyId: string, branding: {
         primaryColor?: string;
         logoUrl?: string;
         companyName?: string;
     }): Promise<{
-        name: string;
         id: string;
+        name: string;
         branding: string;
     }>;
 }

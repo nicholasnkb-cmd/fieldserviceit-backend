@@ -2,70 +2,70 @@ import { PrismaService } from '../../../database/prisma.service';
 export declare class AdminService {
     private prisma;
     constructor(prisma: PrismaService);
-    listPermissions(): Promise<{
-        createdAt: Date;
-        name: string;
+    listPermissions(): Promise<(import("@prisma/client/runtime").GetResult<{
         id: string;
+        name: string;
         slug: string;
-        description: string | null;
         group: string | null;
-    }[]>;
+        description: string | null;
+        createdAt: Date;
+    }, unknown> & {})[]>;
     listRoles(companyId?: string): Promise<({
         permissions: ({
-            permission: {
-                createdAt: Date;
-                name: string;
+            permission: import("@prisma/client/runtime").GetResult<{
                 id: string;
+                name: string;
                 slug: string;
-                description: string | null;
                 group: string | null;
-            };
-        } & {
+                description: string | null;
+                createdAt: Date;
+            }, unknown> & {};
+        } & import("@prisma/client/runtime").GetResult<{
             roleId: string;
-            createdAt: Date;
             permissionId: string;
-        })[];
+            createdAt: Date;
+        }, unknown> & {})[];
         _count: {
             userRoles: number;
         };
-    } & {
-        createdAt: Date;
-        name: string;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
+        name: string;
         slug: string;
         description: string | null;
         companyId: string | null;
         isSystem: boolean;
+        createdAt: Date;
         updatedAt: Date;
-    })[]>;
+    }, unknown> & {})[]>;
     getRole(roleId: string): Promise<{
         permissions: ({
-            permission: {
-                createdAt: Date;
-                name: string;
+            permission: import("@prisma/client/runtime").GetResult<{
                 id: string;
+                name: string;
                 slug: string;
-                description: string | null;
                 group: string | null;
-            };
-        } & {
+                description: string | null;
+                createdAt: Date;
+            }, unknown> & {};
+        } & import("@prisma/client/runtime").GetResult<{
             roleId: string;
-            createdAt: Date;
             permissionId: string;
-        })[];
+            createdAt: Date;
+        }, unknown> & {})[];
         _count: {
             userRoles: number;
         };
-    } & {
-        createdAt: Date;
-        name: string;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
+        name: string;
         slug: string;
         description: string | null;
         companyId: string | null;
         isSystem: boolean;
+        createdAt: Date;
         updatedAt: Date;
-    }>;
+    }, unknown> & {}>;
     createRole(dto: {
         name: string;
         slug: string;
@@ -74,120 +74,120 @@ export declare class AdminService {
         permissionSlugs?: string[];
     }): Promise<{
         permissions: ({
-            permission: {
-                createdAt: Date;
-                name: string;
+            permission: import("@prisma/client/runtime").GetResult<{
                 id: string;
+                name: string;
                 slug: string;
-                description: string | null;
                 group: string | null;
-            };
-        } & {
+                description: string | null;
+                createdAt: Date;
+            }, unknown> & {};
+        } & import("@prisma/client/runtime").GetResult<{
             roleId: string;
-            createdAt: Date;
             permissionId: string;
-        })[];
-    } & {
-        createdAt: Date;
-        name: string;
+            createdAt: Date;
+        }, unknown> & {})[];
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
+        name: string;
         slug: string;
         description: string | null;
         companyId: string | null;
         isSystem: boolean;
+        createdAt: Date;
         updatedAt: Date;
-    }>;
+    }, unknown> & {}>;
     updateRole(roleId: string, dto: {
         name?: string;
         description?: string;
         permissionSlugs?: string[];
     }): Promise<{
         permissions: ({
-            permission: {
-                createdAt: Date;
-                name: string;
+            permission: import("@prisma/client/runtime").GetResult<{
                 id: string;
+                name: string;
                 slug: string;
-                description: string | null;
                 group: string | null;
-            };
-        } & {
+                description: string | null;
+                createdAt: Date;
+            }, unknown> & {};
+        } & import("@prisma/client/runtime").GetResult<{
             roleId: string;
-            createdAt: Date;
             permissionId: string;
-        })[];
-    } & {
-        createdAt: Date;
-        name: string;
-        id: string;
-        slug: string;
-        description: string | null;
-        companyId: string | null;
-        isSystem: boolean;
-        updatedAt: Date;
-    }>;
-    deleteRole(roleId: string): Promise<{
-        createdAt: Date;
-        name: string;
-        id: string;
-        slug: string;
-        description: string | null;
-        companyId: string | null;
-        isSystem: boolean;
-        updatedAt: Date;
-    }>;
-    assignUserRole(userId: string, roleId: string): Promise<{
-        role: {
             createdAt: Date;
-            name: string;
+        }, unknown> & {})[];
+    } & import("@prisma/client/runtime").GetResult<{
+        id: string;
+        name: string;
+        slug: string;
+        description: string | null;
+        companyId: string | null;
+        isSystem: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {}>;
+    deleteRole(roleId: string): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
+        name: string;
+        slug: string;
+        description: string | null;
+        companyId: string | null;
+        isSystem: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {}>;
+    assignUserRole(userId: string, roleId: string): Promise<{
+        role: import("@prisma/client/runtime").GetResult<{
             id: string;
+            name: string;
             slug: string;
             description: string | null;
             companyId: string | null;
             isSystem: boolean;
+            createdAt: Date;
             updatedAt: Date;
-        };
-    } & {
+        }, unknown> & {};
+    } & import("@prisma/client/runtime").GetResult<{
         userId: string;
         roleId: string;
         createdAt: Date;
-    }>;
-    removeUserRole(userId: string, roleId: string): Promise<{
+    }, unknown> & {}>;
+    removeUserRole(userId: string, roleId: string): Promise<import("@prisma/client/runtime").GetResult<{
         userId: string;
         roleId: string;
         createdAt: Date;
-    }>;
+    }, unknown> & {}>;
     getUserRoles(userId: string): Promise<({
         role: {
             permissions: ({
-                permission: {
-                    createdAt: Date;
-                    name: string;
+                permission: import("@prisma/client/runtime").GetResult<{
                     id: string;
+                    name: string;
                     slug: string;
-                    description: string | null;
                     group: string | null;
-                };
-            } & {
+                    description: string | null;
+                    createdAt: Date;
+                }, unknown> & {};
+            } & import("@prisma/client/runtime").GetResult<{
                 roleId: string;
-                createdAt: Date;
                 permissionId: string;
-            })[];
-        } & {
-            createdAt: Date;
-            name: string;
+                createdAt: Date;
+            }, unknown> & {})[];
+        } & import("@prisma/client/runtime").GetResult<{
             id: string;
+            name: string;
             slug: string;
             description: string | null;
             companyId: string | null;
             isSystem: boolean;
+            createdAt: Date;
             updatedAt: Date;
-        };
-    } & {
+        }, unknown> & {};
+    } & import("@prisma/client/runtime").GetResult<{
         userId: string;
         roleId: string;
         createdAt: Date;
-    })[]>;
+    }, unknown> & {})[]>;
     listRolesLegacy(): {
         id: number;
         name: string;
@@ -202,21 +202,21 @@ export declare class AdminService {
         userType?: string;
     }): Promise<{
         data: {
-            company: {
-                name: string;
-                id: string;
-            };
-            role: string;
-            createdAt: Date;
             id: string;
-            companyId: string;
             email: string;
             firstName: string;
             lastName: string;
+            role: string;
             userType: string;
+            companyId: string;
+            company: {
+                id: string;
+                name: string;
+            };
             isActive: boolean;
             emailVerified: boolean;
             lastLoginAt: Date;
+            createdAt: Date;
         }[];
         meta: {
             page: number;
@@ -226,22 +226,22 @@ export declare class AdminService {
         };
     }>;
     getUser(id: string): Promise<{
-        company: {
-            name: string;
-            id: string;
-        };
-        role: string;
-        createdAt: Date;
         id: string;
-        companyId: string;
         email: string;
         firstName: string;
         lastName: string;
-        phone: string;
+        role: string;
         userType: string;
+        companyId: string;
+        company: {
+            id: string;
+            name: string;
+        };
         isActive: boolean;
         emailVerified: boolean;
+        phone: string;
         lastLoginAt: Date;
+        createdAt: Date;
     }>;
     createUser(dto: {
         email: string;
@@ -251,28 +251,28 @@ export declare class AdminService {
         role?: string;
         companyId: string;
     }): Promise<{
-        role: string;
         id: string;
-        companyId: string;
         email: string;
         firstName: string;
         lastName: string;
+        role: string;
+        companyId: string;
     }>;
     updateUserRole(userId: string, role: string): Promise<{
-        role: string;
         id: string;
         email: string;
         firstName: string;
         lastName: string;
+        role: string;
     }>;
     updateUser(id: string, dto: any): Promise<{
-        role: string;
         id: string;
-        companyId: string;
         email: string;
         firstName: string;
         lastName: string;
+        role: string;
         isActive: boolean;
+        companyId: string;
     }>;
     removeUser(id: string): Promise<{
         id: string;
@@ -285,25 +285,25 @@ export declare class AdminService {
     }): Promise<{
         data: ({
             _count: {
-                assets: number;
-                tickets: number;
                 users: number;
+                tickets: number;
+                assets: number;
             };
-        } & {
-            createdAt: Date;
-            name: string;
+        } & import("@prisma/client/runtime").GetResult<{
             id: string;
+            name: string;
             slug: string;
-            updatedAt: Date;
-            isActive: boolean;
-            deletedAt: Date | null;
-            inviteCode: string | null;
             domain: string | null;
             logo: string | null;
             settings: string | null;
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            deletedAt: Date | null;
             branding: string | null;
+            inviteCode: string | null;
             inviteExpiresAt: Date | null;
-        })[];
+        }, unknown> & {})[];
         meta: {
             page: number;
             limit: number;
@@ -315,54 +315,54 @@ export declare class AdminService {
         name: string;
         slug: string;
         domain?: string;
-    }): Promise<{
-        createdAt: Date;
-        name: string;
+    }): Promise<import("@prisma/client/runtime").GetResult<{
         id: string;
+        name: string;
         slug: string;
-        updatedAt: Date;
-        isActive: boolean;
-        deletedAt: Date | null;
-        inviteCode: string | null;
         domain: string | null;
         logo: string | null;
         settings: string | null;
-        branding: string | null;
-        inviteExpiresAt: Date | null;
-    }>;
-    updateCompany(id: string, dto: any): Promise<{
-        createdAt: Date;
-        name: string;
-        id: string;
-        slug: string;
-        updatedAt: Date;
         isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
         deletedAt: Date | null;
+        branding: string | null;
         inviteCode: string | null;
+        inviteExpiresAt: Date | null;
+    }, unknown> & {}>;
+    updateCompany(id: string, dto: any): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
+        name: string;
+        slug: string;
         domain: string | null;
         logo: string | null;
         settings: string | null;
-        branding: string | null;
-        inviteExpiresAt: Date | null;
-    }>;
-    removeCompany(id: string): Promise<{
-        createdAt: Date;
-        name: string;
-        id: string;
-        slug: string;
-        updatedAt: Date;
         isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
         deletedAt: Date | null;
+        branding: string | null;
         inviteCode: string | null;
+        inviteExpiresAt: Date | null;
+    }, unknown> & {}>;
+    removeCompany(id: string): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
+        name: string;
+        slug: string;
         domain: string | null;
         logo: string | null;
         settings: string | null;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
         branding: string | null;
+        inviteCode: string | null;
         inviteExpiresAt: Date | null;
-    }>;
+    }, unknown> & {}>;
     generateInviteCode(companyId: string, expiresInDays?: number): Promise<{
-        name: string;
         id: string;
+        name: string;
         inviteCode: string;
         inviteExpiresAt: Date;
     }>;
@@ -372,14 +372,14 @@ export declare class AdminService {
         search?: string;
     }): Promise<{
         data: {
-            role: string;
-            createdAt: Date;
             id: string;
             email: string;
             firstName: string;
             lastName: string;
+            role: string;
             isActive: boolean;
             lastLoginAt: Date;
+            createdAt: Date;
         }[];
         meta: {
             page: number;
@@ -389,43 +389,43 @@ export declare class AdminService {
         };
     }>;
     updateCompanyUserRole(userId: string, role: string, companyId: string): Promise<{
-        role: string;
         id: string;
         email: string;
         firstName: string;
         lastName: string;
+        role: string;
     }>;
     getCompanyUser(userId: string, companyId: string): Promise<{
-        role: string;
-        createdAt: Date;
         id: string;
         email: string;
         firstName: string;
         lastName: string;
-        phone: string;
+        role: string;
         userType: string;
         isActive: boolean;
         emailVerified: boolean;
+        phone: string;
         lastLoginAt: Date;
+        createdAt: Date;
     }>;
     getCompanySettings(companyId: string): Promise<{
         settings: any;
         branding: any;
-        name: string;
         id: string;
+        name: string;
         slug: string;
-        inviteCode: string;
         domain: string;
         logo: string;
+        inviteCode: string;
         inviteExpiresAt: Date;
     }>;
     updateCompanySettings(companyId: string, dto: any): Promise<{
-        name: string;
         id: string;
+        name: string;
         domain: string;
         logo: string;
-        settings: string;
         branding: string;
+        settings: string;
     }>;
     createCompanyUser(dto: {
         email: string;
@@ -434,11 +434,11 @@ export declare class AdminService {
         lastName: string;
         role?: string;
     }, companyId: string): Promise<{
-        role: string;
         id: string;
         email: string;
         firstName: string;
         lastName: string;
+        role: string;
     }>;
     removeCompanyUser(userId: string, companyId: string): Promise<{
         id: string;
@@ -450,28 +450,28 @@ export declare class AdminService {
         companyId?: string;
     }): Promise<{
         data: ({
-            company: {
-                name: string;
-                id: string;
-            };
             actor: {
                 id: string;
-                email: string;
                 firstName: string;
                 lastName: string;
+                email: string;
             };
-        } & {
-            createdAt: Date;
+            company: {
+                id: string;
+                name: string;
+            };
+        } & import("@prisma/client/runtime").GetResult<{
             id: string;
             companyId: string;
-            action: string;
             actorId: string;
+            action: string;
             resourceType: string;
             resourceId: string;
             diff: string | null;
             ip: string | null;
             userAgent: string | null;
-        })[];
+            createdAt: Date;
+        }, unknown> & {})[];
         meta: {
             page: number;
             limit: number;
@@ -484,10 +484,10 @@ export declare class AdminService {
         totalCompanies: number;
         totalTickets: number;
         totalAssets: number;
-        usersByType: (import(".prisma/client").Prisma.PickEnumerable<import(".prisma/client").Prisma.UserGroupByOutputType, "userType"[]> & {
+        usersByType: (import(".prisma/client").Prisma.PickArray<import(".prisma/client").Prisma.UserGroupByOutputType, "userType"[]> & {
             _count: number;
         })[];
-        ticketsByStatus: (import(".prisma/client").Prisma.PickEnumerable<import(".prisma/client").Prisma.TicketGroupByOutputType, "status"[]> & {
+        ticketsByStatus: (import(".prisma/client").Prisma.PickArray<import(".prisma/client").Prisma.TicketGroupByOutputType, "status"[]> & {
             _count: number;
         })[];
     }>;

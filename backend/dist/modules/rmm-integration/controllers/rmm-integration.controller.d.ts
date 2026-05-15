@@ -14,27 +14,27 @@ export declare class RmmIntegrationController {
     syncAsset(body: {
         provider: string;
         assetData: any;
-    }, user: any): Promise<{
-        createdAt: Date;
-        name: string;
+    }, user: any): Promise<import("@prisma/client/runtime").GetResult<{
         id: string;
-        companyId: string;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        location: string | null;
-        status: string;
-        ipAddress: string | null;
+        name: string;
         assetType: string;
         serialNumber: string | null;
         manufacturer: string | null;
         model: string | null;
+        location: string | null;
+        ipAddress: string | null;
         macAddress: string | null;
         os: string | null;
         cpu: string | null;
         ram: string | null;
         storage: string | null;
+        status: string;
         notes: string | null;
-    }>;
+        companyId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
     createFromAlert(body: {
         provider: string;
         alert: any;
@@ -44,16 +44,11 @@ export declare class RmmIntegrationController {
             firstName: string;
             lastName: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        description: string | null;
-        companyId: string | null;
-        updatedAt: Date;
-        priority: string;
-        deletedAt: Date | null;
         ticketNumber: string;
         title: string;
+        description: string | null;
         contactName: string | null;
         contactEmail: string | null;
         contactPhone: string | null;
@@ -63,7 +58,9 @@ export declare class RmmIntegrationController {
         latitude: number | null;
         longitude: number | null;
         status: string;
+        priority: string;
         type: string;
+        companyId: string | null;
         createdById: string;
         assignedToId: string | null;
         assetId: string | null;
@@ -74,44 +71,47 @@ export declare class RmmIntegrationController {
         resolution: string | null;
         resolvedAt: Date | null;
         resolvedById: string | null;
-    }>;
-    listConfigs(user: any): import(".prisma/client").Prisma.PrismaPromise<{
         createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
+    listConfigs(user: any): import(".prisma/client").Prisma.PrismaPromise<(import("@prisma/client/runtime").GetResult<{
         id: string;
         companyId: string;
-        updatedAt: Date;
+        provider: string;
         credentials: string;
         isActive: boolean;
-        provider: string;
         syncIntervalMin: number;
         lastSyncAt: Date | null;
-    }[]>;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {})[]>;
     saveConfig(body: {
         provider: string;
         credentials: any;
         syncIntervalMin?: number;
-    }, user: any): Promise<{
-        createdAt: Date;
+    }, user: any): Promise<import("@prisma/client/runtime").GetResult<{
         id: string;
         companyId: string;
-        updatedAt: Date;
+        provider: string;
         credentials: string;
         isActive: boolean;
-        provider: string;
         syncIntervalMin: number;
         lastSyncAt: Date | null;
-    }>;
-    removeConfig(provider: string, user: any): Promise<{
         createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {}>;
+    removeConfig(provider: string, user: any): Promise<import("@prisma/client/runtime").GetResult<{
         id: string;
         companyId: string;
-        updatedAt: Date;
+        provider: string;
         credentials: string;
         isActive: boolean;
-        provider: string;
         syncIntervalMin: number;
         lastSyncAt: Date | null;
-    }>;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {}>;
     syncNow(provider: string, user: any): Promise<{
         synced: boolean;
         error: string;

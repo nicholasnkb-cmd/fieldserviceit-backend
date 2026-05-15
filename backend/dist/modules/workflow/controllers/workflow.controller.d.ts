@@ -3,109 +3,109 @@ export declare class WorkflowController {
     private workflowService;
     constructor(workflowService: WorkflowService);
     create(dto: any, user: any): Promise<{
-        steps: {
-            createdAt: Date;
+        steps: (import("@prisma/client/runtime").GetResult<{
             id: string;
-            updatedAt: Date;
-            action: string;
-            stepOrder: number;
-            config: string | null;
             workflowId: string;
-        }[];
-    } & {
-        createdAt: Date;
-        name: string;
+            stepOrder: number;
+            action: string;
+            config: string | null;
+            createdAt: Date;
+            updatedAt: Date;
+        }, unknown> & {})[];
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
+        name: string;
         description: string | null;
-        companyId: string;
-        updatedAt: Date;
-        isActive: boolean;
-        deletedAt: Date | null;
         triggerOn: string;
-    }>;
+        companyId: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
     findAll(user: any): Promise<({
-        steps: {
-            createdAt: Date;
+        steps: (import("@prisma/client/runtime").GetResult<{
             id: string;
-            updatedAt: Date;
-            action: string;
-            stepOrder: number;
-            config: string | null;
             workflowId: string;
-        }[];
-    } & {
-        createdAt: Date;
-        name: string;
+            stepOrder: number;
+            action: string;
+            config: string | null;
+            createdAt: Date;
+            updatedAt: Date;
+        }, unknown> & {})[];
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
+        name: string;
         description: string | null;
-        companyId: string;
-        updatedAt: Date;
-        isActive: boolean;
-        deletedAt: Date | null;
         triggerOn: string;
-    })[]>;
+        companyId: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {})[]>;
     findOne(id: string, user: any): Promise<{
-        runs: {
+        steps: (import("@prisma/client/runtime").GetResult<{
             id: string;
+            workflowId: string;
+            stepOrder: number;
+            action: string;
+            config: string | null;
+            createdAt: Date;
+            updatedAt: Date;
+        }, unknown> & {})[];
+        runs: (import("@prisma/client/runtime").GetResult<{
+            id: string;
+            workflowId: string;
+            ticketId: string;
             companyId: string;
             status: string;
-            ticketId: string;
-            workflowId: string;
             startedAt: Date;
             completedAt: Date | null;
-        }[];
-        steps: {
-            createdAt: Date;
-            id: string;
-            updatedAt: Date;
-            action: string;
-            stepOrder: number;
-            config: string | null;
-            workflowId: string;
-        }[];
-    } & {
-        createdAt: Date;
+        }, unknown> & {})[];
+    } & import("@prisma/client/runtime").GetResult<{
+        id: string;
         name: string;
-        id: string;
         description: string | null;
-        companyId: string;
-        updatedAt: Date;
-        isActive: boolean;
-        deletedAt: Date | null;
         triggerOn: string;
-    }>;
-    execute(id: string, ticketId: string, user: any): Promise<{
+        companyId: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
+    execute(id: string, ticketId: string, user: any): Promise<import("@prisma/client/runtime").GetResult<{
         id: string;
+        workflowId: string;
+        ticketId: string;
         companyId: string;
         status: string;
-        ticketId: string;
-        workflowId: string;
         startedAt: Date;
         completedAt: Date | null;
-    }>;
+    }, unknown> & {}>;
     getRuns(id: string, user: any): Promise<({
+        steps: (import("@prisma/client/runtime").GetResult<{
+            id: string;
+            runId: string;
+            stepId: string;
+            status: string;
+            executedById: string | null;
+            output: string | null;
+            startedAt: Date | null;
+            completedAt: Date | null;
+        }, unknown> & {})[];
         ticket: {
             id: string;
             ticketNumber: string;
             title: string;
         };
-        steps: {
-            id: string;
-            status: string;
-            output: string | null;
-            startedAt: Date | null;
-            completedAt: Date | null;
-            runId: string;
-            executedById: string | null;
-            stepId: string;
-        }[];
-    } & {
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
+        workflowId: string;
+        ticketId: string;
         companyId: string;
         status: string;
-        ticketId: string;
-        workflowId: string;
         startedAt: Date;
         completedAt: Date | null;
-    })[]>;
+    }, unknown> & {})[]>;
 }

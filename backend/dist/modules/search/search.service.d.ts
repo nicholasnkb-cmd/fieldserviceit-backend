@@ -4,21 +4,21 @@ export declare class SearchService {
     constructor(prisma: PrismaService);
     search(companyId: string | null, query: string, userType: string, userId: string): Promise<{
         tickets: {
-            createdAt: Date;
             id: string;
-            priority: string;
             ticketNumber: string;
             title: string;
-            category: string;
             status: string;
+            priority: string;
+            category: string;
+            createdAt: Date;
         }[];
         assets: {
-            name: string;
             id: string;
-            location: string;
-            status: string;
+            name: string;
             assetType: string;
             serialNumber: string;
+            status: string;
+            location: string;
         }[];
     }>;
     private searchTickets;

@@ -13,47 +13,42 @@ export declare class TicketsController {
     private prisma;
     constructor(ticketsService: TicketsService, timelineService: TicketTimelineService, exportService: TicketExportService, prisma: PrismaService);
     create(dto: CreateTicketDto, user: any): Promise<{
-        asset: {
-            createdAt: Date;
-            name: string;
+        createdBy: {
             id: string;
-            companyId: string;
-            updatedAt: Date;
-            deletedAt: Date | null;
-            location: string | null;
-            status: string;
-            ipAddress: string | null;
-            assetType: string;
-            serialNumber: string | null;
-            manufacturer: string | null;
-            model: string | null;
-            macAddress: string | null;
-            os: string | null;
-            cpu: string | null;
-            ram: string | null;
-            storage: string | null;
-            notes: string | null;
+            firstName: string;
+            lastName: string;
         };
         assignedTo: {
             id: string;
             firstName: string;
             lastName: string;
         };
-        createdBy: {
+        asset: import("@prisma/client/runtime").GetResult<{
             id: string;
-            firstName: string;
-            lastName: string;
-        };
-    } & {
-        createdAt: Date;
+            name: string;
+            assetType: string;
+            serialNumber: string | null;
+            manufacturer: string | null;
+            model: string | null;
+            location: string | null;
+            ipAddress: string | null;
+            macAddress: string | null;
+            os: string | null;
+            cpu: string | null;
+            ram: string | null;
+            storage: string | null;
+            status: string;
+            notes: string | null;
+            companyId: string;
+            createdAt: Date;
+            updatedAt: Date;
+            deletedAt: Date | null;
+        }, unknown> & {};
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        description: string | null;
-        companyId: string | null;
-        updatedAt: Date;
-        priority: string;
-        deletedAt: Date | null;
         ticketNumber: string;
         title: string;
+        description: string | null;
         contactName: string | null;
         contactEmail: string | null;
         contactPhone: string | null;
@@ -63,7 +58,9 @@ export declare class TicketsController {
         latitude: number | null;
         longitude: number | null;
         status: string;
+        priority: string;
         type: string;
+        companyId: string | null;
         createdById: string;
         assignedToId: string | null;
         assetId: string | null;
@@ -74,20 +71,18 @@ export declare class TicketsController {
         resolution: string | null;
         resolvedAt: Date | null;
         resolvedById: string | null;
-    }>;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
     findAll(query: any, user: any): Promise<{
         data: ({
-            asset: {
-                name: string;
-                id: string;
-                assetType: string;
-            };
-            assignedTo: {
+            createdBy: {
                 id: string;
                 firstName: string;
                 lastName: string;
             };
-            createdBy: {
+            assignedTo: {
                 id: string;
                 firstName: string;
                 lastName: string;
@@ -97,16 +92,16 @@ export declare class TicketsController {
                 firstName: string;
                 lastName: string;
             };
-        } & {
-            createdAt: Date;
+            asset: {
+                id: string;
+                name: string;
+                assetType: string;
+            };
+        } & import("@prisma/client/runtime").GetResult<{
             id: string;
-            description: string | null;
-            companyId: string | null;
-            updatedAt: Date;
-            priority: string;
-            deletedAt: Date | null;
             ticketNumber: string;
             title: string;
+            description: string | null;
             contactName: string | null;
             contactEmail: string | null;
             contactPhone: string | null;
@@ -116,7 +111,9 @@ export declare class TicketsController {
             latitude: number | null;
             longitude: number | null;
             status: string;
+            priority: string;
             type: string;
+            companyId: string | null;
             createdById: string;
             assignedToId: string | null;
             assetId: string | null;
@@ -127,7 +124,10 @@ export declare class TicketsController {
             resolution: string | null;
             resolvedAt: Date | null;
             resolvedById: string | null;
-        })[];
+            createdAt: Date;
+            updatedAt: Date;
+            deletedAt: Date | null;
+        }, unknown> & {})[];
         meta: {
             page: number;
             limit: number;
@@ -140,116 +140,82 @@ export declare class TicketsController {
         columns: {
             status: string;
             tickets: {
-                createdAt: Date;
                 id: string;
-                priority: string;
                 ticketNumber: string;
                 title: string;
+                status: string;
+                priority: string;
                 contactName: string;
                 category: string;
-                status: string;
                 assignedTo: {
                     id: string;
                     firstName: string;
                     lastName: string;
                 };
+                createdAt: Date;
             }[];
         }[];
     }>;
     findOne(id: string, user: any): Promise<{
-        asset: {
-            createdAt: Date;
-            name: string;
+        createdBy: {
             id: string;
-            companyId: string;
-            updatedAt: Date;
-            deletedAt: Date | null;
-            location: string | null;
-            status: string;
-            ipAddress: string | null;
+            firstName: string;
+            lastName: string;
+            email: string;
+        };
+        assignedTo: {
+            id: string;
+            firstName: string;
+            lastName: string;
+            email: string;
+        };
+        resolvedBy: {
+            id: string;
+            firstName: string;
+            lastName: string;
+            email: string;
+        };
+        asset: import("@prisma/client/runtime").GetResult<{
+            id: string;
+            name: string;
             assetType: string;
             serialNumber: string | null;
             manufacturer: string | null;
             model: string | null;
+            location: string | null;
+            ipAddress: string | null;
             macAddress: string | null;
             os: string | null;
             cpu: string | null;
             ram: string | null;
             storage: string | null;
-            notes: string | null;
-        };
-        attachments: ({
-            uploadedBy: {
-                id: string;
-                firstName: string;
-                lastName: string;
-            };
-        } & {
-            createdAt: Date;
-            id: string;
-            ticketId: string;
-            fileUrl: string;
-            fileName: string;
-            fileSize: number;
-            mimeType: string;
-            uploadedById: string;
-        })[];
-        dispatches: {
-            createdAt: Date;
-            id: string;
-            companyId: string;
-            updatedAt: Date;
-            latitude: number | null;
-            longitude: number | null;
             status: string;
-            ticketId: string;
             notes: string | null;
-            completedAt: Date | null;
-            scheduledAt: Date | null;
-            arrivedAt: Date | null;
-            customerSignature: string | null;
-            photoUrls: string;
-            technicianId: string;
-        }[];
-        sla: {
-            createdAt: Date;
-            name: string;
-            id: string;
             companyId: string;
+            createdAt: Date;
             updatedAt: Date;
-            priority: string;
-            isActive: boolean;
+            deletedAt: Date | null;
+        }, unknown> & {};
+        sla: import("@prisma/client/runtime").GetResult<{
+            id: string;
+            name: string;
+            companyId: string;
             responseTimeMin: number;
             resolutionTimeMin: number;
+            priority: string;
             escalateAfterMin: number | null;
             escalateToId: string | null;
-        };
-        assignedTo: {
-            id: string;
-            email: string;
-            firstName: string;
-            lastName: string;
-        };
-        createdBy: {
-            id: string;
-            email: string;
-            firstName: string;
-            lastName: string;
-        };
-        resolvedBy: {
-            id: string;
-            email: string;
-            firstName: string;
-            lastName: string;
-        };
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+        }, unknown> & {};
         timeline: ({
             actor: {
                 id: string;
                 firstName: string;
                 lastName: string;
             };
-        } & {
-            createdAt: Date;
+        } & import("@prisma/client/runtime").GetResult<{
             id: string;
             ticketId: string;
             action: string;
@@ -258,17 +224,46 @@ export declare class TicketsController {
             newValue: string | null;
             comment: string | null;
             isInternal: boolean;
-        })[];
-    } & {
-        createdAt: Date;
+            createdAt: Date;
+        }, unknown> & {})[];
+        attachments: ({
+            uploadedBy: {
+                id: string;
+                firstName: string;
+                lastName: string;
+            };
+        } & import("@prisma/client/runtime").GetResult<{
+            id: string;
+            ticketId: string;
+            fileUrl: string;
+            fileName: string;
+            fileSize: number;
+            mimeType: string;
+            uploadedById: string;
+            createdAt: Date;
+        }, unknown> & {})[];
+        dispatches: (import("@prisma/client/runtime").GetResult<{
+            id: string;
+            ticketId: string;
+            technicianId: string;
+            companyId: string;
+            status: string;
+            scheduledAt: Date | null;
+            arrivedAt: Date | null;
+            completedAt: Date | null;
+            notes: string | null;
+            customerSignature: string | null;
+            photoUrls: string;
+            latitude: number | null;
+            longitude: number | null;
+            createdAt: Date;
+            updatedAt: Date;
+        }, unknown> & {})[];
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        description: string | null;
-        companyId: string | null;
-        updatedAt: Date;
-        priority: string;
-        deletedAt: Date | null;
         ticketNumber: string;
         title: string;
+        description: string | null;
         contactName: string | null;
         contactEmail: string | null;
         contactPhone: string | null;
@@ -278,7 +273,9 @@ export declare class TicketsController {
         latitude: number | null;
         longitude: number | null;
         status: string;
+        priority: string;
         type: string;
+        companyId: string | null;
         createdById: string;
         assignedToId: string | null;
         assetId: string | null;
@@ -289,14 +286,17 @@ export declare class TicketsController {
         resolution: string | null;
         resolvedAt: Date | null;
         resolvedById: string | null;
-    }>;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
     update(id: string, dto: UpdateTicketDto, user: any): Promise<{
-        assignedTo: {
+        createdBy: {
             id: string;
             firstName: string;
             lastName: string;
         };
-        createdBy: {
+        assignedTo: {
             id: string;
             firstName: string;
             lastName: string;
@@ -306,16 +306,11 @@ export declare class TicketsController {
             firstName: string;
             lastName: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        description: string | null;
-        companyId: string | null;
-        updatedAt: Date;
-        priority: string;
-        deletedAt: Date | null;
         ticketNumber: string;
         title: string;
+        description: string | null;
         contactName: string | null;
         contactEmail: string | null;
         contactPhone: string | null;
@@ -325,7 +320,9 @@ export declare class TicketsController {
         latitude: number | null;
         longitude: number | null;
         status: string;
+        priority: string;
         type: string;
+        companyId: string | null;
         createdById: string;
         assignedToId: string | null;
         assetId: string | null;
@@ -336,17 +333,15 @@ export declare class TicketsController {
         resolution: string | null;
         resolvedAt: Date | null;
         resolvedById: string | null;
-    }>;
-    remove(id: string, user: any): Promise<{
         createdAt: Date;
-        id: string;
-        description: string | null;
-        companyId: string | null;
         updatedAt: Date;
-        priority: string;
         deletedAt: Date | null;
+    }, unknown> & {}>;
+    remove(id: string, user: any): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
         ticketNumber: string;
         title: string;
+        description: string | null;
         contactName: string | null;
         contactEmail: string | null;
         contactPhone: string | null;
@@ -356,7 +351,9 @@ export declare class TicketsController {
         latitude: number | null;
         longitude: number | null;
         status: string;
+        priority: string;
         type: string;
+        companyId: string | null;
         createdById: string;
         assignedToId: string | null;
         assetId: string | null;
@@ -367,23 +364,21 @@ export declare class TicketsController {
         resolution: string | null;
         resolvedAt: Date | null;
         resolvedById: string | null;
-    }>;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
     assign(id: string, userId: string, user: any): Promise<{
         assignedTo: {
             id: string;
             firstName: string;
             lastName: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        description: string | null;
-        companyId: string | null;
-        updatedAt: Date;
-        priority: string;
-        deletedAt: Date | null;
         ticketNumber: string;
         title: string;
+        description: string | null;
         contactName: string | null;
         contactEmail: string | null;
         contactPhone: string | null;
@@ -393,7 +388,9 @@ export declare class TicketsController {
         latitude: number | null;
         longitude: number | null;
         status: string;
+        priority: string;
         type: string;
+        companyId: string | null;
         createdById: string;
         assignedToId: string | null;
         assetId: string | null;
@@ -404,23 +401,21 @@ export declare class TicketsController {
         resolution: string | null;
         resolvedAt: Date | null;
         resolvedById: string | null;
-    }>;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
     resolve(id: string, resolution: string, user: any): Promise<{
         resolvedBy: {
             id: string;
             firstName: string;
             lastName: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        description: string | null;
-        companyId: string | null;
-        updatedAt: Date;
-        priority: string;
-        deletedAt: Date | null;
         ticketNumber: string;
         title: string;
+        description: string | null;
         contactName: string | null;
         contactEmail: string | null;
         contactPhone: string | null;
@@ -430,7 +425,9 @@ export declare class TicketsController {
         latitude: number | null;
         longitude: number | null;
         status: string;
+        priority: string;
         type: string;
+        companyId: string | null;
         createdById: string;
         assignedToId: string | null;
         assetId: string | null;
@@ -441,15 +438,17 @@ export declare class TicketsController {
         resolution: string | null;
         resolvedAt: Date | null;
         resolvedById: string | null;
-    }>;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
     addComment(id: string, dto: CreateCommentDto, user: any): Promise<{
         actor: {
             id: string;
             firstName: string;
             lastName: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
         ticketId: string;
         action: string;
@@ -458,15 +457,15 @@ export declare class TicketsController {
         newValue: string | null;
         comment: string | null;
         isInternal: boolean;
-    }>;
+        createdAt: Date;
+    }, unknown> & {}>;
     getTimeline(id: string, user: any): Promise<({
         actor: {
             id: string;
             firstName: string;
             lastName: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
         ticketId: string;
         action: string;
@@ -475,7 +474,8 @@ export declare class TicketsController {
         newValue: string | null;
         comment: string | null;
         isInternal: boolean;
-    })[]>;
+        createdAt: Date;
+    }, unknown> & {})[]>;
     addAttachment(id: string, body: {
         fileUrl: string;
         fileName: string;
@@ -487,8 +487,7 @@ export declare class TicketsController {
             firstName: string;
             lastName: string;
         };
-    } & {
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
         ticketId: string;
         fileUrl: string;
@@ -496,7 +495,8 @@ export declare class TicketsController {
         fileSize: number;
         mimeType: string;
         uploadedById: string;
-    }>;
+        createdAt: Date;
+    }, unknown> & {}>;
     removeAttachment(id: string, attachmentId: string): Promise<{
         success: boolean;
     }>;
@@ -517,20 +517,20 @@ export declare class TicketsController {
     }, user: any): Promise<{
         results: any[];
     }>;
-    listTemplates(user: any): Promise<{
-        createdAt: Date;
-        name: string;
+    listTemplates(user: any): Promise<(import("@prisma/client/runtime").GetResult<{
         id: string;
+        name: string;
         description: string | null;
-        companyId: string;
-        updatedAt: Date;
-        priority: string | null;
-        isActive: boolean;
-        title: string | null;
         category: string | null;
         subcategory: string | null;
+        priority: string | null;
+        title: string | null;
         body: string | null;
-    }[]>;
+        companyId: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {})[]>;
     createTemplate(body: {
         name: string;
         description?: string;
@@ -539,20 +539,20 @@ export declare class TicketsController {
         priority?: string;
         title?: string;
         body?: string;
-    }, user: any): Promise<{
-        createdAt: Date;
-        name: string;
+    }, user: any): Promise<import("@prisma/client/runtime").GetResult<{
         id: string;
+        name: string;
         description: string | null;
-        companyId: string;
-        updatedAt: Date;
-        priority: string | null;
-        isActive: boolean;
-        title: string | null;
         category: string | null;
         subcategory: string | null;
+        priority: string | null;
+        title: string | null;
         body: string | null;
-    }>;
+        companyId: string;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+    }, unknown> & {}>;
     deleteTemplate(id: string): Promise<{
         success: boolean;
     }>;
@@ -561,34 +561,34 @@ export declare class TicketsController {
         description?: string;
         billable?: boolean;
         startTime?: string;
-    }, user: any): Promise<{
-        userId: string;
-        createdAt: Date;
+    }, user: any): Promise<import("@prisma/client/runtime").GetResult<{
         id: string;
-        description: string | null;
         ticketId: string;
+        userId: string;
         startTime: Date;
         endTime: Date | null;
         duration: number | null;
+        description: string | null;
         billable: boolean;
-    }>;
+        createdAt: Date;
+    }, unknown> & {}>;
     getTimeEntries(id: string): Promise<({
         user: {
             id: string;
             firstName: string;
             lastName: string;
         };
-    } & {
-        userId: string;
-        createdAt: Date;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        description: string | null;
         ticketId: string;
+        userId: string;
         startTime: Date;
         endTime: Date | null;
         duration: number | null;
+        description: string | null;
         billable: boolean;
-    })[]>;
+        createdAt: Date;
+    }, unknown> & {})[]>;
     inboundEmail(body: {
         from: string;
         subject: string;

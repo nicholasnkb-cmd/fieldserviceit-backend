@@ -6,46 +6,46 @@ export declare class CompaniesService {
         name: string;
         slug: string;
         domain?: string;
-    }): Promise<{
-        createdAt: Date;
-        name: string;
+    }): Promise<import("@prisma/client/runtime").GetResult<{
         id: string;
+        name: string;
         slug: string;
-        updatedAt: Date;
-        isActive: boolean;
-        deletedAt: Date | null;
-        inviteCode: string | null;
         domain: string | null;
         logo: string | null;
         settings: string | null;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
         branding: string | null;
+        inviteCode: string | null;
         inviteExpiresAt: Date | null;
-    }>;
+    }, unknown> & {}>;
     findAll(query: {
         page?: number;
         limit?: number;
     }): Promise<{
         data: ({
             _count: {
-                assets: number;
-                tickets: number;
                 users: number;
+                tickets: number;
+                assets: number;
             };
-        } & {
-            createdAt: Date;
-            name: string;
+        } & import("@prisma/client/runtime").GetResult<{
             id: string;
+            name: string;
             slug: string;
-            updatedAt: Date;
-            isActive: boolean;
-            deletedAt: Date | null;
-            inviteCode: string | null;
             domain: string | null;
             logo: string | null;
             settings: string | null;
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            deletedAt: Date | null;
             branding: string | null;
+            inviteCode: string | null;
             inviteExpiresAt: Date | null;
-        })[];
+        }, unknown> & {})[];
         meta: {
             page: number;
             limit: number;
@@ -55,55 +55,55 @@ export declare class CompaniesService {
     }>;
     findOne(id: string): Promise<{
         _count: {
-            assets: number;
-            tickets: number;
             users: number;
+            tickets: number;
+            assets: number;
         };
-    } & {
-        createdAt: Date;
-        name: string;
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
+        name: string;
         slug: string;
-        updatedAt: Date;
-        isActive: boolean;
-        deletedAt: Date | null;
-        inviteCode: string | null;
         domain: string | null;
         logo: string | null;
         settings: string | null;
-        branding: string | null;
-        inviteExpiresAt: Date | null;
-    }>;
-    update(id: string, dto: any): Promise<{
-        createdAt: Date;
-        name: string;
-        id: string;
-        slug: string;
-        updatedAt: Date;
         isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
         deletedAt: Date | null;
+        branding: string | null;
         inviteCode: string | null;
+        inviteExpiresAt: Date | null;
+    }, unknown> & {}>;
+    update(id: string, dto: any): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
+        name: string;
+        slug: string;
         domain: string | null;
         logo: string | null;
         settings: string | null;
-        branding: string | null;
-        inviteExpiresAt: Date | null;
-    }>;
-    remove(id: string): Promise<{
-        createdAt: Date;
-        name: string;
-        id: string;
-        slug: string;
-        updatedAt: Date;
         isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
         deletedAt: Date | null;
+        branding: string | null;
         inviteCode: string | null;
+        inviteExpiresAt: Date | null;
+    }, unknown> & {}>;
+    remove(id: string): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
+        name: string;
+        slug: string;
         domain: string | null;
         logo: string | null;
         settings: string | null;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
         branding: string | null;
+        inviteCode: string | null;
         inviteExpiresAt: Date | null;
-    }>;
+    }, unknown> & {}>;
     getStats(id: string): Promise<{
         tickets: number;
         users: number;

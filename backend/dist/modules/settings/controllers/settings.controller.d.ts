@@ -5,27 +5,27 @@ export declare class SettingsController {
     getSettings(user: any): Promise<{
         settings: any;
         branding: any;
-        name: string;
         id: string;
+        name: string;
         slug: string;
         domain: string;
         logo: string;
     }>;
     updateSettings(dto: any, user: any): Promise<{
-        name: string;
         id: string;
+        name: string;
         domain: string;
         logo: string;
-        settings: string;
         branding: string;
+        settings: string;
     }>;
     updateBranding(branding: {
         primaryColor?: string;
         logoUrl?: string;
         companyName?: string;
     }, user: any): Promise<{
-        name: string;
         id: string;
+        name: string;
         branding: string;
     }>;
 }

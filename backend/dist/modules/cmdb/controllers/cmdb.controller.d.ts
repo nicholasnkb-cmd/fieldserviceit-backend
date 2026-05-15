@@ -2,49 +2,49 @@ import { CmdbService } from '../services/cmdb.service';
 export declare class CmdbController {
     private cmdbService;
     constructor(cmdbService: CmdbService);
-    create(dto: any, user: any): Promise<{
-        createdAt: Date;
-        name: string;
+    create(dto: any, user: any): Promise<import("@prisma/client/runtime").GetResult<{
         id: string;
-        companyId: string;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        location: string | null;
-        status: string;
-        ipAddress: string | null;
+        name: string;
         assetType: string;
         serialNumber: string | null;
         manufacturer: string | null;
         model: string | null;
+        location: string | null;
+        ipAddress: string | null;
         macAddress: string | null;
         os: string | null;
         cpu: string | null;
         ram: string | null;
         storage: string | null;
+        status: string;
         notes: string | null;
-    }>;
+        companyId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
     findAll(query: any, user: any): Promise<{
-        data: {
-            createdAt: Date;
-            name: string;
+        data: (import("@prisma/client/runtime").GetResult<{
             id: string;
-            companyId: string;
-            updatedAt: Date;
-            deletedAt: Date | null;
-            location: string | null;
-            status: string;
-            ipAddress: string | null;
+            name: string;
             assetType: string;
             serialNumber: string | null;
             manufacturer: string | null;
             model: string | null;
+            location: string | null;
+            ipAddress: string | null;
             macAddress: string | null;
             os: string | null;
             cpu: string | null;
             ram: string | null;
             storage: string | null;
+            status: string;
             notes: string | null;
-        }[];
+            companyId: string;
+            createdAt: Date;
+            updatedAt: Date;
+            deletedAt: Date | null;
+        }, unknown> & {})[];
         meta: {
             page: number;
             limit: number;
@@ -53,16 +53,11 @@ export declare class CmdbController {
         };
     }>;
     findOne(id: string, user: any): Promise<{
-        tickets: {
-            createdAt: Date;
+        tickets: (import("@prisma/client/runtime").GetResult<{
             id: string;
-            description: string | null;
-            companyId: string | null;
-            updatedAt: Date;
-            priority: string;
-            deletedAt: Date | null;
             ticketNumber: string;
             title: string;
+            description: string | null;
             contactName: string | null;
             contactEmail: string | null;
             contactPhone: string | null;
@@ -72,7 +67,9 @@ export declare class CmdbController {
             latitude: number | null;
             longitude: number | null;
             status: string;
+            priority: string;
             type: string;
+            companyId: string | null;
             createdById: string;
             assignedToId: string | null;
             assetId: string | null;
@@ -83,68 +80,71 @@ export declare class CmdbController {
             resolution: string | null;
             resolvedAt: Date | null;
             resolvedById: string | null;
-        }[];
-    } & {
-        createdAt: Date;
-        name: string;
+            createdAt: Date;
+            updatedAt: Date;
+            deletedAt: Date | null;
+        }, unknown> & {})[];
+    } & import("@prisma/client/runtime").GetResult<{
         id: string;
-        companyId: string;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        location: string | null;
-        status: string;
-        ipAddress: string | null;
+        name: string;
         assetType: string;
         serialNumber: string | null;
         manufacturer: string | null;
         model: string | null;
+        location: string | null;
+        ipAddress: string | null;
         macAddress: string | null;
         os: string | null;
         cpu: string | null;
         ram: string | null;
         storage: string | null;
+        status: string;
         notes: string | null;
-    }>;
-    update(id: string, dto: any, user: any): Promise<{
-        createdAt: Date;
-        name: string;
-        id: string;
         companyId: string;
+        createdAt: Date;
         updatedAt: Date;
         deletedAt: Date | null;
-        location: string | null;
-        status: string;
-        ipAddress: string | null;
+    }, unknown> & {}>;
+    update(id: string, dto: any, user: any): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
+        name: string;
         assetType: string;
         serialNumber: string | null;
         manufacturer: string | null;
         model: string | null;
+        location: string | null;
+        ipAddress: string | null;
         macAddress: string | null;
         os: string | null;
         cpu: string | null;
         ram: string | null;
         storage: string | null;
+        status: string;
         notes: string | null;
-    }>;
-    remove(id: string, user: any): Promise<{
-        createdAt: Date;
-        name: string;
-        id: string;
         companyId: string;
+        createdAt: Date;
         updatedAt: Date;
         deletedAt: Date | null;
-        location: string | null;
-        status: string;
-        ipAddress: string | null;
+    }, unknown> & {}>;
+    remove(id: string, user: any): Promise<import("@prisma/client/runtime").GetResult<{
+        id: string;
+        name: string;
         assetType: string;
         serialNumber: string | null;
         manufacturer: string | null;
         model: string | null;
+        location: string | null;
+        ipAddress: string | null;
         macAddress: string | null;
         os: string | null;
         cpu: string | null;
         ram: string | null;
         storage: string | null;
+        status: string;
         notes: string | null;
-    }>;
+        companyId: string;
+        createdAt: Date;
+        updatedAt: Date;
+        deletedAt: Date | null;
+    }, unknown> & {}>;
 }
