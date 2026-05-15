@@ -15,7 +15,7 @@ export class UsersService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: { email: string; password: string; firstName: string; lastName: string; role?: UserRole }, companyId: string) {
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     return this.prisma.user.create({
       data: {
@@ -50,7 +50,7 @@ export class UsersService {
   }
 
   async findById(id: string) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
       select: {
         id: true, email: true, firstName: true, lastName: true, role: true, userType: true,
@@ -81,7 +81,7 @@ export class UsersService {
   }
 
   async updateMe(id: string, dto: { firstName?: string; lastName?: string; phone?: string }) {
-    const user = await this.prisma.user.findUnique({ where: { id, deletedAt: null } });
+    const user = await this.prisma.user.findFirst({ where: { id, deletedAt: null } });
     if (!user) throw new NotFoundException('User not found');
     return this.prisma.user.update({
       where: { id },
@@ -91,12 +91,12 @@ export class UsersService {
   }
 
   async changePassword(id: string, oldPassword: string, newPassword: string) {
-    const user = await this.prisma.user.findUnique({ where: { id, deletedAt: null } });
+    const user = await this.prisma.user.findFirst({ where: { id, deletedAt: null } });
     if (!user) throw new NotFoundException('User not found');
     if (!user.passwordHash) throw new BadRequestException('Password not set');
     const valid = await bcrypt.compare(oldPassword, user.passwordHash);
     if (!valid) throw new BadRequestException('Current password is incorrect');
-    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const passwordHash = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({ where: { id }, data: { passwordHash } });
     return { message: 'Password changed successfully' };
   }

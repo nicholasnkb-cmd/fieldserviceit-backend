@@ -28,6 +28,10 @@ export class EmailService {
   }
 
   async sendPasswordResetEmail(to: string, token: string): Promise<void> {
+    if (!this.transporter) {
+      console.log(`[EmailService] SMTP not configured, skipping password reset email to ${to}`);
+      return;
+    }
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
 
     const info = await this.transporter.sendMail({

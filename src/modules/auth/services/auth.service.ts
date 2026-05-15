@@ -56,7 +56,7 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 8);
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     const user = await this.prisma.user.create({
       data: {
@@ -119,7 +119,7 @@ export class AuthService {
       throw new BadRequestException('Either invite code or company domain is required');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 8);
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     const user = await this.prisma.user.create({
       data: {
@@ -233,7 +233,7 @@ export class AuthService {
       where: { resetToken: token, resetTokenExpiresAt: { gte: new Date() } },
     });
     if (!user) throw new BadRequestException('Invalid or expired reset token');
-    const passwordHash = await bcrypt.hash(password, 8);
+    const passwordHash = await bcrypt.hash(password, 10);
     await this.prisma.user.update({
       where: { id: user.id },
       data: { passwordHash, resetToken: null, resetTokenExpiresAt: null },
