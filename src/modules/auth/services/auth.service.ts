@@ -58,33 +58,38 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 4);
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        passwordHash,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        role: 'CLIENT',
-        userType: 'PUBLIC',
-        emailVerified: true,
-      },
-    });
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          passwordHash,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          role: 'CLIENT',
+          userType: 'PUBLIC',
+          emailVerified: true,
+        },
+      });
 
-    const tokens = await this.generateTokens(user);
+      const tokens = await this.generateTokens(user);
 
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        userType: user.userType,
-        companyId: null,
-        emailVerified: false,
-      },
-      ...tokens,
-    };
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          userType: user.userType,
+          companyId: null,
+          emailVerified: false,
+        },
+        ...tokens,
+      };
+    } catch (err: any) {
+      console.error('[registerPublic] DB error:', err?.message || String(err));
+      throw new Error('Registration failed: ' + (err?.message || String(err)));
+    }
   }
 
   async registerBusiness(dto: { email: string; password: string; firstName: string; lastName: string; inviteCode?: string; domain?: string }) {

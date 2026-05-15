@@ -61,31 +61,37 @@ let AuthService = class AuthService {
             throw new common_1.ConflictException('Email already registered');
         }
         const passwordHash = await bcrypt.hash(dto.password, 4);
-        const user = await this.prisma.user.create({
-            data: {
-                email: dto.email,
-                passwordHash,
-                firstName: dto.firstName,
-                lastName: dto.lastName,
-                role: 'CLIENT',
-                userType: 'PUBLIC',
-                emailVerified: true,
-            },
-        });
-        const tokens = await this.generateTokens(user);
-        return {
-            user: {
-                id: user.id,
-                email: user.email,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                role: user.role,
-                userType: user.userType,
-                companyId: null,
-                emailVerified: false,
-            },
-            ...tokens,
-        };
+        try {
+            const user = await this.prisma.user.create({
+                data: {
+                    email: dto.email,
+                    passwordHash,
+                    firstName: dto.firstName,
+                    lastName: dto.lastName,
+                    role: 'CLIENT',
+                    userType: 'PUBLIC',
+                    emailVerified: true,
+                },
+            });
+            const tokens = await this.generateTokens(user);
+            return {
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    role: user.role,
+                    userType: user.userType,
+                    companyId: null,
+                    emailVerified: false,
+                },
+                ...tokens,
+            };
+        }
+        catch (err) {
+            console.error('[registerPublic] DB error:', err?.message || String(err));
+            throw new Error('Registration failed: ' + (err?.message || String(err)));
+        }
     }
     async registerBusiness(dto) {
         const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
