@@ -5,27 +5,14 @@ export declare class SettingsController {
     getSettings(user: any): Promise<{
         settings: any;
         branding: any;
-        id: string;
-        name: string;
-        slug: string;
-        domain: string;
-        logo: string;
+        constructor: {
+            name: "RowDataPacket";
+        };
     }>;
-    updateSettings(dto: any, user: any): Promise<{
-        id: string;
-        name: string;
-        domain: string;
-        logo: string;
-        branding: string;
-        settings: string;
-    }>;
+    updateSettings(dto: any, user: any): Promise<import("mysql2").RowDataPacket>;
     updateBranding(branding: {
         primaryColor?: string;
         logoUrl?: string;
         companyName?: string;
-    }, user: any): Promise<{
-        id: string;
-        name: string;
-        branding: string;
-    }>;
+    }, user: any): Promise<import("mysql2").RowDataPacket>;
 }

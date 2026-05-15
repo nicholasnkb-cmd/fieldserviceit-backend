@@ -2,125 +2,23 @@ import { CompaniesService } from '../services/companies.service';
 export declare class CompaniesController {
     private companiesService;
     constructor(companiesService: CompaniesService);
-    create(dto: any): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        domain: string | null;
-        logo: string | null;
-        settings: string | null;
-        isActive: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        branding: string | null;
-        inviteCode: string | null;
-        inviteExpiresAt: Date | null;
-    }, unknown> & {}>;
-    findAll(query: any, user: any): Promise<{
-        data: ({
-            _count: {
-                users: number;
-                tickets: number;
-                assets: number;
-            };
-        } & import("@prisma/client/runtime").GetResult<{
-            id: string;
-            name: string;
-            slug: string;
-            domain: string | null;
-            logo: string | null;
-            settings: string | null;
-            isActive: boolean;
-            createdAt: Date;
-            updatedAt: Date;
-            deletedAt: Date | null;
-            branding: string | null;
-            inviteCode: string | null;
-            inviteExpiresAt: Date | null;
-        }, unknown> & {})[];
+    create(dto: any): Promise<import("mysql2").RowDataPacket>;
+    findAll(query: any, user: any): Promise<import("mysql2").RowDataPacket> | Promise<{
+        data: any;
         meta: {
             page: number;
             limit: number;
-            total: number;
+            total: any;
             totalPages: number;
         };
-    }> | Promise<{
-        _count: {
-            users: number;
-            tickets: number;
-            assets: number;
-        };
-    } & import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        domain: string | null;
-        logo: string | null;
-        settings: string | null;
-        isActive: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        branding: string | null;
-        inviteCode: string | null;
-        inviteExpiresAt: Date | null;
-    }, unknown> & {}>;
-    findOne(id: string, user: any): Promise<{
-        _count: {
-            users: number;
-            tickets: number;
-            assets: number;
-        };
-    } & import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        domain: string | null;
-        logo: string | null;
-        settings: string | null;
-        isActive: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        branding: string | null;
-        inviteCode: string | null;
-        inviteExpiresAt: Date | null;
-    }, unknown> & {}>;
-    getStats(id: string, user: any): Promise<{
-        tickets: number;
-        users: number;
-        assets: number;
-        dispatches: number;
     }>;
-    update(id: string, dto: any): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        domain: string | null;
-        logo: string | null;
-        settings: string | null;
-        isActive: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        branding: string | null;
-        inviteCode: string | null;
-        inviteExpiresAt: Date | null;
-    }, unknown> & {}>;
-    remove(id: string): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        name: string;
-        slug: string;
-        domain: string | null;
-        logo: string | null;
-        settings: string | null;
-        isActive: boolean;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-        branding: string | null;
-        inviteCode: string | null;
-        inviteExpiresAt: Date | null;
-    }, unknown> & {}>;
+    findOne(id: string, user: any): Promise<import("mysql2").RowDataPacket>;
+    getStats(id: string, user: any): Promise<{
+        tickets: any;
+        users: any;
+        assets: any;
+        dispatches: any;
+    }>;
+    update(id: string, dto: any): Promise<import("mysql2").RowDataPacket>;
+    remove(id: string): Promise<import("mysql2").RowDataPacket>;
 }

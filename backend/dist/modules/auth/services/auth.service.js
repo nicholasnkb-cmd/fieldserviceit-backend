@@ -15,7 +15,7 @@ const jwt_1 = require("@nestjs/jwt");
 const config_1 = require("@nestjs/config");
 const prisma_service_1 = require("../../../database/prisma.service");
 const email_service_1 = require("../../notifications/services/email.service");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 let AuthService = class AuthService {
     constructor(prisma, jwtService, config, emailService) {
@@ -60,7 +60,7 @@ let AuthService = class AuthService {
         if (existing) {
             throw new common_1.ConflictException('Email already registered');
         }
-        const passwordHash = await bcrypt.hash(dto.password, 8);
+        const passwordHash = await bcrypt.hash(dto.password, 4);
         const user = await this.prisma.user.create({
             data: {
                 email: dto.email,
@@ -118,7 +118,7 @@ let AuthService = class AuthService {
         else {
             throw new common_1.BadRequestException('Either invite code or company domain is required');
         }
-        const passwordHash = await bcrypt.hash(dto.password, 8);
+        const passwordHash = await bcrypt.hash(dto.password, 4);
         const user = await this.prisma.user.create({
             data: {
                 email: dto.email,
@@ -217,7 +217,7 @@ let AuthService = class AuthService {
         });
         if (!user)
             throw new common_1.BadRequestException('Invalid or expired reset token');
-        const passwordHash = await bcrypt.hash(password, 8);
+        const passwordHash = await bcrypt.hash(password, 4);
         await this.prisma.user.update({
             where: { id: user.id },
             data: { passwordHash, resetToken: null, resetTokenExpiresAt: null },

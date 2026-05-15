@@ -15,29 +15,12 @@ export declare class UsersService {
         firstName: string;
         lastName: string;
         role?: UserRole;
-    }, companyId: string): Promise<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role: string;
-        companyId: string;
-        createdAt: Date;
-    }>;
+    }, companyId: string): Promise<import("mysql2").RowDataPacket>;
     findAll(companyId: string, query: {
         page?: number;
         limit?: number;
     }): Promise<{
-        data: {
-            id: string;
-            email: string;
-            firstName: string;
-            lastName: string;
-            role: string;
-            isActive: boolean;
-            lastLoginAt: Date;
-            createdAt: Date;
-        }[];
+        data: import("mysql2").RowDataPacket[];
         meta: {
             page: number;
             limit: number;
@@ -45,85 +28,17 @@ export declare class UsersService {
             totalPages: number;
         };
     }>;
-    findById(id: string): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        email: string;
-        passwordHash: string | null;
-        firstName: string;
-        lastName: string;
-        phone: string | null;
-        avatarUrl: string | null;
-        role: string;
-        userType: string;
-        companyId: string | null;
-        isActive: boolean;
-        emailVerified: boolean;
-        lastLoginAt: Date | null;
-        resetToken: string | null;
-        resetTokenExpiresAt: Date | null;
-        emailVerificationToken: string | null;
-        emailVerificationExpiresAt: Date | null;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-    }, unknown> & {}>;
-    findOne(id: string, companyId: string): Promise<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role: string;
-        phone: string;
-        avatarUrl: string;
-        isActive: boolean;
-        lastLoginAt: Date;
-        createdAt: Date;
-    }>;
-    update(id: string, dto: any, companyId: string): Promise<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        role: string;
-    }>;
+    findById(id: string): Promise<import("mysql2").RowDataPacket>;
+    findOne(id: string, companyId: string): Promise<import("mysql2").RowDataPacket>;
+    update(id: string, dto: any, companyId: string): Promise<import("mysql2").RowDataPacket>;
     updateMe(id: string, dto: {
         firstName?: string;
         lastName?: string;
         phone?: string;
-    }): Promise<{
-        id: string;
-        email: string;
-        firstName: string;
-        lastName: string;
-        phone: string;
-        role: string;
-        companyId: string;
-        createdAt: Date;
-    }>;
+    }): Promise<import("mysql2").RowDataPacket>;
     changePassword(id: string, oldPassword: string, newPassword: string): Promise<{
         message: string;
     }>;
-    remove(id: string, companyId: string): Promise<import("@prisma/client/runtime").GetResult<{
-        id: string;
-        email: string;
-        passwordHash: string | null;
-        firstName: string;
-        lastName: string;
-        phone: string | null;
-        avatarUrl: string | null;
-        role: string;
-        userType: string;
-        companyId: string | null;
-        isActive: boolean;
-        emailVerified: boolean;
-        lastLoginAt: Date | null;
-        resetToken: string | null;
-        resetTokenExpiresAt: Date | null;
-        emailVerificationToken: string | null;
-        emailVerificationExpiresAt: Date | null;
-        createdAt: Date;
-        updatedAt: Date;
-        deletedAt: Date | null;
-    }, unknown> & {}>;
+    remove(id: string, companyId: string): Promise<import("mysql2").RowDataPacket>;
 }
 export {};

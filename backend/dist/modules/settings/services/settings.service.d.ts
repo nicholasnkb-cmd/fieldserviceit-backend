@@ -5,11 +5,9 @@ export declare class SettingsService {
     getSettings(companyId: string): Promise<{
         settings: any;
         branding: any;
-        id: string;
-        name: string;
-        slug: string;
-        domain: string;
-        logo: string;
+        constructor: {
+            name: "RowDataPacket";
+        };
     }>;
     updateSettings(companyId: string, dto: {
         name?: string;
@@ -17,21 +15,10 @@ export declare class SettingsService {
         logo?: string;
         branding?: string;
         settings?: string;
-    }): Promise<{
-        id: string;
-        name: string;
-        domain: string;
-        logo: string;
-        branding: string;
-        settings: string;
-    }>;
+    }): Promise<import("mysql2").RowDataPacket>;
     updateBranding(companyId: string, branding: {
         primaryColor?: string;
         logoUrl?: string;
         companyName?: string;
-    }): Promise<{
-        id: string;
-        name: string;
-        branding: string;
-    }>;
+    }): Promise<import("mysql2").RowDataPacket>;
 }

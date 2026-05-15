@@ -6,13 +6,6 @@ export declare class JwtStrategy extends JwtStrategy_base {
     private config;
     private prisma;
     constructor(config: ConfigService, prisma: PrismaService);
-    validate(payload: any): Promise<{
-        id: string;
-        email: string;
-        role: string;
-        userType: string;
-        companyId: string;
-        isActive: boolean;
-    }>;
+    validate(payload: any): Promise<import("mysql2").RowDataPacket>;
 }
 export {};

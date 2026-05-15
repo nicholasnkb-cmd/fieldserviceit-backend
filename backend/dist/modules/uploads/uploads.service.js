@@ -18,6 +18,21 @@ const path = require("path");
 const fs = require("fs");
 const uuid_1 = require("uuid");
 const s3_config_1 = require("../../config/s3.config");
+const ALLOWED_EXTENSIONS = new Set([
+    '.jpg', '.jpeg', '.png', '.gif', '.webp',
+    '.pdf', '.txt', '.doc', '.docx',
+    '.csv', '.xlsx', '.xls',
+]);
+function sanitizeFilename(originalname) {
+    const base = path.basename(originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+    return base || 'unnamed';
+}
+function validateExtension(filename) {
+    const ext = path.extname(filename).toLowerCase();
+    if (!ext || !ALLOWED_EXTENSIONS.has(ext)) {
+        throw new common_1.BadRequestException(`File extension "${ext || 'none'}" not allowed. Allowed: ${[...ALLOWED_EXTENSIONS].join(', ')}`);
+    }
+}
 let UploadsService = UploadsService_1 = class UploadsService {
     constructor(config) {
         this.config = config;
@@ -34,7 +49,9 @@ let UploadsService = UploadsService_1 = class UploadsService {
     async saveFile(file, subfolder) {
         if (!file)
             throw new common_1.BadRequestException('No file provided');
-        const ext = path.extname(file.originalname) || '.bin';
+        const sanitized = sanitizeFilename(file.originalname);
+        validateExtension(sanitized);
+        const ext = path.extname(sanitized) || '.bin';
         const filename = `${(0, uuid_1.v4)()}${ext}`;
         if (this.storageType === 's3' && this.s3Client) {
             return this.saveToS3(file, subfolder, filename);

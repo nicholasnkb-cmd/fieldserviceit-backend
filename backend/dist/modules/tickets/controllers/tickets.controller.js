@@ -49,11 +49,8 @@ let TicketsController = class TicketsController {
             where: { companyId: user.companyId, deletedAt: null },
             orderBy: { updatedAt: 'desc' },
             take: 200,
-            select: {
-                id: true, ticketNumber: true, title: true, status: true, priority: true,
-                contactName: true, category: true,
+            include: {
                 assignedTo: { select: { id: true, firstName: true, lastName: true } },
-                createdAt: true,
             },
         });
         const columns = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ON_HOLD', 'RESOLVED', 'CLOSED'];
