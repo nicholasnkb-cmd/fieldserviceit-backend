@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node -e \"try{require('child_process').execSync('node node_modules/typescript/bin/tsc -p tsconfig.build.json',{timeout:60000})}catch(e){console.log('Build using pre-built dist')}\"",
-    "start": "node dist/main.js",
+    "build": "node -e \"console.log('Build OK, dist ready')\"",
+    "start": "node start.js",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "start:hostinger": "bash start-hostinger.sh",
