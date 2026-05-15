@@ -52,12 +52,12 @@ export declare class FieldServiceController {
         status: string;
         ticketId: string;
         notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
     }>;
     getBoard(user: any): Promise<({
         ticket: {
@@ -83,12 +83,12 @@ export declare class FieldServiceController {
         status: string;
         ticketId: string;
         notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
     })[]>;
     updateStatus(id: string, status: string, user: any): Promise<{
         createdAt: Date;
@@ -100,12 +100,12 @@ export declare class FieldServiceController {
         status: string;
         ticketId: string;
         notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
     }>;
     addNotes(id: string, notes: string, user: any): Promise<{
         createdAt: Date;
@@ -117,12 +117,12 @@ export declare class FieldServiceController {
         status: string;
         ticketId: string;
         notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
     }>;
     addSignature(id: string, signature: string, user: any): Promise<{
         createdAt: Date;
@@ -134,12 +134,12 @@ export declare class FieldServiceController {
         status: string;
         ticketId: string;
         notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
     }>;
     addPhotos(id: string, photoUrls: string[], user: any): Promise<{
         createdAt: Date;
@@ -151,11 +151,11 @@ export declare class FieldServiceController {
         status: string;
         ticketId: string;
         notes: string | null;
-        completedAt: Date | null;
+        technicianId: string;
         scheduledAt: Date | null;
         arrivedAt: Date | null;
+        completedAt: Date | null;
         customerSignature: string | null;
         photoUrls: string;
-        technicianId: string;
     }>;
 }

@@ -50,9 +50,9 @@ export declare class WorkflowController {
             companyId: string;
             status: string;
             ticketId: string;
+            completedAt: Date | null;
             workflowId: string;
             startedAt: Date;
-            completedAt: Date | null;
         }[];
         steps: {
             createdAt: Date;
@@ -79,9 +79,9 @@ export declare class WorkflowController {
         companyId: string;
         status: string;
         ticketId: string;
+        completedAt: Date | null;
         workflowId: string;
         startedAt: Date;
-        completedAt: Date | null;
     }>;
     getRuns(id: string, user: any): Promise<({
         ticket: {
@@ -92,9 +92,9 @@ export declare class WorkflowController {
         steps: {
             id: string;
             status: string;
+            completedAt: Date | null;
             output: string | null;
             startedAt: Date | null;
-            completedAt: Date | null;
             runId: string;
             executedById: string | null;
             stepId: string;
@@ -104,8 +104,8 @@ export declare class WorkflowController {
         companyId: string;
         status: string;
         ticketId: string;
+        completedAt: Date | null;
         workflowId: string;
         startedAt: Date;
-        completedAt: Date | null;
     })[]>;
 }

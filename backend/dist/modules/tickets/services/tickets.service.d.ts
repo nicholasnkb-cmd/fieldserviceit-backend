@@ -189,12 +189,12 @@ export declare class TicketsService {
             status: string;
             ticketId: string;
             notes: string | null;
-            completedAt: Date | null;
+            technicianId: string;
             scheduledAt: Date | null;
             arrivedAt: Date | null;
+            completedAt: Date | null;
             customerSignature: string | null;
             photoUrls: string;
-            technicianId: string;
         }[];
         sla: {
             createdAt: Date;
