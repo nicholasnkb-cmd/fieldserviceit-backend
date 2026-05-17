@@ -189,7 +189,7 @@ export class AuthService {
     if (!user) throw new BadRequestException('User not found');
     if (user.emailVerified) throw new BadRequestException('Email already verified');
 
-    this.sendVerificationEmail(user).catch((e) => {
+    this.sendVerificationEmail(user as { id: string; email: string; firstName: string }).catch((e) => {
       console.error('Failed to send verification email:', e.message);
     });
 

@@ -3,10 +3,10 @@ export declare class ReportingService {
     private prisma;
     constructor(prisma: PrismaService);
     getTicketSummary(companyId: string, from?: string, to?: string): Promise<{
-        total: any;
-        byStatus: any;
-        byPriority: any;
-        resolvedToday: any;
+        total: number;
+        byStatus: import("mysql2").RowDataPacket[];
+        byPriority: import("mysql2").RowDataPacket[];
+        resolvedToday: number;
         avgResolutionTime: number;
     }>;
     getSlaCompliance(companyId: string): Promise<{
@@ -21,7 +21,7 @@ export declare class ReportingService {
         avgResolutionTime: number;
         totalDispatches: any;
     }[]>;
-    getAssetInventory(companyId: string): Promise<any>;
+    getAssetInventory(companyId: string): Promise<import("mysql2").RowDataPacket[]>;
     getActivityFeed(companyId: string, limit?: number): Promise<import("mysql2").RowDataPacket[]>;
     private calculateAvgResolution;
 }

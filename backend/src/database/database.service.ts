@@ -79,7 +79,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   user = {
-    findUnique: async ({ where, select }: { where: Record<string, any>; select?: Record<string, boolean> }) => {
+    findUnique: async ({ where, select }: { where: Record<string, any>; select?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
       const values = Object.values(where);
@@ -90,21 +90,24 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return rows[0] || null;
     },
 
-    findFirst: async ({ where, select, include }: { where: Record<string, any>; select?: Record<string, boolean>; include?: Record<string, any> }) => {
+    findFirst: async ({ where, select, include, orderBy }: { where: Record<string, any>; select?: Record<string, any>; include?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       const whereClauses = Object.entries(where).map(([k, v]) => {
         if (v === null) return `${this.escapeColumn(k)} IS NULL`;
         return `${this.escapeColumn(k)} = ?`;
       }).filter(Boolean);
       const values = Object.values(where).filter(v => v !== null);
-      const rows = await this.query<RowDataPacket[]>(
-        `SELECT ${cols.join(', ')} FROM User WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
-        values,
-      );
+      let sql = `SELECT ${cols.join(', ')} FROM User WHERE ${whereClauses.join(' AND ')}`;
+      if (orderBy) {
+        const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
+        sql += ` ORDER BY ${orderParts.join(', ')}`;
+      }
+      sql += ` LIMIT 1`;
+      const rows = await this.query<RowDataPacket[]>(sql, values);
       return rows[0] || null;
     },
 
-    findMany: async ({ where, select, orderBy, skip, take, include }: { where?: Record<string, any>; select?: Record<string, boolean>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number; include?: Record<string, any> }) => {
+    findMany: async ({ where, select, orderBy, skip, take, include }: { where?: Record<string, any>; select?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number; include?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       let sql = `SELECT ${cols.join(', ')} FROM User`;
       const values: any[] = [];
@@ -157,9 +160,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return Number(rows[0].count);
     },
 
-    create: async ({ data, select }: { data: Record<string, any>; select?: Record<string, boolean> }) => {
+    create: async ({ data, select }: { data: Record<string, any>; select?: Record<string, any> }) => {
       const now = new Date();
-      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -170,7 +173,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return rows[0];
     },
 
-    update: async ({ where, data, select }: { where: Record<string, any>; data: Record<string, any>; select?: Record<string, boolean> }) => {
+    update: async ({ where, data, select }: { where: Record<string, any>; data: Record<string, any>; select?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
@@ -200,10 +203,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       const result = await this.execute(sql, values);
       return { count: result.affectedRows };
     },
+
+    groupBy: async (params: { by: string[]; where?: Record<string, any>; _count?: any }) => {
+      return this.genericGroupBy('User', params);
+    },
   };
 
   company = {
-    findUnique: async ({ where, select }: { where: Record<string, any>; select?: Record<string, boolean> }) => {
+    findUnique: async ({ where, select }: { where: Record<string, any>; select?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
       const values = Object.values(where);
@@ -214,7 +221,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return rows[0] || null;
     },
 
-    findFirst: async ({ where, select }: { where: Record<string, any>; select?: Record<string, boolean> }) => {
+    findFirst: async ({ where, select, include }: { where: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       const whereClauses = Object.entries(where).map(([k, v]) => {
         if (v === null) return `${this.escapeColumn(k)} IS NULL`;
@@ -228,7 +235,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return rows[0] || null;
     },
 
-    findMany: async ({ where, select, orderBy, skip, take }: { where?: Record<string, any>; select?: Record<string, boolean>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number }) => {
+    findMany: async ({ where, select, orderBy, skip, take, include }: { where?: Record<string, any>; select?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number; include?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       let sql = `SELECT ${cols.join(', ')} FROM Company`;
       const values: any[] = [];
@@ -252,7 +259,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     create: async ({ data }: { data: Record<string, any> }) => {
       const now = new Date();
-      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -262,7 +269,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return rows[0];
     },
 
-    update: async ({ where, data, select }: { where: Record<string, any>; data: Record<string, any>; select?: Record<string, boolean> }) => {
+    update: async ({ where, data, select }: { where: Record<string, any>; data: Record<string, any>; select?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
@@ -272,10 +279,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       const rows = await this.query<RowDataPacket[]>(`SELECT ${cols.join(', ')} FROM Company WHERE id = ? LIMIT 1`, [where.id]);
       return rows[0];
     },
+
+    count: async ({ where }: { where?: Record<string, any> }) => {
+      return this.genericCount('Company', { where });
+    },
   };
 
   ticket = {
-    findUnique: async ({ where, select, include }: { where: Record<string, any>; select?: Record<string, boolean>; include?: Record<string, any> }) => {
+    findUnique: async ({ where, select, include }: { where: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       const whereClauses = Object.entries(where).map(([k, v]) => {
         if (v === null) return `${this.escapeColumn(k)} IS NULL`;
@@ -289,7 +300,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return this.enrichTicket(rows[0], include) || null;
     },
 
-    findFirst: async ({ where, select, include }: { where: Record<string, any>; select?: Record<string, boolean>; include?: Record<string, any> }) => {
+    findFirst: async ({ where, select, include }: { where: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       const whereClauses = Object.entries(where).map(([k, v]) => {
         if (v === null) return `${this.escapeColumn(k)} IS NULL`;
@@ -303,7 +314,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return this.enrichTicket(rows[0], include) || null;
     },
 
-    findMany: async ({ where, select, orderBy, skip, take, include }: { where?: Record<string, any>; select?: Record<string, boolean>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number; include?: Record<string, any> }) => {
+    findMany: async ({ where, select, orderBy, skip, take, include }: { where?: Record<string, any>; select?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number; include?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k] && typeof select[k] === 'boolean') : ['*'];
       let sql = `SELECT ${cols.join(', ')} FROM Ticket`;
       const values: any[] = [];
@@ -344,9 +355,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return Number(rows[0].count);
     },
 
-    create: async ({ data, select, include }: { data: Record<string, any>; select?: Record<string, boolean>; include?: Record<string, any> }) => {
+    create: async ({ data, select, include }: { data: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) => {
       const now = new Date();
-      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData).filter(k => insertData[k] !== undefined);
       const values = cols.map(k => insertData[k]);
       const placeholders = cols.map(() => '?').join(', ');
@@ -356,7 +367,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return this.enrichTicket(rows[0], include);
     },
 
-    update: async ({ where, data, select, include }: { where: Record<string, any>; data: Record<string, any>; select?: Record<string, boolean>; include?: Record<string, any> }) => {
+    update: async ({ where, data, select, include }: { where: Record<string, any>; data: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) => {
       const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
       const values = [...Object.values(data), ...Object.values(where)];
@@ -372,6 +383,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       const sql = `DELETE FROM Ticket WHERE ${whereClauses.join(' AND ')}`;
       const result = await this.execute(sql, values);
       return { count: result.affectedRows };
+    },
+
+    groupBy: async (params: { by: string[]; where?: Record<string, any>; _count?: any }) => {
+      return this.genericGroupBy('Ticket', params);
     },
   };
 
@@ -392,7 +407,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     create: async ({ data }: { data: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), createdAt: new Date(), ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: new Date(), ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -423,7 +438,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   ticketAttachment = {
     create: async ({ data, include }: { data: Record<string, any>; include?: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), createdAt: new Date(), ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: new Date(), ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -468,7 +483,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     create: async ({ data }: { data: Record<string, any> }) => {
       const now = new Date();
-      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -491,7 +506,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   timeEntry = {
     create: async ({ data }: { data: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), createdAt: new Date(), ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: new Date(), ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -528,7 +543,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   };
 
   dispatch = {
-    findMany: async ({ where, select, orderBy, skip, take }: { where?: Record<string, any>; select?: Record<string, boolean>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number }) => {
+    findMany: async ({ where, select, orderBy, skip, take, include }: { where?: Record<string, any>; select?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number; include?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       let sql = `SELECT ${cols.join(', ')} FROM Dispatch`;
       const values: any[] = [];
@@ -546,12 +561,51 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       }
       if (take !== undefined) { sql += ` LIMIT ?`; values.push(take); }
       if (skip !== undefined) { sql += ` OFFSET ?`; values.push(skip); }
-      return this.query<RowDataPacket[]>(sql, values);
+      const rows = await this.query<RowDataPacket[]>(sql, values);
+      if (include?.ticket) {
+        for (const row of rows) {
+          const tRows = await this.query<RowDataPacket[]>(`SELECT * FROM Ticket WHERE id = ? LIMIT 1`, [row.ticketId]);
+          row.ticket = tRows[0] || null;
+        }
+      }
+      if (include?.technician) {
+        for (const row of rows) {
+          const tRows = await this.query<RowDataPacket[]>(`SELECT id, firstName, lastName FROM User WHERE id = ? LIMIT 1`, [row.technicianId]);
+          row.technician = tRows[0] || null;
+        }
+      }
+      return rows;
+    },
+
+    findFirst: async ({ where, select, include }: { where: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) => {
+      const rows = await this.dispatch.findMany({ where, select, include, take: 1 });
+      return rows[0] || null;
+    },
+
+    create: async ({ data, include }: { data: Record<string, any>; include?: Record<string, any> }) => {
+      const row = await this.genericCreate('Dispatch', { data });
+      if (include?.ticket) {
+        const tRows = await this.query<RowDataPacket[]>(`SELECT * FROM Ticket WHERE id = ? LIMIT 1`, [row.ticketId]);
+        row.ticket = tRows[0] || null;
+      }
+      if (include?.technician) {
+        const tRows = await this.query<RowDataPacket[]>(`SELECT id, firstName, lastName FROM User WHERE id = ? LIMIT 1`, [row.technicianId]);
+        row.technician = tRows[0] || null;
+      }
+      return row;
+    },
+
+    update: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
+      return this.genericUpdate('Dispatch', { where, data });
+    },
+
+    count: async ({ where }: { where?: Record<string, any> }) => {
+      return this.genericCount('Dispatch', { where });
     },
   };
 
   asset = {
-    findMany: async ({ where, select, orderBy, skip, take }: { where?: Record<string, any>; select?: Record<string, boolean>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number }) => {
+    findMany: async ({ where, select, orderBy, skip, take }: { where?: Record<string, any>; select?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       let sql = `SELECT ${cols.join(', ')} FROM Asset`;
       const values: any[] = [];
@@ -573,7 +627,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return this.query<RowDataPacket[]>(sql, values);
     },
 
-    findFirst: async ({ where, select }: { where: Record<string, any>; select?: Record<string, boolean> }) => {
+    findFirst: async ({ where, select, include }: { where: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       const whereClauses = Object.entries(where).map(([k, v]) => {
         if (v === null) return `${this.escapeColumn(k)} IS NULL`;
@@ -587,7 +641,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return rows[0] || null;
     },
 
-    findUnique: async ({ where, select, orderBy }: { where: Record<string, any>; select?: Record<string, boolean>; orderBy?: Record<string, 'asc' | 'desc'> }) => {
+    findUnique: async ({ where, select, orderBy }: { where: Record<string, any>; select?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
       const values = Object.values(where);
@@ -617,7 +671,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     create: async ({ data }: { data: Record<string, any> }) => {
       const now = new Date();
-      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -635,6 +689,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       await this.execute(sql, values);
       const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Asset WHERE id = ? LIMIT 1`, [where.id]);
       return rows[0];
+    },
+
+    groupBy: async (params: { by: string[]; where?: Record<string, any>; _count?: any }) => {
+      return this.genericGroupBy('Asset', params);
     },
   };
 
@@ -666,7 +724,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   notification = {
     create: async ({ data }: { data: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), createdAt: new Date(), ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: new Date(), ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -710,10 +768,22 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       const rows = await this.query<RowDataPacket[]>(sql, values);
       return Number(rows[0].count);
     },
+
+    updateMany: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
+      const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+      const whereClauses = Object.entries(where).map(([k, v]) => {
+        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+        return `${this.escapeColumn(k)} = ?`;
+      });
+      const values = [...Object.values(data), ...Object.values(where).filter(v => v !== null)];
+      const sql = `UPDATE Notification SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`;
+      const result = await this.execute(sql, values);
+      return { count: result.affectedRows };
+    },
   };
 
   role = {
-    findMany: async ({ where, include }: { where?: Record<string, any>; include?: Record<string, any> }) => {
+    findMany: async ({ where, include, orderBy }: { where?: Record<string, any>; include?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'> }) => {
       let sql = 'SELECT * FROM Role';
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
@@ -723,6 +793,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           return `${this.escapeColumn(k)} = ?`;
         });
         sql += ` WHERE ${clauses.join(' AND ')}`;
+      }
+      if (orderBy) {
+        const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
+        sql += ` ORDER BY ${orderParts.join(', ')}`;
       }
       const rows = await this.query<RowDataPacket[]>(sql, values);
       if (include?.permissions) {
@@ -755,26 +829,62 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return role;
     },
 
-    create: async ({ data }: { data: Record<string, any> }) => {
+    create: async ({ data, include }: { data: Record<string, any>; include?: Record<string, any> }) => {
+      const { permissions, ...roleData } = data;
       const now = new Date();
-      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...roleData };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO Role (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
       await this.execute(sql, values);
+      if (permissions?.create) {
+        for (const perm of permissions.create) {
+          await this.execute(`INSERT INTO RolePermission (roleId, permissionId) VALUES (?, ?)`, [insertData.id, perm.permissionId]);
+        }
+      }
       const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Role WHERE id = ? LIMIT 1`, [insertData.id]);
-      return rows[0];
+      const role = rows[0];
+      if (role && include?.permissions) {
+        const permRows = await this.query<RowDataPacket[]>(
+          `SELECT rp.*, p.* FROM RolePermission rp JOIN Permission p ON rp.permissionId = p.id WHERE rp.roleId = ?`,
+          [role.id],
+        );
+        role.permissions = permRows;
+      }
+      return role;
     },
 
-    update: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
-      const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+    update: async ({ where, data, include }: { where: Record<string, any>; data: Record<string, any>; include?: Record<string, any> }) => {
+      const { permissions, ...updateData } = data;
+      const setClauses = Object.keys(updateData).map(k => `${this.escapeColumn(k)} = ?`);
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
-      const values = [...Object.values(data), ...Object.values(where)];
-      const sql = `UPDATE Role SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`;
-      await this.execute(sql, values);
+      const values = [...Object.values(updateData), ...Object.values(where)];
+      if (setClauses.length > 0) {
+        const sql = `UPDATE Role SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`;
+        await this.execute(sql, values);
+      }
+      if (permissions) {
+        const roleId = where.id;
+        if (permissions.deleteMany) {
+          await this.execute(`DELETE FROM RolePermission WHERE roleId = ?`, [roleId]);
+        }
+        if (permissions.create) {
+          for (const perm of permissions.create) {
+            await this.execute(`INSERT INTO RolePermission (roleId, permissionId) VALUES (?, ?)`, [roleId, perm.permissionId]);
+          }
+        }
+      }
       const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Role WHERE id = ? LIMIT 1`, [where.id]);
-      return rows[0];
+      const role = rows[0];
+      if (role && include?.permissions) {
+        const permRows = await this.query<RowDataPacket[]>(
+          `SELECT rp.*, p.* FROM RolePermission rp JOIN Permission p ON rp.permissionId = p.id WHERE rp.roleId = ?`,
+          [role.id],
+        );
+        role.permissions = permRows;
+      }
+      return role;
     },
 
     delete: async ({ where }: { where: Record<string, any> }) => {
@@ -784,10 +894,18 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       await this.execute(sql, values);
       return { success: true };
     },
+
+    createMany: async ({ data }: { data: Record<string, any>[] }) => {
+      return this.genericCreateMany('Role', { data });
+    },
+
+    upsert: async ({ where, update, create }: { where: Record<string, any>; update: Record<string, any>; create: Record<string, any> }) => {
+      return this.genericUpsert('Role', { where, update, create });
+    },
   };
 
   permission = {
-    findMany: async ({ where }: { where?: Record<string, any> }) => {
+    findMany: async ({ where, orderBy }: { where?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'> | Record<string, 'asc' | 'desc'>[] }) => {
       let sql = 'SELECT * FROM Permission';
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
@@ -798,6 +916,18 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           return `${this.escapeColumn(k)} = ?`;
         });
         sql += ` WHERE ${clauses.join(' AND ')}`;
+      }
+      if (orderBy) {
+        if (Array.isArray(orderBy)) {
+          const orderParts = orderBy.map((o: any) => {
+            const key = Object.keys(o)[0];
+            return `${this.escapeColumn(key)} ${o[key].toUpperCase()}`;
+          });
+          sql += ` ORDER BY ${orderParts.join(', ')}`;
+        } else {
+          const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
+          sql += ` ORDER BY ${orderParts.join(', ')}`;
+        }
       }
       return this.query<RowDataPacket[]>(sql, values);
     },
@@ -834,6 +964,17 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       const sql = `DELETE FROM RolePermission WHERE ${whereClauses.join(' AND ')}`;
       await this.execute(sql, values);
       return { count: 0 };
+    },
+
+    createMany: async ({ data }: { data: Record<string, any>[] }) => {
+      for (const item of data) {
+        const cols = Object.keys(item);
+        const values = Object.values(item);
+        const placeholders = cols.map(() => '?').join(', ');
+        const sql = `INSERT INTO RolePermission (${cols.map(c => `\`${c.replace(/`/g, '')}\``).join(', ')}) VALUES (${placeholders})`;
+        await this.query(sql, values);
+      }
+      return { count: data.length };
     },
   };
 
@@ -883,6 +1024,32 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       await this.execute(sql, values);
       return { success: true };
     },
+
+    deleteMany: async ({ where }: { where: Record<string, any> }) => {
+      const whereClauses = Object.entries(where).map(([k, v]) => {
+        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+        return `${this.escapeColumn(k)} = ?`;
+      });
+      const values = Object.values(where).filter(v => v !== null);
+      const sql = `DELETE FROM UserRole WHERE ${whereClauses.join(' AND ')}`;
+      const result = await this.execute(sql, values);
+      return { count: result.affectedRows };
+    },
+
+    findUnique: async ({ where, include }: { where: Record<string, any>; include?: Record<string, any> }) => {
+      const rows = await this.userRole.findMany({ where, include, take: 1 } as any);
+      return rows[0] || null;
+    },
+
+    upsert: async ({ where, update, create, include }: { where: Record<string, any>; update: Record<string, any>; create: Record<string, any>; include?: Record<string, any> }) => {
+      const rows = await this.userRole.findMany({ where } as any);
+      if (rows.length > 0) {
+        await this.userRole.delete({ where });
+        await this.userRole.create({ data: { ...update } } as any);
+        return { ...rows[0], ...update };
+      }
+      return this.userRole.create({ data: create } as any);
+    },
   };
 
   auditLog = {
@@ -895,7 +1062,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return data;
     },
 
-    findMany: async ({ where, orderBy, skip, take }: { where?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number }) => {
+    findMany: async ({ where, orderBy, skip, take, include }: { where?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number; include?: Record<string, any> }) => {
       let sql = 'SELECT * FROM AuditLog';
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
@@ -912,7 +1079,20 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       }
       if (take !== undefined) { sql += ` LIMIT ?`; values.push(take); }
       if (skip !== undefined) { sql += ` OFFSET ?`; values.push(skip); }
-      return this.query<RowDataPacket[]>(sql, values);
+      const rows = await this.query<RowDataPacket[]>(sql, values);
+      if (include?.actor) {
+        for (const row of rows) {
+          const actorRows = await this.query<RowDataPacket[]>(`SELECT id, firstName, lastName FROM User WHERE id = ? LIMIT 1`, [row.actorId]);
+          row.actor = actorRows[0] || null;
+        }
+      }
+      if (include?.company) {
+        for (const row of rows) {
+          const companyRows = await this.query<RowDataPacket[]>(`SELECT id, name FROM Company WHERE id = ? LIMIT 1`, [row.companyId]);
+          row.company = companyRows[0] || null;
+        }
+      }
+      return rows;
     },
 
     count: async ({ where }: { where?: Record<string, any> }) => {
@@ -1130,7 +1310,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     create: async ({ data }: { data: Record<string, any> }) => {
       const now = new Date();
-      const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -1148,6 +1328,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       await this.execute(sql, values);
       const rows = await this.query<RowDataPacket[]>(`SELECT * FROM RmmProviderConfig WHERE id = ? LIMIT 1`, [where.id]);
       return rows[0];
+    },
+
+    upsert: async ({ where, update, create }: { where: Record<string, any>; update: Record<string, any>; create: Record<string, any> }) => {
+      return this.genericUpsert('RmmProviderConfig', { where, update, create });
     },
   };
 
@@ -1174,7 +1358,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   };
 
   ticketTimeline = {
-    findMany: async ({ where, orderBy, include }: { where?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; include?: Record<string, any> }) => {
+    findMany: async ({ where, orderBy, include, skip, take }: { where?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; include?: Record<string, any>; skip?: number; take?: number }) => {
       let sql = 'SELECT * FROM TicketTimeline';
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
@@ -1189,6 +1373,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
         sql += ` ORDER BY ${orderParts.join(', ')}`;
       }
+      if (take !== undefined) { sql += ` LIMIT ?`; values.push(take); }
+      if (skip !== undefined) { sql += ` OFFSET ?`; values.push(skip); }
       const rows = await this.query<RowDataPacket[]>(sql, values);
       if (include?.actor) {
         for (const row of rows) {
@@ -1196,11 +1382,17 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           row.actor = actorRows[0] || null;
         }
       }
+      if (include?.ticket) {
+        for (const row of rows) {
+          const ticketRows = await this.query<RowDataPacket[]>(`SELECT id, ticketNumber, title, status FROM Ticket WHERE id = ? LIMIT 1`, [row.ticketId]);
+          row.ticket = ticketRows[0] || null;
+        }
+      }
       return rows;
     },
 
     create: async ({ data, include }: { data: Record<string, any>; include?: Record<string, any> }) => {
-      const insertData = { id: this.generateUuid(), createdAt: new Date(), ...data };
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: new Date(), ...data };
       const cols = Object.keys(insertData);
       const values = Object.values(insertData);
       const placeholders = cols.map(() => '?').join(', ');
@@ -1302,6 +1494,93 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       const r = Math.random() * 16 | 0;
       return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
     });
+  }
+
+  private resolveSelectCols(select?: Record<string, any> | null): string[] {
+    if (!select) return ['*'];
+    return Object.keys(select).filter(k => select[k] === true);
+  }
+
+  private async genericGroupBy(table: string, params: { by: string[]; where?: Record<string, any>; _count?: any; _sum?: any; _avg?: any; _min?: any; _max?: any }): Promise<RowDataPacket[]> {
+    const byCols = params.by.map(c => this.escapeColumn(c)).join(', ');
+    let sql = `SELECT ${byCols}`;
+    if (params._count) sql += `, COUNT(*) as _count`;
+    const values: any[] = [];
+    let whereClause = '';
+    if (params.where && Object.keys(params.where).length > 0) {
+      const clauses = Object.entries(params.where).map(([k, v]) => {
+        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+        values.push(v);
+        return `${this.escapeColumn(k)} = ?`;
+      });
+      whereClause = ` WHERE ${clauses.join(' AND ')}`;
+    }
+    sql += ` FROM ${table}${whereClause} GROUP BY ${byCols}`;
+    return this.query<RowDataPacket[]>(sql, values);
+  }
+
+  private async genericFindFirst(table: string, { where, select, include }: { where: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) {
+    const cols = this.resolveSelectCols(select);
+    const whereClauses = Object.entries(where).map(([k, v]) => {
+      if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+      return `${this.escapeColumn(k)} = ?`;
+    }).filter(Boolean);
+    const values = Object.values(where).filter(v => v !== null);
+    const rows = await this.query<RowDataPacket[]>(
+      `SELECT ${cols.join(', ')} FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
+      values,
+    );
+    return rows[0] || null;
+  }
+
+  private async genericCreate(table: string, { data }: { data: Record<string, any> }) {
+    const now = new Date();
+    const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
+    const cols = Object.keys(insertData);
+    const values = Object.values(insertData);
+    const placeholders = cols.map(() => '?').join(', ');
+    await this.execute(`INSERT INTO ${table} (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`, values);
+    const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE id = ? LIMIT 1`, [insertData.id]);
+    return rows[0];
+  }
+
+  private async genericUpdate(table: string, { where, data }: { where: Record<string, any>; data: Record<string, any> }) {
+    const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+    const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
+    const values = [...Object.values(data), ...Object.values(where)];
+    await this.execute(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
+    const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
+    return rows[0];
+  }
+
+  private async genericUpsert(table: string, { where, update, create }: { where: Record<string, any>; update: Record<string, any>; create: Record<string, any> }) {
+    const existing = await this.genericFindFirst(table, { where });
+    if (existing) {
+      return this.genericUpdate(table, { where, data: update });
+    }
+    return this.genericCreate(table, { data: create });
+  }
+
+  private async genericCreateMany(table: string, { data }: { data: Record<string, any>[] }) {
+    for (const item of data) {
+      await this.genericCreate(table, { data: item });
+    }
+    return { count: data.length };
+  }
+
+  private async genericCount(table: string, { where }: { where?: Record<string, any> }) {
+    let sql = `SELECT COUNT(*) as count FROM ${table}`;
+    const values: any[] = [];
+    if (where && Object.keys(where).length > 0) {
+      const clauses = Object.entries(where).map(([k, v]) => {
+        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+        values.push(v);
+        return `${this.escapeColumn(k)} = ?`;
+      });
+      sql += ` WHERE ${clauses.join(' AND ')}`;
+    }
+    const rows = await this.query<RowDataPacket[]>(sql, values);
+    return Number(rows[0].count);
   }
 
   async $connect() {

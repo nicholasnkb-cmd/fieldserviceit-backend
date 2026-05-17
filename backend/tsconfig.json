@@ -21,7 +21,9 @@
       "@common/*": ["src/common/*"],
       "@config/*": ["src/config/*"],
       "@database/*": ["src/database/*"],
-      "@modules/*": ["src/modules/*"]
+      "@modules/*": ["src/modules/*"],
+      "rxjs": ["node_modules/rxjs/dist/types"],
+      "rxjs/*": ["node_modules/rxjs/dist/types/*"]
     }
   },
   "exclude": ["node_modules", "dist", "test"]

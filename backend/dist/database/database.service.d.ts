@@ -13,16 +13,17 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
     user: {
         findUnique: ({ where, select }: {
             where: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
         }) => Promise<RowDataPacket>;
-        findFirst: ({ where, select, include }: {
+        findFirst: ({ where, select, include, orderBy }: {
             where: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
             include?: Record<string, any>;
+            orderBy?: Record<string, "asc" | "desc">;
         }) => Promise<RowDataPacket>;
         findMany: ({ where, select, orderBy, skip, take, include }: {
             where?: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
             orderBy?: Record<string, "asc" | "desc">;
             skip?: number;
             take?: number;
@@ -33,12 +34,12 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }) => Promise<number>;
         create: ({ data, select }: {
             data: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
         }) => Promise<RowDataPacket>;
         update: ({ where, data, select }: {
             where: Record<string, any>;
             data: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
         }) => Promise<RowDataPacket>;
         updateMany: ({ where, data }: {
             where: Record<string, any>;
@@ -51,22 +52,29 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }) => Promise<{
             count: number;
         }>;
+        groupBy: (params: {
+            by: string[];
+            where?: Record<string, any>;
+            _count?: any;
+        }) => Promise<RowDataPacket[]>;
     };
     company: {
         findUnique: ({ where, select }: {
             where: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
         }) => Promise<RowDataPacket>;
-        findFirst: ({ where, select }: {
+        findFirst: ({ where, select, include }: {
             where: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
+            include?: Record<string, any>;
         }) => Promise<RowDataPacket>;
-        findMany: ({ where, select, orderBy, skip, take }: {
+        findMany: ({ where, select, orderBy, skip, take, include }: {
             where?: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
             orderBy?: Record<string, "asc" | "desc">;
             skip?: number;
             take?: number;
+            include?: Record<string, any>;
         }) => Promise<RowDataPacket[]>;
         create: ({ data }: {
             data: Record<string, any>;
@@ -74,23 +82,26 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
         update: ({ where, data, select }: {
             where: Record<string, any>;
             data: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
         }) => Promise<RowDataPacket>;
+        count: ({ where }: {
+            where?: Record<string, any>;
+        }) => Promise<number>;
     };
     ticket: {
         findUnique: ({ where, select, include }: {
             where: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
             include?: Record<string, any>;
         }) => Promise<any>;
         findFirst: ({ where, select, include }: {
             where: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
             include?: Record<string, any>;
         }) => Promise<any>;
         findMany: ({ where, select, orderBy, skip, take, include }: {
             where?: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
             orderBy?: Record<string, "asc" | "desc">;
             skip?: number;
             take?: number;
@@ -101,13 +112,13 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }) => Promise<number>;
         create: ({ data, select, include }: {
             data: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
             include?: Record<string, any>;
         }) => Promise<any>;
         update: ({ where, data, select, include }: {
             where: Record<string, any>;
             data: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
             include?: Record<string, any>;
         }) => Promise<any>;
         delete: ({ where }: {
@@ -115,6 +126,11 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }) => Promise<{
             count: number;
         }>;
+        groupBy: (params: {
+            by: string[];
+            where?: Record<string, any>;
+            _count?: any;
+        }) => Promise<RowDataPacket[]>;
     };
     session: {
         findUnique: ({ where, include }: {
@@ -169,29 +185,47 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }) => Promise<RowDataPacket[]>;
     };
     dispatch: {
-        findMany: ({ where, select, orderBy, skip, take }: {
+        findMany: ({ where, select, orderBy, skip, take, include }: {
             where?: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
             orderBy?: Record<string, "asc" | "desc">;
             skip?: number;
             take?: number;
+            include?: Record<string, any>;
         }) => Promise<RowDataPacket[]>;
+        findFirst: ({ where, select, include }: {
+            where: Record<string, any>;
+            select?: Record<string, any>;
+            include?: Record<string, any>;
+        }) => Promise<RowDataPacket>;
+        create: ({ data, include }: {
+            data: Record<string, any>;
+            include?: Record<string, any>;
+        }) => Promise<RowDataPacket>;
+        update: ({ where, data }: {
+            where: Record<string, any>;
+            data: Record<string, any>;
+        }) => Promise<RowDataPacket>;
+        count: ({ where }: {
+            where?: Record<string, any>;
+        }) => Promise<number>;
     };
     asset: {
         findMany: ({ where, select, orderBy, skip, take }: {
             where?: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
             orderBy?: Record<string, "asc" | "desc">;
             skip?: number;
             take?: number;
         }) => Promise<RowDataPacket[]>;
-        findFirst: ({ where, select }: {
+        findFirst: ({ where, select, include }: {
             where: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
+            include?: Record<string, any>;
         }) => Promise<RowDataPacket>;
         findUnique: ({ where, select, orderBy }: {
             where: Record<string, any>;
-            select?: Record<string, boolean>;
+            select?: Record<string, any>;
             orderBy?: Record<string, "asc" | "desc">;
         }) => Promise<RowDataPacket>;
         count: ({ where }: {
@@ -204,6 +238,11 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
             where: Record<string, any>;
             data: Record<string, any>;
         }) => Promise<RowDataPacket>;
+        groupBy: (params: {
+            by: string[];
+            where?: Record<string, any>;
+            _count?: any;
+        }) => Promise<RowDataPacket[]>;
     };
     sla: {
         findMany: ({ where }: {
@@ -226,32 +265,52 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
         count: ({ where }: {
             where?: Record<string, any>;
         }) => Promise<number>;
+        updateMany: ({ where, data }: {
+            where: Record<string, any>;
+            data: Record<string, any>;
+        }) => Promise<{
+            count: number;
+        }>;
     };
     role: {
-        findMany: ({ where, include }: {
+        findMany: ({ where, include, orderBy }: {
             where?: Record<string, any>;
             include?: Record<string, any>;
+            orderBy?: Record<string, "asc" | "desc">;
         }) => Promise<RowDataPacket[]>;
         findUnique: ({ where, include }: {
             where: Record<string, any>;
             include?: Record<string, any>;
         }) => Promise<RowDataPacket>;
-        create: ({ data }: {
+        create: ({ data, include }: {
             data: Record<string, any>;
+            include?: Record<string, any>;
         }) => Promise<RowDataPacket>;
-        update: ({ where, data }: {
+        update: ({ where, data, include }: {
             where: Record<string, any>;
             data: Record<string, any>;
+            include?: Record<string, any>;
         }) => Promise<RowDataPacket>;
         delete: ({ where }: {
             where: Record<string, any>;
         }) => Promise<{
             success: boolean;
         }>;
+        createMany: ({ data }: {
+            data: Record<string, any>[];
+        }) => Promise<{
+            count: number;
+        }>;
+        upsert: ({ where, update, create }: {
+            where: Record<string, any>;
+            update: Record<string, any>;
+            create: Record<string, any>;
+        }) => Promise<RowDataPacket>;
     };
     permission: {
-        findMany: ({ where }: {
+        findMany: ({ where, orderBy }: {
             where?: Record<string, any>;
+            orderBy?: Record<string, "asc" | "desc"> | Record<string, "asc" | "desc">[];
         }) => Promise<RowDataPacket[]>;
     };
     rolePermission: {
@@ -264,6 +323,11 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }) => Promise<RowDataPacket>;
         deleteMany: ({ where }: {
             where: Record<string, any>;
+        }) => Promise<{
+            count: number;
+        }>;
+        createMany: ({ data }: {
+            data: Record<string, any>[];
         }) => Promise<{
             count: number;
         }>;
@@ -281,16 +345,32 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }) => Promise<{
             success: boolean;
         }>;
+        deleteMany: ({ where }: {
+            where: Record<string, any>;
+        }) => Promise<{
+            count: number;
+        }>;
+        findUnique: ({ where, include }: {
+            where: Record<string, any>;
+            include?: Record<string, any>;
+        }) => Promise<RowDataPacket>;
+        upsert: ({ where, update, create, include }: {
+            where: Record<string, any>;
+            update: Record<string, any>;
+            create: Record<string, any>;
+            include?: Record<string, any>;
+        }) => Promise<RowDataPacket>;
     };
     auditLog: {
         create: ({ data }: {
             data: Record<string, any>;
         }) => Promise<Record<string, any>>;
-        findMany: ({ where, orderBy, skip, take }: {
+        findMany: ({ where, orderBy, skip, take, include }: {
             where?: Record<string, any>;
             orderBy?: Record<string, "asc" | "desc">;
             skip?: number;
             take?: number;
+            include?: Record<string, any>;
         }) => Promise<RowDataPacket[]>;
         count: ({ where }: {
             where?: Record<string, any>;
@@ -342,6 +422,11 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
             where: Record<string, any>;
             data: Record<string, any>;
         }) => Promise<RowDataPacket>;
+        upsert: ({ where, update, create }: {
+            where: Record<string, any>;
+            update: Record<string, any>;
+            create: Record<string, any>;
+        }) => Promise<RowDataPacket>;
     };
     kbArticle: {
         findMany: ({ where, orderBy, skip, take }: {
@@ -352,10 +437,12 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }) => Promise<RowDataPacket[]>;
     };
     ticketTimeline: {
-        findMany: ({ where, orderBy, include }: {
+        findMany: ({ where, orderBy, include, skip, take }: {
             where?: Record<string, any>;
             orderBy?: Record<string, "asc" | "desc">;
             include?: Record<string, any>;
+            skip?: number;
+            take?: number;
         }) => Promise<RowDataPacket[]>;
         create: ({ data, include }: {
             data: Record<string, any>;
@@ -365,6 +452,14 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
     private enrichTicket;
     private escapeColumn;
     private generateUuid;
+    private resolveSelectCols;
+    private genericGroupBy;
+    private genericFindFirst;
+    private genericCreate;
+    private genericUpdate;
+    private genericUpsert;
+    private genericCreateMany;
+    private genericCount;
     $connect(): Promise<void>;
     $disconnect(): Promise<void>;
     $queryRaw(strings: TemplateStringsArray, ...values: any[]): Promise<RowDataPacket[]>;

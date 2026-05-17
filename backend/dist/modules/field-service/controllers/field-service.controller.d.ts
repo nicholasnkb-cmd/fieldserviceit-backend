@@ -5,10 +5,10 @@ export declare class FieldServiceController {
     dispatch(body: {
         ticketId: string;
         technicianId: string;
-    }, user: any): Promise<any>;
+    }, user: any): Promise<import("mysql2").RowDataPacket>;
     getBoard(user: any): Promise<import("mysql2").RowDataPacket[]>;
-    updateStatus(id: string, status: string, user: any): Promise<any>;
-    addNotes(id: string, notes: string, user: any): Promise<any>;
-    addSignature(id: string, signature: string, user: any): Promise<any>;
-    addPhotos(id: string, photoUrls: string[], user: any): Promise<any>;
+    updateStatus(id: string, status: string, user: any): Promise<import("mysql2").RowDataPacket>;
+    addNotes(id: string, notes: string, user: any): Promise<import("mysql2").RowDataPacket>;
+    addSignature(id: string, signature: string, user: any): Promise<import("mysql2").RowDataPacket>;
+    addPhotos(id: string, photoUrls: string[], user: any): Promise<import("mysql2").RowDataPacket>;
 }

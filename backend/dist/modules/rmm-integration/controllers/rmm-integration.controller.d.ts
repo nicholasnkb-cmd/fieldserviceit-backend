@@ -24,7 +24,7 @@ export declare class RmmIntegrationController {
         provider: string;
         credentials: any;
         syncIntervalMin?: number;
-    }, user: any): Promise<any>;
+    }, user: any): Promise<import("mysql2").RowDataPacket>;
     removeConfig(provider: string, user: any): Promise<import("mysql2").RowDataPacket>;
     syncNow(provider: string, user: any): Promise<{
         synced: boolean;

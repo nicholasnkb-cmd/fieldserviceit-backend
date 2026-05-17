@@ -23,8 +23,12 @@ export declare class NotificationsService {
             totalPages: number;
         };
     }>;
-    markAsRead(id: string, userId: string): Promise<any>;
-    markAllAsRead(userId: string): Promise<any>;
+    markAsRead(id: string, userId: string): Promise<{
+        count: number;
+    }>;
+    markAllAsRead(userId: string): Promise<{
+        count: number;
+    }>;
     unreadCount(userId: string): Promise<{
         count: number;
     }>;
