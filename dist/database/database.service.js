@@ -24,7 +24,7 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 const rows = await this.query(`SELECT ${cols.join(', ')} FROM User WHERE ${whereClauses.join(' AND ')} LIMIT 1`, values);
                 return rows[0] || null;
             },
-            findFirst: async ({ where, select, include }) => {
+            findFirst: async ({ where, select, include, orderBy }) => {
                 const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
                 const whereClauses = Object.entries(where).map(([k, v]) => {
                     if (v === null)
@@ -32,7 +32,13 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                     return `${this.escapeColumn(k)} = ?`;
                 }).filter(Boolean);
                 const values = Object.values(where).filter(v => v !== null);
-                const rows = await this.query(`SELECT ${cols.join(', ')} FROM User WHERE ${whereClauses.join(' AND ')} LIMIT 1`, values);
+                let sql = `SELECT ${cols.join(', ')} FROM User WHERE ${whereClauses.join(' AND ')}`;
+                if (orderBy) {
+                    const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
+                    sql += ` ORDER BY ${orderParts.join(', ')}`;
+                }
+                sql += ` LIMIT 1`;
+                const rows = await this.query(sql, values);
                 return rows[0] || null;
             },
             findMany: async ({ where, select, orderBy, skip, take, include }) => {
@@ -137,6 +143,9 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 const result = await this.execute(sql, values);
                 return { count: result.affectedRows };
             },
+            groupBy: async (params) => {
+                return this.genericGroupBy('User', params);
+            },
         };
         this.company = {
             findUnique: async ({ where, select }) => {
@@ -146,7 +155,7 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 const rows = await this.query(`SELECT ${cols.join(', ')} FROM Company WHERE ${whereClauses.join(' AND ')} LIMIT 1`, values);
                 return rows[0] || null;
             },
-            findFirst: async ({ where, select }) => {
+            findFirst: async ({ where, select, include }) => {
                 const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
                 const whereClauses = Object.entries(where).map(([k, v]) => {
                     if (v === null)
@@ -157,7 +166,7 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 const rows = await this.query(`SELECT ${cols.join(', ')} FROM Company WHERE ${whereClauses.join(' AND ')} LIMIT 1`, values);
                 return rows[0] || null;
             },
-            findMany: async ({ where, select, orderBy, skip, take }) => {
+            findMany: async ({ where, select, orderBy, skip, take, include }) => {
                 const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
                 let sql = `SELECT ${cols.join(', ')} FROM Company`;
                 const values = [];
@@ -205,6 +214,9 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 await this.execute(sql, values);
                 const rows = await this.query(`SELECT ${cols.join(', ')} FROM Company WHERE id = ? LIMIT 1`, [where.id]);
                 return rows[0];
+            },
+            count: async ({ where }) => {
+                return this.genericCount('Company', { where });
             },
         };
         this.ticket = {
@@ -309,6 +321,9 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 const sql = `DELETE FROM Ticket WHERE ${whereClauses.join(' AND ')}`;
                 const result = await this.execute(sql, values);
                 return { count: result.affectedRows };
+            },
+            groupBy: async (params) => {
+                return this.genericGroupBy('Ticket', params);
             },
         };
         this.session = {
@@ -452,7 +467,7 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
             },
         };
         this.dispatch = {
-            findMany: async ({ where, select, orderBy, skip, take }) => {
+            findMany: async ({ where, select, orderBy, skip, take, include }) => {
                 const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
                 let sql = `SELECT ${cols.join(', ')} FROM Dispatch`;
                 const values = [];
@@ -477,7 +492,42 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                     sql += ` OFFSET ?`;
                     values.push(skip);
                 }
-                return this.query(sql, values);
+                const rows = await this.query(sql, values);
+                if (include?.ticket) {
+                    for (const row of rows) {
+                        const tRows = await this.query(`SELECT * FROM Ticket WHERE id = ? LIMIT 1`, [row.ticketId]);
+                        row.ticket = tRows[0] || null;
+                    }
+                }
+                if (include?.technician) {
+                    for (const row of rows) {
+                        const tRows = await this.query(`SELECT id, firstName, lastName FROM User WHERE id = ? LIMIT 1`, [row.technicianId]);
+                        row.technician = tRows[0] || null;
+                    }
+                }
+                return rows;
+            },
+            findFirst: async ({ where, select, include }) => {
+                const rows = await this.dispatch.findMany({ where, select, include, take: 1 });
+                return rows[0] || null;
+            },
+            create: async ({ data, include }) => {
+                const row = await this.genericCreate('Dispatch', { data });
+                if (include?.ticket) {
+                    const tRows = await this.query(`SELECT * FROM Ticket WHERE id = ? LIMIT 1`, [row.ticketId]);
+                    row.ticket = tRows[0] || null;
+                }
+                if (include?.technician) {
+                    const tRows = await this.query(`SELECT id, firstName, lastName FROM User WHERE id = ? LIMIT 1`, [row.technicianId]);
+                    row.technician = tRows[0] || null;
+                }
+                return row;
+            },
+            update: async ({ where, data }) => {
+                return this.genericUpdate('Dispatch', { where, data });
+            },
+            count: async ({ where }) => {
+                return this.genericCount('Dispatch', { where });
             },
         };
         this.asset = {
@@ -512,7 +562,7 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 }
                 return this.query(sql, values);
             },
-            findFirst: async ({ where, select }) => {
+            findFirst: async ({ where, select, include }) => {
                 const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
                 const whereClauses = Object.entries(where).map(([k, v]) => {
                     if (v === null)
@@ -569,6 +619,9 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 await this.execute(sql, values);
                 const rows = await this.query(`SELECT * FROM Asset WHERE id = ? LIMIT 1`, [where.id]);
                 return rows[0];
+            },
+            groupBy: async (params) => {
+                return this.genericGroupBy('Asset', params);
             },
         };
         this.sla = {
@@ -645,9 +698,21 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 const rows = await this.query(sql, values);
                 return Number(rows[0].count);
             },
+            updateMany: async ({ where, data }) => {
+                const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+                const whereClauses = Object.entries(where).map(([k, v]) => {
+                    if (v === null)
+                        return `${this.escapeColumn(k)} IS NULL`;
+                    return `${this.escapeColumn(k)} = ?`;
+                });
+                const values = [...Object.values(data), ...Object.values(where).filter(v => v !== null)];
+                const sql = `UPDATE Notification SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`;
+                const result = await this.execute(sql, values);
+                return { count: result.affectedRows };
+            },
         };
         this.role = {
-            findMany: async ({ where, include }) => {
+            findMany: async ({ where, include, orderBy }) => {
                 let sql = 'SELECT * FROM Role';
                 const values = [];
                 if (where && Object.keys(where).length > 0) {
@@ -658,6 +723,10 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                         return `${this.escapeColumn(k)} = ?`;
                     });
                     sql += ` WHERE ${clauses.join(' AND ')}`;
+                }
+                if (orderBy) {
+                    const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
+                    sql += ` ORDER BY ${orderParts.join(', ')}`;
                 }
                 const rows = await this.query(sql, values);
                 if (include?.permissions) {
@@ -679,25 +748,55 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 }
                 return role;
             },
-            create: async ({ data }) => {
+            create: async ({ data, include }) => {
+                const { permissions, ...roleData } = data;
                 const now = new Date();
-                const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
+                const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...roleData };
                 const cols = Object.keys(insertData);
                 const values = Object.values(insertData);
                 const placeholders = cols.map(() => '?').join(', ');
                 const sql = `INSERT INTO Role (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
                 await this.execute(sql, values);
+                if (permissions?.create) {
+                    for (const perm of permissions.create) {
+                        await this.execute(`INSERT INTO RolePermission (roleId, permissionId) VALUES (?, ?)`, [insertData.id, perm.permissionId]);
+                    }
+                }
                 const rows = await this.query(`SELECT * FROM Role WHERE id = ? LIMIT 1`, [insertData.id]);
-                return rows[0];
+                const role = rows[0];
+                if (role && include?.permissions) {
+                    const permRows = await this.query(`SELECT rp.*, p.* FROM RolePermission rp JOIN Permission p ON rp.permissionId = p.id WHERE rp.roleId = ?`, [role.id]);
+                    role.permissions = permRows;
+                }
+                return role;
             },
-            update: async ({ where, data }) => {
-                const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+            update: async ({ where, data, include }) => {
+                const { permissions, ...updateData } = data;
+                const setClauses = Object.keys(updateData).map(k => `${this.escapeColumn(k)} = ?`);
                 const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
-                const values = [...Object.values(data), ...Object.values(where)];
-                const sql = `UPDATE Role SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`;
-                await this.execute(sql, values);
+                const values = [...Object.values(updateData), ...Object.values(where)];
+                if (setClauses.length > 0) {
+                    const sql = `UPDATE Role SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`;
+                    await this.execute(sql, values);
+                }
+                if (permissions) {
+                    const roleId = where.id;
+                    if (permissions.deleteMany) {
+                        await this.execute(`DELETE FROM RolePermission WHERE roleId = ?`, [roleId]);
+                    }
+                    if (permissions.create) {
+                        for (const perm of permissions.create) {
+                            await this.execute(`INSERT INTO RolePermission (roleId, permissionId) VALUES (?, ?)`, [roleId, perm.permissionId]);
+                        }
+                    }
+                }
                 const rows = await this.query(`SELECT * FROM Role WHERE id = ? LIMIT 1`, [where.id]);
-                return rows[0];
+                const role = rows[0];
+                if (role && include?.permissions) {
+                    const permRows = await this.query(`SELECT rp.*, p.* FROM RolePermission rp JOIN Permission p ON rp.permissionId = p.id WHERE rp.roleId = ?`, [role.id]);
+                    role.permissions = permRows;
+                }
+                return role;
             },
             delete: async ({ where }) => {
                 const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
@@ -706,9 +805,15 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 await this.execute(sql, values);
                 return { success: true };
             },
+            createMany: async ({ data }) => {
+                return this.genericCreateMany('Role', { data });
+            },
+            upsert: async ({ where, update, create }) => {
+                return this.genericUpsert('Role', { where, update, create });
+            },
         };
         this.permission = {
-            findMany: async ({ where }) => {
+            findMany: async ({ where, orderBy }) => {
                 let sql = 'SELECT * FROM Permission';
                 const values = [];
                 if (where && Object.keys(where).length > 0) {
@@ -723,6 +828,19 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                         return `${this.escapeColumn(k)} = ?`;
                     });
                     sql += ` WHERE ${clauses.join(' AND ')}`;
+                }
+                if (orderBy) {
+                    if (Array.isArray(orderBy)) {
+                        const orderParts = orderBy.map((o) => {
+                            const key = Object.keys(o)[0];
+                            return `${this.escapeColumn(key)} ${o[key].toUpperCase()}`;
+                        });
+                        sql += ` ORDER BY ${orderParts.join(', ')}`;
+                    }
+                    else {
+                        const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
+                        sql += ` ORDER BY ${orderParts.join(', ')}`;
+                    }
                 }
                 return this.query(sql, values);
             },
@@ -757,6 +875,16 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 const sql = `DELETE FROM RolePermission WHERE ${whereClauses.join(' AND ')}`;
                 await this.execute(sql, values);
                 return { count: 0 };
+            },
+            createMany: async ({ data }) => {
+                for (const item of data) {
+                    const cols = Object.keys(item);
+                    const values = Object.values(item);
+                    const placeholders = cols.map(() => '?').join(', ');
+                    const sql = `INSERT INTO RolePermission (${cols.map(c => `\`${c.replace(/`/g, '')}\``).join(', ')}) VALUES (${placeholders})`;
+                    await this.query(sql, values);
+                }
+                return { count: data.length };
             },
         };
         this.userRole = {
@@ -801,6 +929,30 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 await this.execute(sql, values);
                 return { success: true };
             },
+            deleteMany: async ({ where }) => {
+                const whereClauses = Object.entries(where).map(([k, v]) => {
+                    if (v === null)
+                        return `${this.escapeColumn(k)} IS NULL`;
+                    return `${this.escapeColumn(k)} = ?`;
+                });
+                const values = Object.values(where).filter(v => v !== null);
+                const sql = `DELETE FROM UserRole WHERE ${whereClauses.join(' AND ')}`;
+                const result = await this.execute(sql, values);
+                return { count: result.affectedRows };
+            },
+            findUnique: async ({ where, include }) => {
+                const rows = await this.userRole.findMany({ where, include, take: 1 });
+                return rows[0] || null;
+            },
+            upsert: async ({ where, update, create, include }) => {
+                const rows = await this.userRole.findMany({ where });
+                if (rows.length > 0) {
+                    await this.userRole.delete({ where });
+                    await this.userRole.create({ data: { ...update } });
+                    return { ...rows[0], ...update };
+                }
+                return this.userRole.create({ data: create });
+            },
         };
         this.auditLog = {
             create: async ({ data }) => {
@@ -811,7 +963,7 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 await this.execute(sql, values);
                 return data;
             },
-            findMany: async ({ where, orderBy, skip, take }) => {
+            findMany: async ({ where, orderBy, skip, take, include }) => {
                 let sql = 'SELECT * FROM AuditLog';
                 const values = [];
                 if (where && Object.keys(where).length > 0) {
@@ -835,7 +987,20 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                     sql += ` OFFSET ?`;
                     values.push(skip);
                 }
-                return this.query(sql, values);
+                const rows = await this.query(sql, values);
+                if (include?.actor) {
+                    for (const row of rows) {
+                        const actorRows = await this.query(`SELECT id, firstName, lastName FROM User WHERE id = ? LIMIT 1`, [row.actorId]);
+                        row.actor = actorRows[0] || null;
+                    }
+                }
+                if (include?.company) {
+                    for (const row of rows) {
+                        const companyRows = await this.query(`SELECT id, name FROM Company WHERE id = ? LIMIT 1`, [row.companyId]);
+                        row.company = companyRows[0] || null;
+                    }
+                }
+                return rows;
             },
             count: async ({ where }) => {
                 let sql = 'SELECT COUNT(*) as count FROM AuditLog';
@@ -1047,6 +1212,9 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 const rows = await this.query(`SELECT * FROM RmmProviderConfig WHERE id = ? LIMIT 1`, [where.id]);
                 return rows[0];
             },
+            upsert: async ({ where, update, create }) => {
+                return this.genericUpsert('RmmProviderConfig', { where, update, create });
+            },
         };
         this.kbArticle = {
             findMany: async ({ where, orderBy, skip, take }) => {
@@ -1077,7 +1245,7 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
             },
         };
         this.ticketTimeline = {
-            findMany: async ({ where, orderBy, include }) => {
+            findMany: async ({ where, orderBy, include, skip, take }) => {
                 let sql = 'SELECT * FROM TicketTimeline';
                 const values = [];
                 if (where && Object.keys(where).length > 0) {
@@ -1093,11 +1261,25 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                     const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
                     sql += ` ORDER BY ${orderParts.join(', ')}`;
                 }
+                if (take !== undefined) {
+                    sql += ` LIMIT ?`;
+                    values.push(take);
+                }
+                if (skip !== undefined) {
+                    sql += ` OFFSET ?`;
+                    values.push(skip);
+                }
                 const rows = await this.query(sql, values);
                 if (include?.actor) {
                     for (const row of rows) {
                         const actorRows = await this.query(`SELECT id, firstName, lastName FROM User WHERE id = ? LIMIT 1`, [row.actorId]);
                         row.actor = actorRows[0] || null;
+                    }
+                }
+                if (include?.ticket) {
+                    for (const row of rows) {
+                        const ticketRows = await this.query(`SELECT id, ticketNumber, title, status FROM Ticket WHERE id = ? LIMIT 1`, [row.ticketId]);
+                        row.ticket = ticketRows[0] || null;
                     }
                 }
                 return rows;
@@ -1271,6 +1453,87 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
             const r = Math.random() * 16 | 0;
             return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
         });
+    }
+    resolveSelectCols(select) {
+        if (!select)
+            return ['*'];
+        return Object.keys(select).filter(k => select[k] === true);
+    }
+    async genericGroupBy(table, params) {
+        const byCols = params.by.map(c => this.escapeColumn(c)).join(', ');
+        let sql = `SELECT ${byCols}`;
+        if (params._count)
+            sql += `, COUNT(*) as _count`;
+        const values = [];
+        let whereClause = '';
+        if (params.where && Object.keys(params.where).length > 0) {
+            const clauses = Object.entries(params.where).map(([k, v]) => {
+                if (v === null)
+                    return `${this.escapeColumn(k)} IS NULL`;
+                values.push(v);
+                return `${this.escapeColumn(k)} = ?`;
+            });
+            whereClause = ` WHERE ${clauses.join(' AND ')}`;
+        }
+        sql += ` FROM ${table}${whereClause} GROUP BY ${byCols}`;
+        return this.query(sql, values);
+    }
+    async genericFindFirst(table, { where, select, include }) {
+        const cols = this.resolveSelectCols(select);
+        const whereClauses = Object.entries(where).map(([k, v]) => {
+            if (v === null)
+                return `${this.escapeColumn(k)} IS NULL`;
+            return `${this.escapeColumn(k)} = ?`;
+        }).filter(Boolean);
+        const values = Object.values(where).filter(v => v !== null);
+        const rows = await this.query(`SELECT ${cols.join(', ')} FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, values);
+        return rows[0] || null;
+    }
+    async genericCreate(table, { data }) {
+        const now = new Date();
+        const insertData = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
+        const cols = Object.keys(insertData);
+        const values = Object.values(insertData);
+        const placeholders = cols.map(() => '?').join(', ');
+        await this.execute(`INSERT INTO ${table} (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`, values);
+        const rows = await this.query(`SELECT * FROM ${table} WHERE id = ? LIMIT 1`, [insertData.id]);
+        return rows[0];
+    }
+    async genericUpdate(table, { where, data }) {
+        const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+        const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
+        const values = [...Object.values(data), ...Object.values(where)];
+        await this.execute(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
+        const rows = await this.query(`SELECT * FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
+        return rows[0];
+    }
+    async genericUpsert(table, { where, update, create }) {
+        const existing = await this.genericFindFirst(table, { where });
+        if (existing) {
+            return this.genericUpdate(table, { where, data: update });
+        }
+        return this.genericCreate(table, { data: create });
+    }
+    async genericCreateMany(table, { data }) {
+        for (const item of data) {
+            await this.genericCreate(table, { data: item });
+        }
+        return { count: data.length };
+    }
+    async genericCount(table, { where }) {
+        let sql = `SELECT COUNT(*) as count FROM ${table}`;
+        const values = [];
+        if (where && Object.keys(where).length > 0) {
+            const clauses = Object.entries(where).map(([k, v]) => {
+                if (v === null)
+                    return `${this.escapeColumn(k)} IS NULL`;
+                values.push(v);
+                return `${this.escapeColumn(k)} = ?`;
+            });
+            sql += ` WHERE ${clauses.join(' AND ')}`;
+        }
+        const rows = await this.query(sql, values);
+        return Number(rows[0].count);
     }
     async $connect() {
         const conn = await this.pool.getConnection();

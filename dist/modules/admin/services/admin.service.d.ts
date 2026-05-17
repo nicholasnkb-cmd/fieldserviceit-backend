@@ -20,7 +20,7 @@ export declare class AdminService {
     deleteRole(roleId: string): Promise<{
         success: boolean;
     }>;
-    assignUserRole(userId: string, roleId: string): Promise<any>;
+    assignUserRole(userId: string, roleId: string): Promise<import("mysql2").RowDataPacket>;
     removeUserRole(userId: string, roleId: string): Promise<{
         success: boolean;
     }>;
@@ -63,11 +63,11 @@ export declare class AdminService {
         limit?: number;
         search?: string;
     }): Promise<{
-        data: any;
+        data: import("mysql2").RowDataPacket[];
         meta: {
             page: number;
             limit: number;
-            total: any;
+            total: number;
             totalPages: number;
         };
     }>;
@@ -124,11 +124,11 @@ export declare class AdminService {
         };
     }>;
     getGlobalStats(): Promise<{
-        totalUsers: any;
-        totalCompanies: any;
-        totalTickets: any;
-        totalAssets: any;
-        usersByType: any;
-        ticketsByStatus: any;
+        totalUsers: number;
+        totalCompanies: number;
+        totalTickets: number;
+        totalAssets: number;
+        usersByType: import("mysql2").RowDataPacket[];
+        ticketsByStatus: import("mysql2").RowDataPacket[];
     }>;
 }

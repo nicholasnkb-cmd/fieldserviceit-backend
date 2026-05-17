@@ -11,11 +11,11 @@ export declare class CompaniesService {
         page?: number;
         limit?: number;
     }): Promise<{
-        data: any;
+        data: import("mysql2").RowDataPacket[];
         meta: {
             page: number;
             limit: number;
-            total: any;
+            total: number;
             totalPages: number;
         };
     }>;
@@ -23,9 +23,9 @@ export declare class CompaniesService {
     update(id: string, dto: any): Promise<import("mysql2").RowDataPacket>;
     remove(id: string): Promise<import("mysql2").RowDataPacket>;
     getStats(id: string): Promise<{
-        tickets: any;
-        users: any;
-        assets: any;
-        dispatches: any;
+        tickets: number;
+        users: number;
+        assets: number;
+        dispatches: number;
     }>;
 }

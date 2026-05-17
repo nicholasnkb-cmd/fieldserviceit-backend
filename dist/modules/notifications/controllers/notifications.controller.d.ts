@@ -11,8 +11,12 @@ export declare class NotificationsController {
             totalPages: number;
         };
     }>;
-    markAsRead(id: string, user: any): Promise<any>;
-    markAllAsRead(user: any): Promise<any>;
+    markAsRead(id: string, user: any): Promise<{
+        count: number;
+    }>;
+    markAllAsRead(user: any): Promise<{
+        count: number;
+    }>;
     unreadCount(user: any): Promise<{
         count: number;
     }>;

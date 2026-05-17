@@ -3,10 +3,10 @@ export declare class ReportingController {
     private reportingService;
     constructor(reportingService: ReportingService);
     getTicketSummary(from: string, to: string, user: any): Promise<{
-        total: any;
-        byStatus: any;
-        byPriority: any;
-        resolvedToday: any;
+        total: number;
+        byStatus: import("mysql2").RowDataPacket[];
+        byPriority: import("mysql2").RowDataPacket[];
+        resolvedToday: number;
         avgResolutionTime: number;
     }>;
     getSlaCompliance(user: any): Promise<{
@@ -21,6 +21,6 @@ export declare class ReportingController {
         avgResolutionTime: number;
         totalDispatches: any;
     }[]>;
-    getAssetInventory(user: any): Promise<any>;
+    getAssetInventory(user: any): Promise<import("mysql2").RowDataPacket[]>;
     getActivityFeed(user: any): Promise<import("mysql2").RowDataPacket[]>;
 }
