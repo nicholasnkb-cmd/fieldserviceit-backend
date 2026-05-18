@@ -30,8 +30,12 @@ export class TicketsController {
   }
 
   @Get()
-  findAll(@Query() query: any, @CurrentUser() user: any) {
-    return this.ticketsService.findAll(user, query);
+  async findAll(@Query() query: any, @CurrentUser() user: any) {
+    try {
+      return await this.ticketsService.findAll(user, query);
+    } catch (err: any) {
+      return { error: err?.message || String(err), stack: err?.stack?.split('\n').slice(0, 5).join('\n') };
+    }
   }
 
   @Get('export/csv')
