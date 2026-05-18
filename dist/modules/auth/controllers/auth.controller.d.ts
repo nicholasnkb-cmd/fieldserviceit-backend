@@ -20,6 +20,7 @@ export declare class AuthController {
             emailVerified: any;
         };
     }>;
+    debugRegister(): Promise<Record<string, any>>;
     register(body: {
         email: string;
         password: string;

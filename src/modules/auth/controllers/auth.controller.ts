@@ -19,13 +19,29 @@ export class AuthController {
   @Get('debug-register')
   @HttpCode(HttpStatus.OK)
   async debugRegister() {
+    const result: Record<string, any> = {};
     try {
       const email = 'debug-' + Date.now() + '@test.com';
       const hash = await require('bcryptjs').hash('Test1234!', 4);
+      result.step1 = 'hash_done';
+
       const user = await this.authService['prisma'].user.create({
         data: { email, passwordHash: hash, firstName: 'Debug', lastName: 'User', role: 'CLIENT', userType: 'PUBLIC', emailVerified: true },
       });
-      return { step: 'user_created', id: user?.id };
+      result.step2 = 'user_created';
+      result.userId = user?.id;
+
+      try {
+        const tokens = await this.authService['generateTokens'](user);
+        result.step3 = 'tokens_generated';
+        result.hasAccessToken = !!tokens?.accessToken;
+      } catch (err: any) {
+        result.step3 = 'generateTokens_failed';
+        result.tokenError = err?.message || String(err);
+        result.tokenStack = err?.stack?.split('\n').slice(0, 3).join(' | ');
+      }
+
+      return result;
     } catch (err: any) {
       return { error: err?.message || String(err), stack: err?.stack?.split('\n').slice(0, 5).join('\n') || 'no stack' };
     }

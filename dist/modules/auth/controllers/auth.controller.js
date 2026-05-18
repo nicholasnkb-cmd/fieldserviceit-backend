@@ -24,6 +24,33 @@ let AuthController = class AuthController {
     async login(body) {
         return this.authService.login(body.email, body.password);
     }
+    async debugRegister() {
+        const result = {};
+        try {
+            const email = 'debug-' + Date.now() + '@test.com';
+            const hash = await require('bcryptjs').hash('Test1234!', 4);
+            result.step1 = 'hash_done';
+            const user = await this.authService['prisma'].user.create({
+                data: { email, passwordHash: hash, firstName: 'Debug', lastName: 'User', role: 'CLIENT', userType: 'PUBLIC', emailVerified: true },
+            });
+            result.step2 = 'user_created';
+            result.userId = user?.id;
+            try {
+                const tokens = await this.authService['generateTokens'](user);
+                result.step3 = 'tokens_generated';
+                result.hasAccessToken = !!tokens?.accessToken;
+            }
+            catch (err) {
+                result.step3 = 'generateTokens_failed';
+                result.tokenError = err?.message || String(err);
+                result.tokenStack = err?.stack?.split('\n').slice(0, 3).join(' | ');
+            }
+            return result;
+        }
+        catch (err) {
+            return { error: err?.message || String(err), stack: err?.stack?.split('\n').slice(0, 5).join('\n') || 'no stack' };
+        }
+    }
     async register(body) {
         return this.authService.registerPublic(body);
     }
@@ -63,6 +90,14 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "login", null);
+__decorate([
+    (0, public_decorator_1.Public)(),
+    (0, common_1.Get)('debug-register'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "debugRegister", null);
 __decorate([
     (0, public_decorator_1.Public)(),
     (0, common_1.Post)('register'),
