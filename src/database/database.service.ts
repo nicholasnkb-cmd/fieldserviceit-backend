@@ -31,8 +31,33 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       const conn = await this.pool.getConnection();
       conn.release();
       this.logger.log('Database connected');
+      await this.ensureTables();
     } catch (err) {
       this.logger.warn('Database unavailable: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  }
+
+  private async ensureTables() {
+    const tables = [
+      `CREATE TABLE IF NOT EXISTS \`Session\` (
+        id VARCHAR(191) PRIMARY KEY,
+        userId VARCHAR(191) NOT NULL,
+        refreshToken VARCHAR(191) NOT NULL UNIQUE,
+        deviceInfo VARCHAR(191),
+        ipAddress VARCHAR(191),
+        expiresAt DATETIME(3) NOT NULL,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(userId),
+        INDEX(refreshToken)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+    ];
+    for (const sql of tables) {
+      try {
+        await this.execute(sql);
+        this.logger.log(`Table ensured: ${sql.split('`')[1] || 'unknown'}`);
+      } catch (err: any) {
+        this.logger.warn(`Table creation skipped: ${err?.message || err}`);
+      }
     }
   }
 
