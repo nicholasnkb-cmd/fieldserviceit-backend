@@ -56,7 +56,7 @@ export class WorkflowService {
         ticketId,
         companyId,
         steps: {
-          create: workflow.steps.map((step) => ({
+          create: workflow.steps.map((step: any) => ({
             stepId: step.id,
             status: 'pending',
           })),
