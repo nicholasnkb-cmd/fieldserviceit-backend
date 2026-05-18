@@ -16,6 +16,22 @@ export class AuthController {
   }
 
   @Public()
+  @Get('debug-register')
+  @HttpCode(HttpStatus.OK)
+  async debugRegister() {
+    try {
+      const email = 'debug-' + Date.now() + '@test.com';
+      const hash = await require('bcryptjs').hash('Test1234!', 4);
+      const user = await this.authService['prisma'].user.create({
+        data: { email, passwordHash: hash, firstName: 'Debug', lastName: 'User', role: 'CLIENT', userType: 'PUBLIC', emailVerified: true },
+      });
+      return { step: 'user_created', id: user?.id };
+    } catch (err: any) {
+      return { error: err?.message || String(err), stack: err?.stack?.split('\n').slice(0, 5).join('\n') || 'no stack' };
+    }
+  }
+
+  @Public()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(@Body() body: { email: string; password: string; firstName: string; lastName: string }) {
