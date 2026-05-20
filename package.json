@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.build.json",
+    "postbuild": "node -e \"require('fs').existsSync('.next') || require('fs').mkdirSync('.next'); require('fs').writeFileSync('.next/BUILD_ID', Date.now().toString())\"",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
