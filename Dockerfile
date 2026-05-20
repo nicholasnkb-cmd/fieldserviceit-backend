@@ -26,4 +26,4 @@ USER nestjs
 EXPOSE 4000
 ENV NODE_ENV=production
 ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/main.js"]
