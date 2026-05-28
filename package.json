@@ -4,7 +4,6 @@
   "private": true,
   "scripts": {
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.build.json",
-    "postinstall": "prisma generate",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
@@ -13,14 +12,10 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:e2e:ci": "node node_modules/prisma/build/index.js migrate deploy && node node_modules/prisma/build/index.js db seed && jest --config ./test/jest-e2e.json",
+    "test:e2e:ci": "jest --config ./test/jest-e2e.json",
     "test:db:up": "docker compose -f ../infra/docker-compose.test.yml up -d",
     "test:db:down": "docker compose -f ../infra/docker-compose.test.yml down",
-    "test:ci": "npm test && npm run test:e2e:ci",
-    "prisma:generate": "node node_modules/prisma/build/index.js generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "ts-node prisma/seed.ts",
-    "prisma:studio": "prisma studio"
+    "test:ci": "npm test && npm run test:e2e:ci"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",
@@ -60,6 +55,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.7.5",
+    "stripe": "^22.1.1",
     "swagger-ui-express": "^5.0.1",
     "typescript": "^5.4.0",
     "uuid": "^9.0.1",

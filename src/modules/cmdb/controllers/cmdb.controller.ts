@@ -24,6 +24,12 @@ export class CmdbController {
     return this.cmdbService.findAll(user.companyId, query);
   }
 
+  @Get('mdm/summary')
+  getMdmSummary(@CurrentUser() user: any) {
+    if (!user.companyId) throw new ForbiddenException('No company context available');
+    return this.cmdbService.getMdmSummary(user.companyId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
@@ -34,6 +40,18 @@ export class CmdbController {
   update(@Param('id') id: string, @Body() dto: any, @CurrentUser() user: any) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.update(id, dto, user.companyId);
+  }
+
+  @Post(':id/check-in')
+  checkIn(@Param('id') id: string, @Body() dto: any, @CurrentUser() user: any) {
+    if (!user.companyId) throw new ForbiddenException('No company context available');
+    return this.cmdbService.checkIn(id, dto, user.companyId);
+  }
+
+  @Post(':id/actions/:action')
+  runDeviceAction(@Param('id') id: string, @Param('action') action: string, @Body() body: any, @CurrentUser() user: any) {
+    if (!user.companyId) throw new ForbiddenException('No company context available');
+    return this.cmdbService.runDeviceAction(id, action, body, user.companyId);
   }
 
   @Delete(':id')

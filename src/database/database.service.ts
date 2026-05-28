@@ -46,6 +46,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         firstName VARCHAR(191) NOT NULL,
         lastName VARCHAR(191) NOT NULL,
         phone VARCHAR(191),
+        jobTitle VARCHAR(191),
+        department VARCHAR(191),
+        location VARCHAR(191),
+        preferredContactMethod VARCHAR(191),
+        timezone VARCHAR(191),
         avatarUrl VARCHAR(191),
         role VARCHAR(191) DEFAULT 'CLIENT',
         userType VARCHAR(191) DEFAULT 'BUSINESS',
@@ -144,17 +149,45 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         ipAddress VARCHAR(191),
         macAddress VARCHAR(191),
         os VARCHAR(191),
+        osVersion VARCHAR(191),
         cpu VARCHAR(191),
         ram VARCHAR(191),
         storage VARCHAR(191),
         status VARCHAR(191) DEFAULT 'active',
+        deviceCategory VARCHAR(191) DEFAULT 'DESKTOP',
+        ownership VARCHAR(191) DEFAULT 'COMPANY',
+        assignedUser VARCHAR(191),
+        enrollmentStatus VARCHAR(191) DEFAULT 'UNMANAGED',
+        managementMode VARCHAR(191),
+        mdmProvider VARCHAR(191),
+        mdmDeviceId VARCHAR(191),
+        lastCheckInAt DATETIME(3),
+        complianceStatus VARCHAR(191) DEFAULT 'UNKNOWN',
+        complianceReasons TEXT,
+        encryptionStatus VARCHAR(191) DEFAULT 'UNKNOWN',
+        firewallEnabled TINYINT(1),
+        antivirusStatus VARCHAR(191),
+        passcodeCompliant TINYINT(1),
+        jailbreakDetected TINYINT(1) DEFAULT 0,
+        lostModeEnabled TINYINT(1) DEFAULT 0,
+        batteryLevel INT,
+        imei VARCHAR(191),
+        meid VARCHAR(191),
+        phoneNumber VARCHAR(191),
+        carrier VARCHAR(191),
+        appInventory TEXT,
+        policyProfile VARCHAR(191),
         notes TEXT,
         companyId VARCHAR(191) NOT NULL,
         createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
         updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
         deletedAt DATETIME(3),
         INDEX(companyId),
-        INDEX(assetType)
+        INDEX(assetType),
+        INDEX(deviceCategory),
+        INDEX(enrollmentStatus),
+        INDEX(complianceStatus),
+        INDEX(lastCheckInAt)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
       `CREATE TABLE IF NOT EXISTS \`Contract\` (
         id VARCHAR(191) PRIMARY KEY,
@@ -204,6 +237,61 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         INDEX(technicianId),
         INDEX(companyId)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`Plan\` (
+        id VARCHAR(191) PRIMARY KEY,
+        name VARCHAR(191) NOT NULL,
+        description TEXT,
+        stripePriceId VARCHAR(191),
+        monthlyPrice DECIMAL(10,2) NOT NULL DEFAULT 0,
+        maxUsers INT DEFAULT -1,
+        maxTickets INT DEFAULT -1,
+        features JSON,
+        sortOrder INT DEFAULT 0,
+        isActive TINYINT(1) DEFAULT 1,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`CompanyPlan\` (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL UNIQUE,
+        planId VARCHAR(191) NOT NULL,
+        stripeSubscriptionId VARCHAR(191),
+        stripeCustomerId VARCHAR(191),
+        status VARCHAR(191) DEFAULT 'ACTIVE',
+        trialEndsAt DATETIME(3),
+        currentPeriodStart DATETIME(3),
+        currentPeriodEnd DATETIME(3),
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(companyId),
+        INDEX(planId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`UsageRecord\` (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        metric VARCHAR(191) NOT NULL,
+        count INT NOT NULL DEFAULT 0,
+        periodStart DATETIME(3) NOT NULL,
+        periodEnd DATETIME(3) NOT NULL,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(companyId, metric)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`Company\` (
+        id VARCHAR(191) PRIMARY KEY,
+        name VARCHAR(191) NOT NULL,
+        slug VARCHAR(191) NOT NULL UNIQUE,
+        domain VARCHAR(191),
+        logo VARCHAR(191),
+        settings TEXT,
+        isActive TINYINT(1) DEFAULT 1,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        deletedAt DATETIME(3),
+        branding TEXT,
+        inviteCode VARCHAR(191) UNIQUE,
+        inviteExpiresAt DATETIME(3),
+        INDEX(name)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     ];
     for (const sql of tables) {
       try {
@@ -211,6 +299,79 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`Table ensured: ${sql.split('`')[1] || 'unknown'}`);
       } catch (err: any) {
         this.logger.warn(`Table creation skipped: ${err?.message || err}`);
+      }
+    }
+    await this.ensureUserProfileColumns();
+    await this.ensureAssetMdmColumns();
+  }
+
+  private async ensureUserProfileColumns() {
+    const columns: Array<{ name: string; definition: string }> = [
+      { name: 'phone', definition: 'VARCHAR(191)' },
+      { name: 'jobTitle', definition: 'VARCHAR(191)' },
+      { name: 'department', definition: 'VARCHAR(191)' },
+      { name: 'location', definition: 'VARCHAR(191)' },
+      { name: 'preferredContactMethod', definition: 'VARCHAR(191)' },
+      { name: 'timezone', definition: 'VARCHAR(191)' },
+    ];
+
+    for (const column of columns) {
+      try {
+        await this.execute(`ALTER TABLE User ADD COLUMN ${this.escapeColumn(column.name)} ${column.definition}`);
+        this.logger.log(`User column ensured: ${column.name}`);
+      } catch (err: any) {
+        if (!String(err?.message || '').includes('Duplicate column')) {
+          this.logger.warn(`User column skipped (${column.name}): ${err?.message || err}`);
+        }
+      }
+    }
+  }
+
+  private async ensureAssetMdmColumns() {
+    const columns: Array<{ name: string; definition: string; index?: string }> = [
+      { name: 'osVersion', definition: 'VARCHAR(191)' },
+      { name: 'deviceCategory', definition: "VARCHAR(191) DEFAULT 'DESKTOP'", index: 'INDEX(deviceCategory)' },
+      { name: 'ownership', definition: "VARCHAR(191) DEFAULT 'COMPANY'" },
+      { name: 'assignedUser', definition: 'VARCHAR(191)' },
+      { name: 'enrollmentStatus', definition: "VARCHAR(191) DEFAULT 'UNMANAGED'", index: 'INDEX(enrollmentStatus)' },
+      { name: 'managementMode', definition: 'VARCHAR(191)' },
+      { name: 'mdmProvider', definition: 'VARCHAR(191)' },
+      { name: 'mdmDeviceId', definition: 'VARCHAR(191)' },
+      { name: 'lastCheckInAt', definition: 'DATETIME(3)', index: 'INDEX(lastCheckInAt)' },
+      { name: 'complianceStatus', definition: "VARCHAR(191) DEFAULT 'UNKNOWN'", index: 'INDEX(complianceStatus)' },
+      { name: 'complianceReasons', definition: 'TEXT' },
+      { name: 'encryptionStatus', definition: "VARCHAR(191) DEFAULT 'UNKNOWN'" },
+      { name: 'firewallEnabled', definition: 'TINYINT(1)' },
+      { name: 'antivirusStatus', definition: 'VARCHAR(191)' },
+      { name: 'passcodeCompliant', definition: 'TINYINT(1)' },
+      { name: 'jailbreakDetected', definition: 'TINYINT(1) DEFAULT 0' },
+      { name: 'lostModeEnabled', definition: 'TINYINT(1) DEFAULT 0' },
+      { name: 'batteryLevel', definition: 'INT' },
+      { name: 'imei', definition: 'VARCHAR(191)' },
+      { name: 'meid', definition: 'VARCHAR(191)' },
+      { name: 'phoneNumber', definition: 'VARCHAR(191)' },
+      { name: 'carrier', definition: 'VARCHAR(191)' },
+      { name: 'appInventory', definition: 'TEXT' },
+      { name: 'policyProfile', definition: 'VARCHAR(191)' },
+    ];
+
+    for (const column of columns) {
+      try {
+        await this.execute(`ALTER TABLE Asset ADD COLUMN ${this.escapeColumn(column.name)} ${column.definition}`);
+        this.logger.log(`Asset column ensured: ${column.name}`);
+      } catch (err: any) {
+        if (!String(err?.message || '').includes('Duplicate column')) {
+          this.logger.warn(`Asset column skipped (${column.name}): ${err?.message || err}`);
+        }
+      }
+      if (column.index) {
+        try {
+          await this.execute(`ALTER TABLE Asset ADD ${column.index}`);
+        } catch (err: any) {
+          if (!String(err?.message || '').includes('Duplicate key name')) {
+            this.logger.warn(`Asset index skipped (${column.name}): ${err?.message || err}`);
+          }
+        }
       }
     }
   }
@@ -789,7 +950,18 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       let sql = `SELECT ${cols.join(', ')} FROM Asset`;
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
-        const clauses = Object.entries(where).map(([k, v]) => {
+        const clauses = Object.entries(where).flatMap(([k, v]) => {
+          if (k === 'OR' && Array.isArray(v)) {
+            const orClauses = v.flatMap((condition: Record<string, any>) => Object.entries(condition).map(([orKey, orValue]) => {
+              if (typeof orValue === 'object' && orValue?.contains !== undefined) {
+                values.push(`%${orValue.contains}%`);
+                return `${this.escapeColumn(orKey)} LIKE ?`;
+              }
+              values.push(orValue);
+              return `${this.escapeColumn(orKey)} = ?`;
+            }));
+            return orClauses.length > 0 ? [`(${orClauses.join(' OR ')})`] : [];
+          }
           if (v === null) return `${this.escapeColumn(k)} IS NULL`;
           if (typeof v === 'object' && v?.contains !== undefined) { values.push(`%${v.contains}%`); return `${this.escapeColumn(k)} LIKE ?`; }
           values.push(v);
@@ -837,8 +1009,20 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       let sql = 'SELECT COUNT(*) as count FROM Asset';
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
-        const clauses = Object.entries(where).map(([k, v]) => {
+        const clauses = Object.entries(where).flatMap(([k, v]) => {
+          if (k === 'OR' && Array.isArray(v)) {
+            const orClauses = v.flatMap((condition: Record<string, any>) => Object.entries(condition).map(([orKey, orValue]) => {
+              if (typeof orValue === 'object' && orValue?.contains !== undefined) {
+                values.push(`%${orValue.contains}%`);
+                return `${this.escapeColumn(orKey)} LIKE ?`;
+              }
+              values.push(orValue);
+              return `${this.escapeColumn(orKey)} = ?`;
+            }));
+            return orClauses.length > 0 ? [`(${orClauses.join(' OR ')})`] : [];
+          }
           if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+          if (typeof v === 'object' && v?.contains !== undefined) { values.push(`%${v.contains}%`); return `${this.escapeColumn(k)} LIKE ?`; }
           values.push(v);
           return `${this.escapeColumn(k)} = ?`;
         });
@@ -851,8 +1035,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     create: async ({ data }: { data: Record<string, any> }) => {
       const now = new Date();
       const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
-      const cols = Object.keys(insertData);
-      const values = Object.values(insertData);
+      const cols = Object.keys(insertData).filter(k => insertData[k] !== undefined);
+      const values = cols.map(k => insertData[k]);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO Asset (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
       await this.execute(sql, values);
@@ -861,9 +1045,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
 
     update: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
-      const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+      const dataKeys = Object.keys(data).filter(k => data[k] !== undefined);
+      const setClauses = dataKeys.map(k => `${this.escapeColumn(k)} = ?`);
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
-      const values = [...Object.values(data), ...Object.values(where)];
+      const values = [...dataKeys.map(k => data[k]), ...Object.values(where)];
       const sql = `UPDATE Asset SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`;
       await this.execute(sql, values);
       const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Asset WHERE id = ? LIMIT 1`, [where.id]);
@@ -1663,6 +1848,170 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
     return ticket;
   }
+
+  private parsePlanRow(row: any) {
+    if (!row) return row;
+    if (typeof row.features === 'string') {
+      try { row.features = JSON.parse(row.features); } catch {}
+    }
+    return row;
+  }
+
+  plan = {
+    findMany: async ({ where, orderBy }: { where?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'> }) => {
+      let sql = 'SELECT * FROM Plan';
+      const values: any[] = [];
+      if (where && Object.keys(where).length > 0) {
+        const clauses = Object.entries(where).map(([k, v]) => {
+          if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+          values.push(v);
+          return `${this.escapeColumn(k)} = ?`;
+        });
+        sql += ` WHERE ${clauses.join(' AND ')}`;
+      }
+      if (orderBy) {
+        const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
+        sql += ` ORDER BY ${orderParts.join(', ')}`;
+      }
+      const rows = await this.query<RowDataPacket[]>(sql, values);
+      return rows.map(r => this.parsePlanRow(r));
+    },
+
+    findUnique: async ({ where }: { where: Record<string, any> }) => {
+      const whereClauses = Object.entries(where).map(([k, v]) => {
+        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+        return `${this.escapeColumn(k)} = ?`;
+      });
+      const values = Object.values(where).filter(v => v !== null);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Plan WHERE ${whereClauses.join(' AND ')} LIMIT 1`, values);
+      return this.parsePlanRow(rows[0] || null);
+    },
+
+    create: async ({ data }: { data: Record<string, any> }) => {
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: new Date(), updatedAt: new Date(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
+      const placeholders = cols.map(() => '?').join(', ');
+      await this.execute(`INSERT INTO Plan (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`, values);
+      return this.parsePlanRow(insertData);
+    },
+
+    update: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
+      const updateData: Record<string, any> = { ...data, updatedAt: new Date() };
+      const dataKeys = Object.keys(updateData).filter(k => updateData[k] !== undefined);
+      const setClauses = dataKeys.map(k => `${this.escapeColumn(k)} = ?`);
+      const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
+      const values = [...dataKeys.map(k => updateData[k]), ...Object.values(where)];
+      await this.execute(`UPDATE Plan SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
+      return this.plan.findUnique({ where });
+    },
+  };
+
+  companyPlan = {
+    findUnique: async ({ where, include }: { where: Record<string, any>; include?: Record<string, any> }) => {
+      const whereClauses = Object.entries(where).map(([k, v]) => {
+        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+        return `${this.escapeColumn(k)} = ?`;
+      });
+      const values = Object.values(where).filter(v => v !== null);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM CompanyPlan WHERE ${whereClauses.join(' AND ')} LIMIT 1`, values);
+      const cp = rows[0] || null;
+      if (cp && include?.plan) {
+        const planRows = await this.query<RowDataPacket[]>(`SELECT * FROM Plan WHERE id = ? LIMIT 1`, [cp.planId]);
+        cp.plan = this.parsePlanRow(planRows[0] || null);
+      }
+      return cp;
+    },
+
+    findFirst: async ({ where }: { where: Record<string, any> }) => {
+      const whereClauses = Object.entries(where).map(([k, v]) => {
+        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+        return `${this.escapeColumn(k)} = ?`;
+      });
+      const values = Object.values(where).filter(v => v !== null);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM CompanyPlan WHERE ${whereClauses.join(' AND ')} LIMIT 1`, values);
+      return rows[0] || null;
+    },
+
+    upsert: async ({ where, update, create }: { where: Record<string, any>; update: Record<string, any>; create: Record<string, any> }) => {
+      const existing = await this.companyPlan.findUnique({ where });
+      if (existing) {
+        const setClauses = Object.keys(update).map(k => `${this.escapeColumn(k)} = ?`);
+        const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
+        const values = [...Object.values(update), ...Object.values(where)];
+        await this.execute(`UPDATE CompanyPlan SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
+        return this.companyPlan.findUnique({ where });
+      }
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: new Date(), updatedAt: new Date(), ...create };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
+      const placeholders = cols.map(() => '?').join(', ');
+      await this.execute(`INSERT INTO CompanyPlan (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`, values);
+      return this.companyPlan.findUnique({ where });
+    },
+
+    updateMany: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
+      const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+      const whereClauses = Object.entries(where).map(([k, v]) => {
+        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+        return `${this.escapeColumn(k)} = ?`;
+      });
+      const values = [...Object.values(data), ...Object.values(where).filter(v => v !== null)];
+      const result = await this.execute(`UPDATE CompanyPlan SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
+      return { count: result.affectedRows };
+    },
+
+    update: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
+      const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+      const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
+      const values = [...Object.values(data), ...Object.values(where)];
+      await this.execute(`UPDATE CompanyPlan SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
+      return this.companyPlan.findUnique({ where });
+    },
+  };
+
+  usageRecord = {
+    findFirst: async ({ where }: { where: Record<string, any> }) => {
+      const whereClauses = Object.entries(where).map(([k, v]) => {
+        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+        if (typeof v === 'object' && v !== null) {
+          const op = Object.keys(v)[0];
+          if (op === 'gte') return `${this.escapeColumn(k)} >= ?`;
+          if (op === 'lte') return `${this.escapeColumn(k)} <= ?`;
+          return `${this.escapeColumn(k)} = ?`;
+        }
+        return `${this.escapeColumn(k)} = ?`;
+      });
+      const values: any[] = [];
+      for (const [k, v] of Object.entries(where)) {
+        if (v === null) continue;
+        if (typeof v === 'object' && v !== null) {
+          values.push(Object.values(v)[0]);
+        } else {
+          values.push(v);
+        }
+      }
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM UsageRecord WHERE ${whereClauses.join(' AND ')} LIMIT 1`, values);
+      return rows[0] || null;
+    },
+
+    create: async ({ data }: { data: Record<string, any> }) => {
+      const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: new Date(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
+      const placeholders = cols.map(() => '?').join(', ');
+      await this.execute(`INSERT INTO UsageRecord (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`, values);
+      return insertData;
+    },
+
+    update: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
+      const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+      const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
+      const values = [...Object.values(data), ...Object.values(where)];
+      await this.execute(`UPDATE UsageRecord SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
+      return this.usageRecord.findFirst({ where });
+    },
+  };
 
   private escapeColumn(col: string): string {
     return `\`${col.replace(/`/g, '')}\``;

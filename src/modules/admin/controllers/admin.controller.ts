@@ -19,6 +19,20 @@ export class AdminController {
     return this.adminService.listPermissions();
   }
 
+  // ── System Controls / Plan restrictions ──
+
+  @Get('plans')
+  @Roles('SUPER_ADMIN')
+  listPlans() {
+    return this.adminService.listPlans();
+  }
+
+  @Patch('plans/:id')
+  @Roles('SUPER_ADMIN')
+  updatePlan(@Param('id') id: string, @Body() dto: any) {
+    return this.adminService.updatePlan(id, dto);
+  }
+
   // ── Roles ──
 
   @Get('roles')

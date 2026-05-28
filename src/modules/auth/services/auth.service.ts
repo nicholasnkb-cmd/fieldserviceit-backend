@@ -6,6 +6,26 @@ import { EmailService } from '../../notifications/services/email.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 
+type RegistrationProfile = {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  location?: string;
+  preferredContactMethod?: string;
+  timezone?: string;
+  planName?: string;
+};
+
+type BusinessRegistrationProfile = RegistrationProfile & {
+  jobTitle?: string;
+  department?: string;
+  companyName?: string;
+  inviteCode?: string;
+  domain?: string;
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -50,7 +70,38 @@ export class AuthService {
     };
   }
 
-  async registerPublic(dto: { email: string; password: string; firstName: string; lastName: string }) {
+  private registrationProfileData(dto: RegistrationProfile) {
+    return {
+      email: dto.email,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      phone: dto.phone?.trim() || null,
+      location: dto.location?.trim() || null,
+      preferredContactMethod: dto.preferredContactMethod?.trim() || null,
+      timezone: dto.timezone?.trim() || null,
+    };
+  }
+
+  private responseUser(user: any) {
+    return {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      jobTitle: user.jobTitle,
+      department: user.department,
+      location: user.location,
+      preferredContactMethod: user.preferredContactMethod,
+      timezone: user.timezone,
+      role: user.role,
+      userType: user.userType,
+      companyId: user.companyId,
+      emailVerified: user.emailVerified,
+    };
+  }
+
+  async registerPublic(dto: RegistrationProfile) {
     try {
       console.log('[registerPublic] Step 1: checking existing user for', dto.email);
       const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
@@ -65,10 +116,8 @@ export class AuthService {
 
       const user = await this.prisma.user.create({
         data: {
-          email: dto.email,
+          ...this.registrationProfileData(dto),
           passwordHash,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
           role: 'CLIENT',
           userType: 'PUBLIC',
           emailVerified: true,
@@ -80,16 +129,7 @@ export class AuthService {
       console.log('[registerPublic] Step 6: tokens generated');
 
       return {
-        user: {
-          id: user.id,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          userType: user.userType,
-          companyId: null,
-          emailVerified: false,
-        },
+        user: { ...this.responseUser(user), companyId: null, emailVerified: false },
         ...tokens,
       };
     } catch (err: any) {
@@ -99,15 +139,31 @@ export class AuthService {
     }
   }
 
-  async registerBusiness(dto: { email: string; password: string; firstName: string; lastName: string; inviteCode?: string; domain?: string }) {
+  async registerBusiness(dto: BusinessRegistrationProfile) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) {
       throw new ConflictException('Email already registered');
     }
+    if (dto.planName && dto.planName.toLowerCase() !== 'business') {
+      throw new BadRequestException('Companies must choose the Business plan');
+    }
 
     let companyId: string | null = null;
 
-    if (dto.inviteCode) {
+    if (dto.companyName && !dto.inviteCode && !dto.domain) {
+      const slug = dto.companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
+      const inviteCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+      const company = await this.prisma.company.create({
+        data: {
+          name: dto.companyName,
+          slug,
+          inviteCode,
+          inviteExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        },
+      });
+      companyId = company.id;
+
+    } else if (dto.inviteCode) {
       const company = await this.prisma.company.findUnique({
         where: { inviteCode: dto.inviteCode },
       });
@@ -128,17 +184,17 @@ export class AuthService {
       }
       companyId = company.id;
     } else {
-      throw new BadRequestException('Either invite code or company domain is required');
+      throw new BadRequestException('Either companyName, invite code, or company domain is required');
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 4);
 
     const user = await this.prisma.user.create({
       data: {
-        email: dto.email,
+        ...this.registrationProfileData(dto),
+        jobTitle: dto.jobTitle?.trim() || null,
+        department: dto.department?.trim() || null,
         passwordHash,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
         role: 'CLIENT',
         userType: 'BUSINESS',
         companyId,
@@ -149,16 +205,7 @@ export class AuthService {
     const tokens = await this.generateTokens(user);
 
     return {
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        userType: user.userType,
-        companyId: user.companyId,
-        emailVerified: false,
-      },
+      user: { ...this.responseUser(user), emailVerified: false },
       ...tokens,
     };
   }
@@ -250,6 +297,7 @@ export class AuthService {
       where: { id: user.id },
       data: { passwordHash, resetToken: null, resetTokenExpiresAt: null },
     });
+    await this.prisma.session.deleteMany({ where: { userId: user.id } });
     return { message: 'Password has been reset successfully' };
   }
 
@@ -290,18 +338,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const tokens = await this.generateTokens(session.user);
+    await this.prisma.session.deleteMany({ where: { id: session.id } });
 
-    await this.prisma.session.update({
-      where: { id: session.id },
-      data: { refreshToken: tokens.refreshToken, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
-    });
+    const tokens = await this.generateTokens(session.user);
 
     return tokens;
   }
 
   async logout(refreshToken: string) {
-    await this.prisma.session.deleteMany({ where: { refreshToken } });
+    await this.prisma.session.deleteMany({ where: { refreshToken } }).catch(() => {});
   }
 
   private async generateTokens(user: any) {

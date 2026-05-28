@@ -3,6 +3,26 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthService } from '../services/auth.service';
 import { Public } from '../../../common/decorators/public.decorator';
 
+type RegisterBody = {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  location?: string;
+  preferredContactMethod?: string;
+  timezone?: string;
+  planName?: string;
+};
+
+type RegisterBusinessBody = RegisterBody & {
+  jobTitle?: string;
+  department?: string;
+  companyName?: string;
+  inviteCode?: string;
+  domain?: string;
+};
+
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
@@ -50,14 +70,14 @@ export class AuthController {
   @Public()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  async register(@Body() body: { email: string; password: string; firstName: string; lastName: string }) {
+  async register(@Body() body: RegisterBody) {
     return this.authService.registerPublic(body);
   }
 
   @Public()
   @Post('register-business')
   @HttpCode(HttpStatus.CREATED)
-  async registerBusiness(@Body() body: { email: string; password: string; firstName: string; lastName: string; inviteCode?: string; domain?: string }) {
+  async registerBusiness(@Body() body: RegisterBusinessBody) {
     return this.authService.registerBusiness(body);
   }
 

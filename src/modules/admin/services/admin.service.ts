@@ -15,6 +15,36 @@ export class AdminService {
     return this.prisma.permission.findMany({ orderBy: [{ group: 'asc' }, { name: 'asc' }] });
   }
 
+  // ── System Controls / Plan restrictions ──
+
+  async listPlans() {
+    return this.prisma.plan.findMany({ orderBy: { sortOrder: 'asc' } });
+  }
+
+  async updatePlan(id: string, dto: {
+    description?: string;
+    monthlyPrice?: number;
+    maxUsers?: number;
+    maxTickets?: number;
+    stripePriceId?: string;
+    isActive?: boolean;
+    features?: Record<string, boolean>;
+  }) {
+    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException('Plan not found');
+
+    const data: any = {};
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.monthlyPrice !== undefined) data.monthlyPrice = Number(dto.monthlyPrice);
+    if (dto.maxUsers !== undefined) data.maxUsers = Number(dto.maxUsers);
+    if (dto.maxTickets !== undefined) data.maxTickets = Number(dto.maxTickets);
+    if (dto.stripePriceId !== undefined) data.stripePriceId = dto.stripePriceId || null;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.features !== undefined) data.features = JSON.stringify(dto.features);
+
+    return this.prisma.plan.update({ where: { id }, data });
+  }
+
   // ── System Roles (all companies) ──
 
   async listRoles(companyId?: string) {

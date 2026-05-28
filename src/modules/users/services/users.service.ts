@@ -98,6 +98,7 @@ export class UsersService {
     if (!valid) throw new BadRequestException('Current password is incorrect');
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({ where: { id }, data: { passwordHash } });
+    await this.prisma.session.deleteMany({ where: { userId: id } });
     return { message: 'Password changed successfully' };
   }
 

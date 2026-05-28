@@ -1,20 +1,9 @@
 #!/bin/sh
 set -e
 
-echo "Running database migrations..."
-npx prisma generate
-
-if ls prisma/migrations/*/migration.sql 1>/dev/null 2>&1; then
-  echo "Applying existing migrations..."
-  npx prisma migrate deploy
-else
-  echo "No migration files found — pushing schema directly (dev mode)..."
-  npx prisma db push --accept-data-loss
-fi
-
+echo "Database schema is managed by the application SQL startup checks."
 if [ "$SEED_DB" = "true" ]; then
-  echo "Seeding database..."
-  npx ts-node prisma/seed.ts
+  echo "SEED_DB=true ignored: SQL seed bootstrap is not currently configured."
 fi
 
 echo "Starting application..."

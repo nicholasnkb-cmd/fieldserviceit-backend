@@ -7,6 +7,7 @@ import { TicketsGateway } from '../events/tickets.gateway';
 import { TicketTimelineService } from './ticket-timeline.service';
 import { EmailService } from '../../notifications/services/email.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
+import { UsageService } from '../../billing/services/usage.service';
 import * as crypto from 'crypto';
 
 const validTransitions: Record<string, string[]> = {
@@ -26,6 +27,7 @@ export class TicketsService {
     private timeline: TicketTimelineService,
     private emailService: EmailService,
     private notificationsService: NotificationsService,
+    private usageService: UsageService,
   ) {}
 
   private validateTransition(from: string, to: string) {
@@ -85,7 +87,12 @@ export class TicketsService {
 
     await this.timeline.addEntry(ticket.id, userId, 'CREATED', `Ticket created with status ${dto.priority || 'MEDIUM'} priority`);
 
-    if (companyIdForTicket) this.gateway.notifyTicketUpdate(companyIdForTicket, 'ticket:created', ticket);
+    if (companyIdForTicket) {
+      this.usageService.incrementUsage(companyIdForTicket, 'tickets').catch((e) => {
+        console.error('[UsageService] Failed to increment ticket usage:', e?.message);
+      });
+      this.gateway.notifyTicketUpdate(companyIdForTicket, 'ticket:created', ticket);
+    }
     return ticket;
   }
 
