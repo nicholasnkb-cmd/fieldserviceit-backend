@@ -189,6 +189,38 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         INDEX(complianceStatus),
         INDEX(lastCheckInAt)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`MdmEnrollmentToken\` (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        token VARCHAR(191) NOT NULL UNIQUE,
+        deviceCategory VARCHAR(191) DEFAULT 'LAPTOP',
+        ownership VARCHAR(191) DEFAULT 'COMPANY',
+        policyProfile VARCHAR(191),
+        expiresAt DATETIME(3) NOT NULL,
+        usedAt DATETIME(3),
+        assetId VARCHAR(191),
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(companyId),
+        INDEX(token),
+        INDEX(expiresAt)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`MdmCommand\` (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        assetId VARCHAR(191) NOT NULL,
+        action VARCHAR(191) NOT NULL,
+        payload TEXT,
+        status VARCHAR(191) DEFAULT 'PENDING',
+        result TEXT,
+        requestedById VARCHAR(191),
+        completedAt DATETIME(3),
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(companyId),
+        INDEX(assetId),
+        INDEX(status),
+        INDEX(createdAt)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
       `CREATE TABLE IF NOT EXISTS \`Contract\` (
         id VARCHAR(191) PRIMARY KEY,
         name VARCHAR(191) NOT NULL,
@@ -292,7 +324,170 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         inviteExpiresAt DATETIME(3),
         INDEX(name)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`Role\` (
+        id VARCHAR(191) PRIMARY KEY,
+        name VARCHAR(191) NOT NULL,
+        slug VARCHAR(191) NOT NULL,
+        description VARCHAR(191),
+        companyId VARCHAR(191),
+        isSystem TINYINT(1) DEFAULT 0,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE(slug, companyId),
+        INDEX(companyId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`Permission\` (
+        id VARCHAR(191) PRIMARY KEY,
+        name VARCHAR(191) NOT NULL,
+        slug VARCHAR(191) NOT NULL UNIQUE,
+        grp VARCHAR(191),
+        description VARCHAR(191),
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(grp)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`RolePermission\` (
+        roleId VARCHAR(191) NOT NULL,
+        permissionId VARCHAR(191) NOT NULL,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        PRIMARY KEY(roleId, permissionId),
+        INDEX(permissionId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`UserRole\` (
+        userId VARCHAR(191) NOT NULL,
+        roleId VARCHAR(191) NOT NULL,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        PRIMARY KEY(userId, roleId),
+        INDEX(roleId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`TicketTemplate\` (
+        id VARCHAR(191) PRIMARY KEY,
+        name VARCHAR(191) NOT NULL,
+        description VARCHAR(191),
+        category VARCHAR(191),
+        subcategory VARCHAR(191),
+        priority VARCHAR(191),
+        title VARCHAR(191),
+        body TEXT,
+        companyId VARCHAR(191) NOT NULL,
+        isActive TINYINT(1) DEFAULT 1,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(companyId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`Workflow\` (
+        id VARCHAR(191) PRIMARY KEY,
+        name VARCHAR(191) NOT NULL,
+        description VARCHAR(191),
+        triggerOn VARCHAR(191) DEFAULT 'ticket.created',
+        companyId VARCHAR(191) NOT NULL,
+        isActive TINYINT(1) DEFAULT 1,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        deletedAt DATETIME(3),
+        INDEX(companyId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`WorkflowStep\` (
+        id VARCHAR(191) PRIMARY KEY,
+        workflowId VARCHAR(191) NOT NULL,
+        stepOrder INT NOT NULL,
+        action VARCHAR(191) NOT NULL,
+        config TEXT,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(workflowId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`WorkflowRun\` (
+        id VARCHAR(191) PRIMARY KEY,
+        workflowId VARCHAR(191) NOT NULL,
+        ticketId VARCHAR(191) NOT NULL,
+        companyId VARCHAR(191) NOT NULL,
+        status VARCHAR(191) DEFAULT 'running',
+        startedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        completedAt DATETIME(3),
+        INDEX(workflowId),
+        INDEX(ticketId),
+        INDEX(companyId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`WorkflowRunStep\` (
+        id VARCHAR(191) PRIMARY KEY,
+        runId VARCHAR(191) NOT NULL,
+        stepId VARCHAR(191) NOT NULL,
+        status VARCHAR(191) DEFAULT 'pending',
+        executedById VARCHAR(191),
+        output TEXT,
+        startedAt DATETIME(3),
+        completedAt DATETIME(3),
+        INDEX(runId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`NotificationPreference\` (
+        id VARCHAR(191) PRIMARY KEY,
+        userId VARCHAR(191) NOT NULL UNIQUE,
+        emailEnabled TINYINT(1) DEFAULT 1,
+        pushEnabled TINYINT(1) DEFAULT 1,
+        smsEnabled TINYINT(1) DEFAULT 0,
+        digestDaily TINYINT(1) DEFAULT 0
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`RmmProviderConfig\` (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        provider VARCHAR(191) NOT NULL,
+        credentials TEXT NOT NULL,
+        isActive TINYINT(1) DEFAULT 1,
+        syncIntervalMin INT DEFAULT 60,
+        lastSyncAt DATETIME(3),
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE(companyId, provider),
+        INDEX(companyId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`AuditLog\` (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        actorId VARCHAR(191) NOT NULL,
+        action VARCHAR(191) NOT NULL,
+        resourceType VARCHAR(191) NOT NULL,
+        resourceId VARCHAR(191) NOT NULL,
+        diff TEXT,
+        ip VARCHAR(191),
+        userAgent VARCHAR(191),
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(companyId, createdAt),
+        INDEX(resourceType, resourceId),
+        INDEX(actorId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`TimeEntry\` (
+        id VARCHAR(191) PRIMARY KEY,
+        ticketId VARCHAR(191) NOT NULL,
+        userId VARCHAR(191) NOT NULL,
+        startTime DATETIME(3) NOT NULL,
+        endTime DATETIME(3),
+        duration INT,
+        description TEXT,
+        billable TINYINT(1) DEFAULT 1,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(ticketId),
+        INDEX(userId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`KbArticle\` (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        title VARCHAR(191) NOT NULL,
+        content TEXT NOT NULL,
+        category VARCHAR(191),
+        tags VARCHAR(191),
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(companyId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     ];
+    for (const sql of tables) {
+      try {
+        await this.execute(sql);
+        this.logger.log(`Table ensured: ${sql.split('`')[1] || 'unknown'}`);
+      } catch (err: any) {
+        this.logger.warn(`Table creation skipped: ${err?.message || err}`);
+      }
+    }
     for (const sql of tables) {
       try {
         await this.execute(sql);
