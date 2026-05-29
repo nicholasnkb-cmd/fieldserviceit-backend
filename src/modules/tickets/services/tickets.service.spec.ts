@@ -44,6 +44,7 @@ describe('TicketsService', () => {
       incrementUsage: jest.fn().mockResolvedValue(undefined),
     };
 
+    const mockLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
     service = new TicketsService(
       mockPrisma as any,
       mockGateway as any,
@@ -51,6 +52,7 @@ describe('TicketsService', () => {
       mockEmail as any,
       mockNotifications as any,
       mockUsageService as any,
+      mockLogger as any,
     );
   });
 

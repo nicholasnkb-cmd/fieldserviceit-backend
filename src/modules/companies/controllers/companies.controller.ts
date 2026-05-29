@@ -6,6 +6,10 @@ import { BusinessOnlyGuard } from '../../../common/guards/business-only.guard';
 import { BusinessOnly } from '../../../common/decorators/business-only.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { CurrentUser as CurrentUserType } from '../../../common/types';
+import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
+import { CreateCompanyDto } from '../dto/create-company.dto';
+import { UpdateCompanyDto } from '../dto/update-company.dto';
 
 @Controller('companies')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard)
@@ -15,12 +19,12 @@ export class CompaniesController {
 
   @Post()
   @Roles('SUPER_ADMIN')
-  create(@Body() dto: any) {
+  create(@Body() dto: CreateCompanyDto) {
     return this.companiesService.create(dto);
   }
 
   @Get()
-  findAll(@Query() query: any, @CurrentUser() user: any) {
+  findAll(@Query() query: PaginationQueryDto, @CurrentUser() user: CurrentUserType) {
     if (user.role === 'SUPER_ADMIN') {
       return this.companiesService.findAll(query);
     }
@@ -28,7 +32,7 @@ export class CompaniesController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+  findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     if (user.role !== 'SUPER_ADMIN' && id !== user.companyId) {
       throw new ForbiddenException('Access denied');
     }
@@ -36,7 +40,7 @@ export class CompaniesController {
   }
 
   @Get(':id/stats')
-  getStats(@Param('id') id: string, @CurrentUser() user: any) {
+  getStats(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     if (user.role !== 'SUPER_ADMIN' && id !== user.companyId) {
       throw new ForbiddenException('Access denied');
     }
@@ -45,7 +49,7 @@ export class CompaniesController {
 
   @Patch(':id')
   @Roles('SUPER_ADMIN')
-  update(@Param('id') id: string, @Body() dto: any) {
+  update(@Param('id') id: string, @Body() dto: UpdateCompanyDto) {
     return this.companiesService.update(id, dto);
   }
 

@@ -3,6 +3,7 @@ import { BillingService } from '../services/billing.service';
 import { PlansService } from '../services/plans.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { CurrentUser as CurrentUserType } from '../../../common/types';
 
 @Controller('billing')
 export class BillingController {
@@ -13,7 +14,7 @@ export class BillingController {
 
   @UseGuards(JwtAuthGuard)
   @Get('current-plan')
-  async getCurrentPlan(@CurrentUser() user: any) {
+  async getCurrentPlan(@CurrentUser() user: CurrentUserType) {
     const companyId = user.companyId;
     if (!companyId) return { plan: null };
     return this.plansService.getCompanyPlan(companyId);
@@ -23,7 +24,7 @@ export class BillingController {
   @Post('checkout')
   async createCheckout(
     @Body() body: { planId: string; successUrl?: string; cancelUrl?: string },
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserType,
   ) {
     const companyId = user.companyId;
     if (!companyId) throw new Error('No company assigned');
@@ -38,7 +39,7 @@ export class BillingController {
 
   @UseGuards(JwtAuthGuard)
   @Get('invoices')
-  async getInvoices(@CurrentUser() user: any) {
+  async getInvoices(@CurrentUser() user: CurrentUserType) {
     const companyId = user.companyId;
     if (!companyId) return [];
     return this.billingService.getInvoices(companyId);
@@ -46,7 +47,7 @@ export class BillingController {
 
   @UseGuards(JwtAuthGuard)
   @Post('portal')
-  async createPortal(@CurrentUser() user: any) {
+  async createPortal(@CurrentUser() user: CurrentUserType) {
     const companyId = user.companyId;
     if (!companyId) throw new Error('No company assigned');
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';

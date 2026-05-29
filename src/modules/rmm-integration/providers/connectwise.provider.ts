@@ -1,7 +1,12 @@
+import { Injectable } from '@nestjs/common';
 import { RmmProvider, AssetMapping, AlertMapping } from './rmm-provider.interface';
+import { LoggerService } from '../../../common/logger/logger.service';
 
+@Injectable()
 export class ConnectWiseProvider implements RmmProvider {
   name = 'connectwise';
+
+  constructor(private readonly logger: LoggerService) {}
 
   private baseUrl(credentials: any): string {
     return `https://api-na.myconnectwise.net/v2024_1`;
@@ -51,7 +56,7 @@ export class ConnectWiseProvider implements RmmProvider {
       });
 
       if (!res.ok) {
-        console.warn(`ConnectWise syncAllAssets failed: ${res.status} ${res.statusText}`);
+        this.logger.warn(`ConnectWise syncAllAssets failed: ${res.status} ${res.statusText}`);
         return this.getMockAssets();
       }
 
@@ -68,7 +73,7 @@ export class ConnectWiseProvider implements RmmProvider {
         location: item.location?.name,
       }));
     } catch (err: any) {
-      console.warn(`ConnectWise syncAllAssets error: ${err.message}`);
+      this.logger.warn(`ConnectWise syncAllAssets error: ${err.message}`);
       return this.getMockAssets();
     }
   }
@@ -114,7 +119,7 @@ export class ConnectWiseProvider implements RmmProvider {
         };
       }
     } catch (err: any) {
-      console.warn(`ConnectWise createAlert error: ${err.message}`);
+      this.logger.warn(`ConnectWise createAlert error: ${err.message}`);
     }
 
     return { title: 'ConnectWise Alert', description: 'Alert received from ConnectWise', severity: 'warning', source: 'connectwise', raw: alertData };

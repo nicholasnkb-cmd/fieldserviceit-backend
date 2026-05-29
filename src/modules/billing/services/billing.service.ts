@@ -22,7 +22,7 @@ export class BillingService {
     if (!plan) throw new Error('Plan not found');
     if (!plan.stripePriceId) throw new Error('Plan has no Stripe price');
 
-    let cp = await this.prisma.companyPlan.findUnique({ where: { companyId } });
+    const cp = await this.prisma.companyPlan.findUnique({ where: { companyId } });
     let customerId = cp?.stripeCustomerId;
 
     if (!customerId) {
@@ -91,6 +91,8 @@ export class BillingService {
 
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!endpointSecret) throw new Error('Webhook secret not configured');
+    if (!rawBody) throw new Error('Webhook raw body missing');
+    if (!signature) throw new Error('Stripe signature missing');
 
     const event = this.stripe.webhooks.constructEvent(rawBody, signature, endpointSecret);
 

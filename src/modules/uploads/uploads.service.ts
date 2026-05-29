@@ -24,6 +24,36 @@ function validateExtension(filename: string): void {
   }
 }
 
+const MAGIC_BYTES: Record<string, Uint8Array[]> = {
+  '.jpg': [new Uint8Array([0xFF, 0xD8, 0xFF])],
+  '.jpeg': [new Uint8Array([0xFF, 0xD8, 0xFF])],
+  '.png': [new Uint8Array([0x89, 0x50, 0x4E, 0x47])],
+  '.gif': [new Uint8Array([0x47, 0x49, 0x46])],
+  '.webp': [new Uint8Array([0x52, 0x49, 0x46, 0x46])],
+  '.pdf': [new Uint8Array([0x25, 0x50, 0x44, 0x46])],
+};
+
+function validateMagicBytes(buffer: Buffer, ext: string): void {
+  const signatures = MAGIC_BYTES[ext];
+  if (!signatures) return;
+  const match = signatures.some(sig =>
+    sig.every((byte, i) => buffer[i] === byte)
+  );
+  if (!match) {
+    throw new BadRequestException('File content does not match its extension');
+  }
+}
+
+function scanForKnownMalwareMarkers(buffer: Buffer): void {
+  const prefix = buffer.subarray(0, Math.min(buffer.length, 4096)).toString('utf8');
+  if (prefix.includes('EICAR-STANDARD-ANTIVIRUS-TEST-FILE')) {
+    throw new BadRequestException('File failed malware scan');
+  }
+  if (/<script[\s>]/i.test(prefix)) {
+    throw new BadRequestException('Executable script content is not allowed in uploads');
+  }
+}
+
 @Injectable()
 export class UploadsService {
   private readonly logger = new Logger(UploadsService.name);
@@ -46,6 +76,8 @@ export class UploadsService {
     const sanitized = sanitizeFilename(file.originalname);
     validateExtension(sanitized);
     const ext = path.extname(sanitized) || '.bin';
+    validateMagicBytes(file.buffer, ext);
+    scanForKnownMalwareMarkers(file.buffer);
     const filename = `${uuid()}${ext}`;
 
     if (this.storageType === 's3' && this.s3Client) {

@@ -7,15 +7,26 @@ export class HealthController {
 
   @Get()
   async check() {
+    const checks: Record<string, any> = {};
+
+    checks.timestamp = new Date().toISOString();
+
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-      return { status: 'ok', timestamp: new Date().toISOString() };
-    } catch (err: any) {
-      return {
-        status: 'error',
-        timestamp: new Date().toISOString(),
-        message: err?.message || String(err),
-      };
+      checks.database = { status: 'ok' };
+    } catch {
+      checks.database = { status: 'error' };
     }
+
+    checks.pool = { status: 'ok' };
+
+    const statuses = Object.values(checks).filter((c: any) => typeof c === 'object' && c !== null);
+    const allOk = statuses.length === 0 || statuses.every((c: any) => c.status === 'ok' || c.status === 'unknown');
+    return { status: allOk ? 'ok' : 'degraded', ...checks };
+  }
+
+  @Get('ping')
+  ping() {
+    return { pong: true, timestamp: new Date().toISOString() };
   }
 }

@@ -1,7 +1,12 @@
+import { Injectable } from '@nestjs/common';
 import { RmmProvider, AssetMapping, AlertMapping } from './rmm-provider.interface';
+import { LoggerService } from '../../../common/logger/logger.service';
 
+@Injectable()
 export class DattoProvider implements RmmProvider {
   name = 'datto';
+
+  constructor(private readonly logger: LoggerService) {}
 
   private baseUrl = 'https://api.datto.com/v1';
 
@@ -47,7 +52,7 @@ export class DattoProvider implements RmmProvider {
       });
 
       if (!res.ok) {
-        console.warn(`Datto syncAllAssets failed: ${res.status}`);
+        this.logger.warn(`Datto syncAllAssets failed: ${res.status}`);
         return this.getMockAssets();
       }
 
@@ -65,7 +70,7 @@ export class DattoProvider implements RmmProvider {
         location: d.site?.name || credentials.siteId,
       }));
     } catch (err: any) {
-      console.warn(`Datto syncAllAssets error: ${err.message}`);
+      this.logger.warn(`Datto syncAllAssets error: ${err.message}`);
       return this.getMockAssets();
     }
   }

@@ -3,8 +3,15 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../database/prisma.service';
 import { EmailService } from '../../notifications/services/email.service';
+import { LoggerService } from '../../../common/logger/logger.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+
+const BCRYPT_ROUNDS = 12;
+const LOGIN_LOCK_THRESHOLD = 5;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+
+const loginFailures = new Map<string, { count: number; lockedUntil?: number; lastFailureAt: number }>();
 
 type RegistrationProfile = {
   email: string;
@@ -33,22 +40,30 @@ export class AuthService {
     private jwtService: JwtService,
     private config: ConfigService,
     private emailService: EmailService,
+    private readonly logger: LoggerService,
   ) {}
 
   async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const normalizedEmail = email.toLowerCase().trim();
+    await this.enforceLoginBackoff(normalizedEmail);
+
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user || !user.isActive) {
+      this.recordLoginFailure(normalizedEmail, 'unknown-or-inactive-user');
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (!user.passwordHash) {
+      this.recordLoginFailure(normalizedEmail, 'missing-password-hash');
       throw new UnauthorizedException('Invalid credentials');
     }
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
+      this.recordLoginFailure(normalizedEmail, 'bad-password');
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    loginFailures.delete(normalizedEmail);
     const tokens = await this.generateTokens(user);
     await this.prisma.user.update({
       where: { id: user.id },
@@ -102,44 +117,34 @@ export class AuthService {
   }
 
   async registerPublic(dto: RegistrationProfile) {
-    try {
-      console.log('[registerPublic] Step 1: checking existing user for', dto.email);
-      const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
-      console.log('[registerPublic] Step 2: existing user =', !!existing);
-      if (existing) {
-        throw new ConflictException('Email already registered');
-      }
-
-      console.log('[registerPublic] Step 3: hashing password');
-      const passwordHash = await bcrypt.hash(dto.password, 4);
-      console.log('[registerPublic] Step 4: password hashed, creating user');
-
-      const user = await this.prisma.user.create({
-        data: {
-          ...this.registrationProfileData(dto),
-          passwordHash,
-          role: 'CLIENT',
-          userType: 'PUBLIC',
-          emailVerified: true,
-        },
-      });
-      console.log('[registerPublic] Step 5: user created, id =', user?.id);
-
-      const tokens = await this.generateTokens(user);
-      console.log('[registerPublic] Step 6: tokens generated');
-
-      return {
-        user: { ...this.responseUser(user), companyId: null, emailVerified: false },
-        ...tokens,
-      };
-    } catch (err: any) {
-      console.error('[registerPublic] FULL ERROR:', err?.message || String(err));
-      console.error('[registerPublic] FULL ERROR STACK:', err?.stack || 'no stack');
-      throw err;
+    dto.email = dto.email.toLowerCase().trim();
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (existing) {
+      throw new ConflictException('Email already registered');
     }
+
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+
+    const user = await this.prisma.user.create({
+      data: {
+        ...this.registrationProfileData(dto),
+        passwordHash,
+        role: 'CLIENT',
+        userType: 'PUBLIC',
+        emailVerified: true,
+      },
+    });
+
+    const tokens = await this.generateTokens(user);
+
+    return {
+      user: { ...this.responseUser(user), companyId: null, emailVerified: false },
+      ...tokens,
+    };
   }
 
   async registerBusiness(dto: BusinessRegistrationProfile) {
+    dto.email = dto.email.toLowerCase().trim();
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) {
       throw new ConflictException('Email already registered');
@@ -187,7 +192,7 @@ export class AuthService {
       throw new BadRequestException('Either companyName, invite code, or company domain is required');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 4);
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     const user = await this.prisma.user.create({
       data: {
@@ -232,15 +237,13 @@ export class AuthService {
   }
 
   async resendVerification(email: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) throw new BadRequestException('User not found');
-    if (user.emailVerified) throw new BadRequestException('Email already verified');
-
-    this.sendVerificationEmail(user as { id: string; email: string; firstName: string }).catch((e) => {
-      console.error('Failed to send verification email:', e.message);
-    });
-
-    return { message: 'Verification email sent' };
+    const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (user && !user.emailVerified) {
+      this.sendVerificationEmail(user as { id: string; email: string; firstName: string }).catch((e) => {
+        this.logger.error('Failed to send verification email: ' + e.message);
+      });
+    }
+    return { message: 'If the email exists and is not verified, a verification email has been sent' };
   }
 
   private async sendVerificationEmail(user: { id: string; email: string; firstName: string }) {
@@ -281,7 +284,7 @@ export class AuthService {
         data: { resetToken, resetTokenExpiresAt },
       });
       this.emailService.sendPasswordResetEmail(user.email, resetToken).catch((e) => {
-        console.error('Failed to send reset email:', e.message);
+        this.logger.error('Failed to send reset email: ' + e.message);
       });
     }
     return { message: 'If the email exists, a reset link has been sent' };
@@ -292,7 +295,7 @@ export class AuthService {
       where: { resetToken: token, resetTokenExpiresAt: { gte: new Date() } },
     });
     if (!user) throw new BadRequestException('Invalid or expired reset token');
-    const passwordHash = await bcrypt.hash(password, 4);
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     await this.prisma.user.update({
       where: { id: user.id },
       data: { passwordHash, resetToken: null, resetTokenExpiresAt: null },
@@ -302,9 +305,9 @@ export class AuthService {
   }
 
   async trackTicket(email: string, ticketNumber: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
     if (!user) {
-      throw new UnauthorizedException('No account found with this email');
+      throw new UnauthorizedException('Ticket not found');
     }
 
     const ticket = await this.prisma.ticket.findFirst({
@@ -338,9 +341,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    await this.prisma.session.deleteMany({ where: { id: session.id } });
-
     const tokens = await this.generateTokens(session.user);
+
+    await this.prisma.session.deleteMany({ where: { id: session.id } });
 
     return tokens;
   }
@@ -370,5 +373,26 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken, expiresIn: 900 };
+  }
+
+  private async enforceLoginBackoff(email: string) {
+    const failure = loginFailures.get(email);
+    if (!failure) return;
+    if (failure.lockedUntil && failure.lockedUntil > Date.now()) {
+      this.logger.warn(`Login locked for ${email}`);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    const delayMs = Math.min(2000, failure.count * 250);
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  private recordLoginFailure(email: string, reason: string) {
+    const existing = loginFailures.get(email) || { count: 0, lastFailureAt: 0 };
+    const count = existing.count + 1;
+    const lockedUntil = count >= LOGIN_LOCK_THRESHOLD ? Date.now() + LOGIN_LOCK_MS : existing.lockedUntil;
+    loginFailures.set(email, { count, lockedUntil, lastFailureAt: Date.now() });
+    this.logger.warn(`Login failure for ${email}: ${reason}; count=${count}${lockedUntil ? '; locked=true' : ''}`);
   }
 }

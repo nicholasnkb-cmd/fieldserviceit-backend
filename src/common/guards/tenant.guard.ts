@@ -18,8 +18,9 @@ export class TenantGuard implements CanActivate {
       return true;
     }
 
-    // Public users have no company context - skip tenant isolation
+    // Public users have no company context
     if (user.userType === 'PUBLIC') {
+      request.companyId = null;
       return true;
     }
 

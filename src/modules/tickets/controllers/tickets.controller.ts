@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, NotFoundException, UnauthorizedException, Headers } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { TicketsService } from '../services/tickets.service';
 import { CreateTicketDto } from '../dto/create-ticket.dto';
@@ -11,7 +12,7 @@ import { TenantGuard } from '../../../common/guards/tenant.guard';
 import { BusinessOnlyGuard } from '../../../common/guards/business-only.guard';
 import { BusinessOnly } from '../../../common/decorators/business-only.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
-import { Public } from '../../../common/decorators/public.decorator';
+import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { PrismaService } from '../../../database/prisma.service';
 
 @Controller('tickets')
@@ -24,26 +25,38 @@ export class TicketsController {
     private prisma: PrismaService,
   ) {}
 
+  private async assertTicketAccess(id: string, user: CurrentUserType) {
+    const where: any = { id, deletedAt: null };
+    if (user.userType === 'PUBLIC') {
+      where.createdById = user.id;
+    } else {
+      where.companyId = user.companyId;
+    }
+    const ticket = await this.prisma.ticket.findFirst({ where, select: { id: true, companyId: true, createdById: true } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    return ticket;
+  }
+
   @Post()
-  create(@Body() dto: CreateTicketDto, @CurrentUser() user: any) {
+  create(@Body() dto: CreateTicketDto, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.create(dto, user.companyId, user.id, user.userType);
   }
 
   @Get()
-  findAll(@Query() query: any, @CurrentUser() user: any) {
+  findAll(@Query() query: any, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.findAll(user, query);
   }
 
   @Get('export/csv')
   @Header('Content-Type', 'text/csv')
   @Header('Content-Disposition', 'attachment; filename="tickets.csv"')
-  async exportCsv(@Query('status') status: string, @CurrentUser() user: any, @Res() res: Response) {
+  async exportCsv(@Query('status') status: string, @CurrentUser() user: CurrentUserType, @Res() res: Response) {
     const csv = await this.exportService.exportCsv(user.companyId, status);
     res.send(csv);
   }
 
   @Get('board')
-  async getBoard(@CurrentUser() user: any) {
+  async getBoard(@CurrentUser() user: CurrentUserType) {
     const tickets = await this.prisma.ticket.findMany({
       where: { companyId: user.companyId, deletedAt: null },
       orderBy: { updatedAt: 'desc' },
@@ -58,47 +71,51 @@ export class TicketsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+  findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.findOne(id, user);
   }
 
   @BusinessOnly()
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateTicketDto, @CurrentUser() user: any) {
+  update(@Param('id') id: string, @Body() dto: UpdateTicketDto, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.update(id, dto, user.companyId, user.id);
   }
 
   @BusinessOnly()
   @Delete(':id')
-  remove(@Param('id') id: string, @CurrentUser() user: any) {
+  remove(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.remove(id, user.companyId);
   }
 
   @BusinessOnly()
   @Post(':id/assign')
-  assign(@Param('id') id: string, @Body('userId') userId: string, @CurrentUser() user: any) {
+  assign(@Param('id') id: string, @Body('userId') userId: string, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.assign(id, userId, user.companyId, user.id);
   }
 
   @BusinessOnly()
   @Post(':id/resolve')
-  resolve(@Param('id') id: string, @Body('resolution') resolution: string, @CurrentUser() user: any) {
+  resolve(@Param('id') id: string, @Body('resolution') resolution: string, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.resolve(id, resolution, user.companyId, user.id);
   }
 
   @Post(':id/comments')
-  addComment(@Param('id') id: string, @Body() dto: CreateCommentDto, @CurrentUser() user: any) {
+  async addComment(@Param('id') id: string, @Body() dto: CreateCommentDto, @CurrentUser() user: CurrentUserType) {
+    await this.assertTicketAccess(id, user);
     return this.timelineService.addEntry(id, user.id, 'COMMENT', dto.comment, undefined, undefined, dto.isInternal);
   }
 
   @Get(':id/timeline')
-  getTimeline(@Param('id') id: string, @CurrentUser() user: any) {
+  async getTimeline(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    await this.assertTicketAccess(id, user);
     return this.timelineService.getTimeline(id);
   }
 
   @BusinessOnly()
   @Post(':id/attachments')
-  async addAttachment(@Param('id') id: string, @Body() body: { fileUrl: string; fileName: string; fileSize: number; mimeType: string }, @CurrentUser() user: any) {
+  async addAttachment(@Param('id') id: string, @Body() body: { fileUrl: string; fileName: string; fileSize: number; mimeType: string }, @CurrentUser() user: CurrentUserType) {
+    const ticket = await this.prisma.ticket.findFirst({ where: { id, companyId: user.companyId, deletedAt: null }, select: { id: true } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
     const attachment = await this.prisma.ticketAttachment.create({
       data: { ticketId: id, fileUrl: body.fileUrl, fileName: body.fileName, fileSize: body.fileSize, mimeType: body.mimeType, uploadedById: user.id },
       include: { uploadedBy: { select: { id: true, firstName: true, lastName: true } } },
@@ -109,14 +126,21 @@ export class TicketsController {
 
   @BusinessOnly()
   @Delete(':id/attachments/:attachmentId')
-  async removeAttachment(@Param('id') id: string, @Param('attachmentId') attachmentId: string) {
+  async removeAttachment(@Param('id') id: string, @Param('attachmentId') attachmentId: string, @CurrentUser() user: CurrentUserType) {
+    const ticket = await this.prisma.ticket.findFirst({ where: { id, companyId: user.companyId, deletedAt: null }, select: { id: true } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    const rows = await this.prisma.query<any[]>(
+      `SELECT ta.id FROM TicketAttachment ta INNER JOIN Ticket t ON t.id = ta.ticketId WHERE ta.id = ? AND ta.ticketId = ? AND t.companyId = ? AND t.deletedAt IS NULL LIMIT 1`,
+      [attachmentId, id, user.companyId],
+    );
+    if (!rows[0]) throw new NotFoundException('Attachment not found');
     await this.prisma.ticketAttachment.delete({ where: { id: attachmentId } });
     return { success: true };
   }
 
   @BusinessOnly()
   @Post('bulk/status')
-  async bulkStatus(@Body() body: { ids: string[]; status: string }, @CurrentUser() user: any) {
+  async bulkStatus(@Body() body: { ids: string[]; status: string }, @CurrentUser() user: CurrentUserType) {
     const results = [];
     for (const id of body.ids) {
       try {
@@ -129,7 +153,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Post('bulk/assign')
-  async bulkAssign(@Body() body: { ids: string[]; userId: string }, @CurrentUser() user: any) {
+  async bulkAssign(@Body() body: { ids: string[]; userId: string }, @CurrentUser() user: CurrentUserType) {
     const results = [];
     for (const id of body.ids) {
       try {
@@ -142,7 +166,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Post('bulk/delete')
-  async bulkDelete(@Body() body: { ids: string[] }, @CurrentUser() user: any) {
+  async bulkDelete(@Body() body: { ids: string[] }, @CurrentUser() user: CurrentUserType) {
     const results = [];
     for (const id of body.ids) {
       try {
@@ -154,7 +178,7 @@ export class TicketsController {
   }
 
   @Get('templates/list')
-  async listTemplates(@CurrentUser() user: any) {
+  async listTemplates(@CurrentUser() user: CurrentUserType) {
     return this.prisma.ticketTemplate.findMany({
       where: { companyId: user.companyId, isActive: true },
       orderBy: { name: 'asc' },
@@ -163,21 +187,35 @@ export class TicketsController {
 
   @BusinessOnly()
   @Post('templates')
-  async createTemplate(@Body() body: { name: string; description?: string; category?: string; subcategory?: string; priority?: string; title?: string; body?: string }, @CurrentUser() user: any) {
+  async createTemplate(@Body() body: { name: string; description?: string; category?: string; subcategory?: string; priority?: string; title?: string; body?: string }, @CurrentUser() user: CurrentUserType) {
+    const data = {
+      name: body.name,
+      description: body.description,
+      category: body.category,
+      subcategory: body.subcategory,
+      priority: body.priority,
+      title: body.title,
+      body: body.body,
+      companyId: user.companyId,
+    };
+    Object.keys(data).forEach((key) => (data as any)[key] === undefined && delete (data as any)[key]);
     return this.prisma.ticketTemplate.create({
-      data: { ...body, companyId: user.companyId },
+      data,
     });
   }
 
   @BusinessOnly()
   @Delete('templates/:id')
-  async deleteTemplate(@Param('id') id: string) {
+  async deleteTemplate(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    const template = await this.prisma.ticketTemplate.findMany({ where: { id, companyId: user.companyId, isActive: true } });
+    if (!template[0]) throw new NotFoundException('Template not found');
     await this.prisma.ticketTemplate.update({ where: { id }, data: { isActive: false } });
     return { success: true };
   }
 
   @Post(':id/time')
-  async addTimeEntry(@Param('id') id: string, @Body() body: { duration: number; description?: string; billable?: boolean; startTime?: string }, @CurrentUser() user: any) {
+  async addTimeEntry(@Param('id') id: string, @Body() body: { duration: number; description?: string; billable?: boolean; startTime?: string }, @CurrentUser() user: CurrentUserType) {
+    await this.assertTicketAccess(id, user);
     const entry = await this.prisma.timeEntry.create({
       data: {
         ticketId: id,
@@ -193,7 +231,9 @@ export class TicketsController {
   }
 
   @Get(':id/time')
-  async getTimeEntries(@Param('id') id: string) {
+  async getTimeEntries(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    const ticket = await this.prisma.ticket.findFirst({ where: { id, companyId: user.companyId, deletedAt: null }, select: { id: true } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
     return this.prisma.timeEntry.findMany({
       where: { ticketId: id },
       orderBy: { createdAt: 'desc' },
@@ -201,14 +241,14 @@ export class TicketsController {
     });
   }
 
-  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('inbound-email')
   async inboundEmail(
     @Body() body: { from: string; subject: string; text: string; html?: string },
     @Headers('x-api-key') apiKey?: string,
   ) {
     const expectedKey = process.env.INBOUND_EMAIL_API_KEY;
-    if (expectedKey && apiKey !== expectedKey) {
+    if (!expectedKey || apiKey !== expectedKey) {
       throw new UnauthorizedException('Invalid API key');
     }
     const user = await this.prisma.user.findFirst({ where: { email: body.from, userType: 'PUBLIC' } });

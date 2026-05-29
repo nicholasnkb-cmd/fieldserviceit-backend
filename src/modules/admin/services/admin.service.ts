@@ -1,13 +1,18 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
+import { AuditLogService } from '../../audit-log/audit-log.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 
+const BCRYPT_ROUNDS = 12;
 const VALID_ROLES = ['SUPER_ADMIN', 'TENANT_ADMIN', 'TECHNICIAN', 'CLIENT', 'READ_ONLY'];
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditLogService: AuditLogService,
+  ) {}
 
   // ── Permissions ──
 
@@ -270,7 +275,7 @@ export class AdminService {
     const company = await this.prisma.company.findUnique({ where: { id: dto.companyId } });
     if (!company) throw new BadRequestException('Company not found');
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const role = dto.role && VALID_ROLES.includes(dto.role) ? dto.role : 'CLIENT';
 
     return this.prisma.user.create({
@@ -376,13 +381,19 @@ export class AdminService {
     });
   }
 
-  async updateCompany(id: string, dto: any) {
+  async updateCompany(id: string, dto: { name?: string; slug?: string; domain?: string; isActive?: boolean }) {
     const company = await this.prisma.company.findUnique({ where: { id } });
     if (!company) throw new NotFoundException('Company not found');
 
+    const data: any = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.slug !== undefined) data.slug = dto.slug;
+    if (dto.domain !== undefined) data.domain = dto.domain;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+
     return this.prisma.company.update({
       where: { id },
-      data: dto,
+      data,
     });
   }
 
@@ -499,12 +510,36 @@ export class AdminService {
     });
   }
 
+  async updateCompanyFeatureOverrides(companyId: string, dto: { featureOverrides?: Record<string, boolean>; restrictions?: Record<string, any> }) {
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) throw new NotFoundException('Company not found');
+
+    let settings: any = {};
+    if (company.settings) {
+      try { settings = JSON.parse(company.settings); } catch { settings = {}; }
+    }
+    settings.featureOverrides = {
+      ...(settings.featureOverrides || {}),
+      ...(dto.featureOverrides || {}),
+    };
+    settings.restrictions = {
+      ...(settings.restrictions || {}),
+      ...(dto.restrictions || {}),
+    };
+
+    return this.prisma.company.update({
+      where: { id: companyId },
+      data: { settings: JSON.stringify(settings) },
+      select: { id: true, name: true, settings: true },
+    });
+  }
+
   async createCompanyUser(dto: { email: string; password: string; firstName: string; lastName: string; role?: string }, companyId: string) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('Email already in use');
 
     const role = dto.role && ['CLIENT', 'TECHNICIAN', 'TENANT_ADMIN', 'READ_ONLY'].includes(dto.role) ? dto.role : 'CLIENT';
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     return this.prisma.user.create({
       data: {
@@ -527,28 +562,68 @@ export class AdminService {
   }
 
   async listAuditLogs(query: { page?: number; limit?: number; companyId?: string }) {
-    const page = Number(query.page) || 1;
-    const limit = Number(query.limit) || 25;
-    const skip = (page - 1) * limit;
+    return this.auditLogService.findMany(query);
+  }
 
-    const where: any = {};
-    if (query.companyId) where.companyId = query.companyId;
+  async getSystemReadiness() {
+    const checks: any[] = [];
+    const add = (name: string, ok: boolean, detail: string, severity: 'info' | 'warning' | 'critical' = 'info') => {
+      checks.push({ name, status: ok ? 'ok' : severity, detail });
+    };
 
-    const [data, total] = await Promise.all([
-      this.prisma.auditLog.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          actor: { select: { id: true, firstName: true, lastName: true, email: true } },
-          company: { select: { id: true, name: true } },
-        },
-      }),
-      this.prisma.auditLog.count({ where }),
-    ]);
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+      add('Database', true, 'SQL connection is responding.');
+    } catch (err: any) {
+      add('Database', false, err?.message || 'SQL connection failed.', 'critical');
+    }
 
-    return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+    const plans = await this.prisma.plan.findMany({ orderBy: { sortOrder: 'asc' } });
+    const businessPlan = plans.find((plan: any) => String(plan.name).toLowerCase() === 'business');
+    const starterPlan = plans.find((plan: any) => String(plan.name).toLowerCase() === 'starter');
+    const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY);
+    const webhookConfigured = Boolean(process.env.STRIPE_WEBHOOK_SECRET);
+
+    add('Stripe secret key', stripeConfigured, stripeConfigured ? 'STRIPE_SECRET_KEY is configured.' : 'Set STRIPE_SECRET_KEY before taking paid signups.', 'critical');
+    add('Stripe webhook', webhookConfigured, webhookConfigured ? 'STRIPE_WEBHOOK_SECRET is configured.' : 'Configure Stripe webhook endpoint /v1/billing/webhook.', 'critical');
+    add('Business plan price', Boolean(businessPlan?.stripePriceId), businessPlan?.stripePriceId ? 'Business plan has a Stripe price ID.' : 'Add a Stripe price ID to the Business plan.', 'warning');
+    add('Starter plan price', Boolean(starterPlan?.stripePriceId), starterPlan?.stripePriceId ? 'Starter plan has a Stripe price ID.' : 'Add a Stripe price ID to the individual Starter plan.', 'warning');
+    add('Frontend URL', Boolean(process.env.FRONTEND_URL), process.env.FRONTEND_URL ? `FRONTEND_URL is ${process.env.FRONTEND_URL}.` : 'Set FRONTEND_URL for checkout redirects.', 'warning');
+    add('CORS origin', Boolean(process.env.CORS_ORIGIN), process.env.CORS_ORIGIN ? `CORS_ORIGIN is ${process.env.CORS_ORIGIN}.` : 'Set CORS_ORIGIN to the production frontend domain.', 'warning');
+    add('JWT secret', Boolean(process.env.JWT_SECRET), process.env.JWT_SECRET ? 'JWT_SECRET is configured.' : 'Set a strong JWT_SECRET before launch.', 'critical');
+
+    let pendingCommands = 0;
+    try {
+      const rows = await this.prisma.query<any[]>(`SELECT COUNT(*) as count FROM MdmCommand WHERE status = 'PENDING'`);
+      pendingCommands = Number(rows[0]?.count || 0);
+      add('MDM command queue', true, `${pendingCommands} pending command${pendingCommands === 1 ? '' : 's'} in queue.`);
+    } catch {
+      add('MDM command queue', false, 'MDM command table has not been initialized yet.', 'warning');
+    }
+
+    const status = checks.some((check) => check.status === 'critical')
+      ? 'blocked'
+      : checks.some((check) => check.status === 'warning')
+        ? 'needs_attention'
+        : 'ready';
+
+    return {
+      status,
+      generatedAt: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      databaseName: process.env.DB_NAME || 'configured',
+      apiPrefix: '/v1',
+      stripeWebhookPath: '/v1/billing/webhook',
+      plans: plans.map((plan: any) => ({
+        id: plan.id,
+        name: plan.name,
+        isActive: Boolean(plan.isActive),
+        monthlyPrice: Number(plan.monthlyPrice || 0),
+        stripePriceConfigured: Boolean(plan.stripePriceId),
+      })),
+      mdm: { pendingCommands },
+      checks,
+    };
   }
 
   async getGlobalStats() {

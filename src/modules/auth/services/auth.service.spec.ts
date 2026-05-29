@@ -57,11 +57,13 @@ describe('AuthService', () => {
       },
     };
 
+    const mockLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
     service = new AuthService(
       mockPrisma as any,
       mockJwt as any,
       mockConfig as any,
       mockEmail as any,
+      mockLogger as any,
     );
   });
 

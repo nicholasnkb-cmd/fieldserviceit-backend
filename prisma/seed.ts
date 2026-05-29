@@ -1,3 +1,11 @@
+/**
+ * Prisma seed file.
+ * NOTE: This file is NOT wired to `npm run seed`. The active seed script is
+ * `src/database/seed.ts` (uses raw SQL via DatabaseService).
+ * This file exists for reference / Prisma Studio convenience only.
+ * If you change seed data, update BOTH files to keep them in sync.
+ */
+
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 

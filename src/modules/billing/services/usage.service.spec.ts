@@ -22,7 +22,8 @@ describe('UsageService', () => {
       },
     };
 
-    mockPlansService = new PlansService(mockPrisma as any);
+    const mockLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    mockPlansService = new PlansService(mockPrisma as any, mockLogger as any);
     jest.spyOn(mockPlansService, 'getCompanyPlan').mockImplementation(async (companyId: string) => {
       if (companyId === 'company-no-plan') return null;
       return {

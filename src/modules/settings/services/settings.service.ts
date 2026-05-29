@@ -23,8 +23,10 @@ export class SettingsService {
     name?: string;
     domain?: string;
     logo?: string;
-    branding?: string;
-    settings?: string;
+    timezone?: string;
+    locale?: string;
+    featureOverrides?: Record<string, boolean>;
+    restrictions?: Record<string, string | number | boolean>;
   }) {
     if (!companyId) throw new ForbiddenException('No company context available');
     const company = await this.prisma.company.findUnique({ where: { id: companyId } });
@@ -34,8 +36,30 @@ export class SettingsService {
     if (dto.name) updateData.name = dto.name;
     if (dto.domain !== undefined) updateData.domain = dto.domain;
     if (dto.logo !== undefined) updateData.logo = dto.logo;
-    if (dto.branding) updateData.branding = dto.branding;
-    if (dto.settings) updateData.settings = dto.settings;
+    const existingSettings = company.settings ? JSON.parse(company.settings) : {};
+    const settings: any = { ...existingSettings };
+    if (dto.timezone !== undefined) settings.timezone = dto.timezone;
+    if (dto.locale !== undefined) settings.locale = dto.locale;
+    if (dto.featureOverrides !== undefined) {
+      settings.featureOverrides = {
+        ...(settings.featureOverrides || {}),
+        ...dto.featureOverrides,
+      };
+    }
+    if (dto.restrictions !== undefined) {
+      settings.restrictions = {
+        ...(settings.restrictions || {}),
+        ...dto.restrictions,
+      };
+    }
+    if (
+      dto.timezone !== undefined ||
+      dto.locale !== undefined ||
+      dto.featureOverrides !== undefined ||
+      dto.restrictions !== undefined
+    ) {
+      updateData.settings = JSON.stringify(settings);
+    }
 
     return this.prisma.company.update({
       where: { id: companyId },

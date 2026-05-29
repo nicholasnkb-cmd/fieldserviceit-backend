@@ -5,6 +5,7 @@ import { RmmProviderFactory } from '../services/rmm-provider-factory.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { PrismaService } from '../../../database/prisma.service';
 
 @Controller('integrations/rmm')
@@ -23,22 +24,22 @@ export class RmmIntegrationController {
   }
 
   @Post('sync-asset')
-  syncAsset(@Body() body: { provider: string; assetData: any }, @CurrentUser() user: any) {
+  syncAsset(@Body() body: { provider: string; assetData: any }, @CurrentUser() user: CurrentUserType) {
     return this.rmmIntegration.syncAsset(body.provider, body.assetData, user.companyId);
   }
 
   @Post('alert')
-  createFromAlert(@Body() body: { provider: string; alert: any }, @CurrentUser() user: any) {
+  createFromAlert(@Body() body: { provider: string; alert: any }, @CurrentUser() user: CurrentUserType) {
     return this.rmmIntegration.createTicketFromAlert(body.provider, body.alert, user.companyId);
   }
 
   @Get('configs')
-  listConfigs(@CurrentUser() user: any) {
+  listConfigs(@CurrentUser() user: CurrentUserType) {
     return this.prisma.rmmProviderConfig.findMany({ where: { companyId: user.companyId } });
   }
 
   @Post('configs')
-  async saveConfig(@Body() body: { provider: string; credentials: any; syncIntervalMin?: number }, @CurrentUser() user: any) {
+  async saveConfig(@Body() body: { provider: string; credentials: any; syncIntervalMin?: number }, @CurrentUser() user: CurrentUserType) {
     const config = await this.prisma.rmmProviderConfig.upsert({
       where: { companyId_provider: { companyId: user.companyId, provider: body.provider } },
       update: { credentials: JSON.stringify(body.credentials), syncIntervalMin: body.syncIntervalMin ?? 60, isActive: true },
@@ -49,7 +50,7 @@ export class RmmIntegrationController {
   }
 
   @Delete('configs/:provider')
-  async removeConfig(@Param('provider') provider: string, @CurrentUser() user: any) {
+  async removeConfig(@Param('provider') provider: string, @CurrentUser() user: CurrentUserType) {
     const config = await this.prisma.rmmProviderConfig.update({
       where: { companyId_provider: { companyId: user.companyId, provider } },
       data: { isActive: false },
@@ -59,7 +60,7 @@ export class RmmIntegrationController {
   }
 
   @Post('sync-now/:provider')
-  syncNow(@Param('provider') provider: string, @CurrentUser() user: any) {
+  syncNow(@Param('provider') provider: string, @CurrentUser() user: CurrentUserType) {
     return this.rmmSync.syncProviderNow(user.companyId, provider);
   }
 }

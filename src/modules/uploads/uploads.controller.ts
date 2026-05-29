@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { BusinessOnlyGuard } from '../../common/guards/business-only.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CurrentUser as CurrentUserType } from '../../common/types';
 
 const PHOTO_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const SIGNATURE_MIMES = ['image/png', 'image/jpeg'];
@@ -31,7 +32,7 @@ export class UploadsController {
     limits: { fileSize: MAX_PHOTO_SIZE },
     fileFilter: mimeFilter(PHOTO_MIMES),
   }))
-  uploadPhotos(@UploadedFiles() files: Express.Multer.File[], @CurrentUser() user: any) {
+  uploadPhotos(@UploadedFiles() files: Express.Multer.File[], @CurrentUser() user: CurrentUserType) {
     const companyDir = user.companyId || 'public';
     return this.uploadsService.saveFiles(files, `photos/${companyDir}`);
   }
@@ -42,7 +43,7 @@ export class UploadsController {
     limits: { fileSize: MAX_SIGNATURE_SIZE },
     fileFilter: mimeFilter(SIGNATURE_MIMES),
   }))
-  uploadSignature(@UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) {
+  uploadSignature(@UploadedFile() file: Express.Multer.File, @CurrentUser() user: CurrentUserType) {
     const companyDir = user.companyId || 'public';
     return this.uploadsService.saveFile(file, `signatures/${companyDir}`);
   }
@@ -61,7 +62,7 @@ export class UploadsController {
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: mimeFilter(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']),
   }))
-  uploadTicketFiles(@UploadedFiles() files: Express.Multer.File[], @CurrentUser() user: any) {
+  uploadTicketFiles(@UploadedFiles() files: Express.Multer.File[], @CurrentUser() user: CurrentUserType) {
     const companyDir = user.companyId || 'public';
     return this.uploadsService.saveFiles(files, `tickets/${companyDir}`);
   }

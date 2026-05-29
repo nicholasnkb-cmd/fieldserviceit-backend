@@ -1,8 +1,18 @@
+/**
+ * Database seed script (ACTIVE — wired to `npm run seed`).
+ * Uses raw SQL via DatabaseService.
+ * A parallel Prisma seed exists at `prisma/seed.ts` for reference/Studio.
+ * Keep BOTH files in sync when changing seed data.
+ */
+
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Logger } from '@nestjs/common';
 import { DatabaseService } from './database.service';
+
+const logger = new Logger('Seed');
 
 type PlanSeed = {
   id: string;
@@ -318,7 +328,7 @@ async function printCounts(db: DatabaseService) {
   const tables = ['Company', 'User', 'Plan', 'CompanyPlan', 'Role', 'Permission', 'RolePermission', 'UserRole', 'Asset', 'Ticket', 'MdmCommand'];
   for (const table of tables) {
     const rows = await db.query<any[]>(`SELECT COUNT(*) as count FROM \`${table}\``);
-    console.log(`${table}: ${rows[0]?.count || 0}`);
+    logger.log(`${table}: ${rows[0]?.count || 0}`);
   }
 }
 
@@ -336,6 +346,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('[seed] failed:', err?.message || err);
+  logger.error('[seed] failed: ' + (err?.message || err));
   process.exit(1);
 });

@@ -18,7 +18,7 @@ describe('UploadsService', () => {
     originalname: 'test.jpg',
     encoding: '7bit',
     mimetype: 'image/jpeg',
-    buffer: Buffer.from('fake-image-data'),
+    buffer: Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01]),
     size: 14,
     destination: '',
     filename: '',

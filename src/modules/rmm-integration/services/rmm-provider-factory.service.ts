@@ -8,10 +8,11 @@ import { DattoProvider } from '../providers/datto.provider';
 export class RmmProviderFactory {
   private providers = new Map<string, RmmProvider>();
 
-  constructor() {
-    const connectwise = new ConnectWiseProvider();
-    const ninjaone = new NinjaOneProvider();
-    const datto = new DattoProvider();
+  constructor(
+    private connectwise: ConnectWiseProvider,
+    private ninjaone: NinjaOneProvider,
+    private datto: DattoProvider,
+  ) {
     this.providers.set(connectwise.name, connectwise);
     this.providers.set(ninjaone.name, ninjaone);
     this.providers.set(datto.name, datto);

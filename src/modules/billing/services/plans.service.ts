@@ -1,15 +1,19 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
+import { LoggerService } from '../../../common/logger/logger.service';
 
 @Injectable()
 export class PlansService implements OnModuleInit {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly logger: LoggerService,
+  ) {}
 
   async onModuleInit() {
     try {
       await this.seedDefaultPlans();
     } catch (err: any) {
-      console.warn('[PlansService] Failed to seed plans (DB unavailable):', err?.message);
+      this.logger.warn('[PlansService] Failed to seed plans (DB unavailable): ' + err?.message);
     }
   }
 

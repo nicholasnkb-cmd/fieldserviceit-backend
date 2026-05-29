@@ -13,7 +13,8 @@ describe('BillingService', () => {
       },
     };
 
-    mockPlansService = new PlansService(mockPrisma as any);
+    const mockLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    mockPlansService = new PlansService(mockPrisma as any, mockLogger as any);
     service = new BillingService(mockPrisma as any, mockPlansService as any);
   });
 

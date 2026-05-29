@@ -8,6 +8,8 @@ import { TicketTimelineService } from './ticket-timeline.service';
 import { EmailService } from '../../notifications/services/email.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { UsageService } from '../../billing/services/usage.service';
+import { LoggerService } from '../../../common/logger/logger.service';
+import { sanitizeHtml } from '../../../common/utils/xss.helper';
 import * as crypto from 'crypto';
 
 const validTransitions: Record<string, string[]> = {
@@ -28,6 +30,7 @@ export class TicketsService {
     private emailService: EmailService,
     private notificationsService: NotificationsService,
     private usageService: UsageService,
+    private readonly logger: LoggerService,
   ) {}
 
   private validateTransition(from: string, to: string) {
@@ -89,7 +92,7 @@ export class TicketsService {
 
     if (companyIdForTicket) {
       this.usageService.incrementUsage(companyIdForTicket, 'tickets').catch((e) => {
-        console.error('[UsageService] Failed to increment ticket usage:', e?.message);
+        this.logger.error('[UsageService] Failed to increment ticket usage: ' + e?.message);
       });
       this.gateway.notifyTicketUpdate(companyIdForTicket, 'ticket:created', ticket);
     }
@@ -179,9 +182,22 @@ export class TicketsService {
         throw new BadRequestException('onHoldReason is required when placing a ticket on hold');
       }
     }
-    const data: any = { ...dto };
+    const data: any = {
+      status: dto.status,
+      priority: dto.priority,
+      title: dto.title,
+      description: dto.description,
+      category: dto.category,
+      subcategory: dto.subcategory,
+      location: dto.location,
+      assignedToId: dto.assignedToId,
+      onHoldReason: dto.onHoldReason,
+      resolution: dto.resolution,
+      contactName: dto.contactName,
+      contactEmail: dto.contactEmail,
+      contactPhone: dto.contactPhone,
+    };
     if (dto.assignedToId) {
-      data.assignedToId = dto.assignedToId;
       if (!newStatus && ticket.status === 'OPEN') {
         data.status = 'ASSIGNED';
       }
@@ -221,7 +237,7 @@ export class TicketsService {
           if (assignedUser) {
             await this.notificationsService.create({ userId: assignedUser.id, companyId, title: `Ticket ${ticket.ticketNumber} on hold`, body: dto.onHoldReason, type: 'info', link: `/tickets/${id}` });
             if (assignedUser.email) {
-              this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} on hold`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been placed on hold.</p><p>Reason: ${dto.onHoldReason}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
+              this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} on hold`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been placed on hold.</p><p>Reason: ${sanitizeHtml(dto.onHoldReason || '')}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
             }
           }
         }
@@ -231,7 +247,7 @@ export class TicketsService {
         if (ticket.createdById) {
           await this.notificationsService.create({ userId: ticket.createdById, companyId, title: `Ticket ${ticket.ticketNumber} resolved`, body: dto.resolution || 'Ticket has been resolved', type: 'success', link: `/tickets/${id}` });
           if ((ticket as any).contactEmail) {
-            this.emailService.sendNotificationEmail((ticket as any).contactEmail, `Ticket ${ticket.ticketNumber} resolved`, `<p>Your ticket <strong>${ticket.ticketNumber}</strong> has been resolved.</p><p>Resolution: ${dto.resolution || 'N/A'}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
+            this.emailService.sendNotificationEmail((ticket as any).contactEmail, `Ticket ${ticket.ticketNumber} resolved`, `<p>Your ticket <strong>${ticket.ticketNumber}</strong> has been resolved.</p><p>Resolution: ${sanitizeHtml(dto.resolution || 'N/A')}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
           }
         }
       }
@@ -243,7 +259,7 @@ export class TicketsService {
       if (assignedUser) {
         await this.notificationsService.create({ userId: assignedUser.id, companyId, title: `Ticket ${ticket.ticketNumber} assigned to you`, body: ticket.title, type: 'info', link: `/tickets/${id}` });
         if (assignedUser.email) {
-          this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} assigned to you`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been assigned to you.</p><p>Title: ${ticket.title}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
+          this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} assigned to you`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been assigned to you.</p><p>Title: ${sanitizeHtml(ticket.title)}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
         }
       }
     }
@@ -277,7 +293,7 @@ export class TicketsService {
     if (assignedUser) {
       await this.notificationsService.create({ userId: assignedUser.id, companyId, title: `Ticket ${ticket.ticketNumber} assigned to you`, body: ticket.title, type: 'info', link: `/tickets/${id}` });
       if (assignedUser.email) {
-        this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} assigned to you`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been assigned to you.</p><p>Title: ${ticket.title}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
+        this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} assigned to you`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been assigned to you.</p><p>Title: ${sanitizeHtml(ticket.title)}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
       }
     }
     this.gateway.notifyTicketUpdate(companyId, 'ticket:assigned', updated);
@@ -298,7 +314,7 @@ export class TicketsService {
     if (ticket.createdById) {
       await this.notificationsService.create({ userId: ticket.createdById, companyId, title: `Ticket ${ticket.ticketNumber} resolved`, body: resolution || 'Ticket has been resolved', type: 'success', link: `/tickets/${id}` });
       if ((ticket as any).contactEmail) {
-        this.emailService.sendNotificationEmail((ticket as any).contactEmail, `Ticket ${ticket.ticketNumber} resolved`, `<p>Your ticket <strong>${ticket.ticketNumber}</strong> has been resolved.</p><p>Resolution: ${resolution || 'N/A'}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
+        this.emailService.sendNotificationEmail((ticket as any).contactEmail, `Ticket ${ticket.ticketNumber} resolved`, `<p>Your ticket <strong>${ticket.ticketNumber}</strong> has been resolved.</p><p>Resolution: ${sanitizeHtml(resolution || 'N/A')}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
       }
     }
     this.gateway.notifyTicketUpdate(companyId, 'ticket:resolved', updated);

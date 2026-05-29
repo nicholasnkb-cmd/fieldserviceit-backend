@@ -1,7 +1,12 @@
+import { Injectable } from '@nestjs/common';
 import { RmmProvider, AssetMapping, AlertMapping } from './rmm-provider.interface';
+import { LoggerService } from '../../../common/logger/logger.service';
 
+@Injectable()
 export class NinjaOneProvider implements RmmProvider {
   name = 'ninjaone';
+
+  constructor(private readonly logger: LoggerService) {}
 
   private baseUrl(credentials: any): string {
     const instance = credentials.instanceUrl?.replace(/\/+$/, '');
@@ -50,7 +55,7 @@ export class NinjaOneProvider implements RmmProvider {
       });
 
       if (!res.ok) {
-        console.warn(`NinjaOne syncAllAssets failed: ${res.status}`);
+        this.logger.warn(`NinjaOne syncAllAssets failed: ${res.status}`);
         return this.getMockAssets();
       }
 
@@ -68,7 +73,7 @@ export class NinjaOneProvider implements RmmProvider {
         location: d.location?.name || d.locationName,
       }));
     } catch (err: any) {
-      console.warn(`NinjaOne syncAllAssets error: ${err.message}`);
+      this.logger.warn(`NinjaOne syncAllAssets error: ${err.message}`);
       return this.getMockAssets();
     }
   }

@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../../database/prisma.service';
 import * as bcrypt from 'bcryptjs';
 
+const BCRYPT_ROUNDS = 12;
+
 enum UserRole {
   SUPER_ADMIN = 'SUPER_ADMIN',
   TENANT_ADMIN = 'TENANT_ADMIN',
@@ -15,7 +17,7 @@ export class UsersService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: { email: string; password: string; firstName: string; lastName: string; role?: UserRole }, companyId: string) {
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     return this.prisma.user.create({
       data: {
@@ -71,11 +73,11 @@ export class UsersService {
     return user;
   }
 
-  async update(id: string, dto: any, companyId: string) {
+  async update(id: string, dto: { firstName?: string; lastName?: string; phone?: string }, companyId: string) {
     await this.findOne(id, companyId);
     return this.prisma.user.update({
       where: { id },
-      data: dto,
+      data: { firstName: dto.firstName, lastName: dto.lastName, phone: dto.phone },
       select: { id: true, email: true, firstName: true, lastName: true, role: true },
     });
   }
@@ -85,7 +87,7 @@ export class UsersService {
     if (!user) throw new NotFoundException('User not found');
     return this.prisma.user.update({
       where: { id },
-      data: dto,
+      data: { firstName: dto.firstName, lastName: dto.lastName, phone: dto.phone },
       select: { id: true, email: true, firstName: true, lastName: true, phone: true, role: true, companyId: true, createdAt: true },
     });
   }
@@ -96,7 +98,7 @@ export class UsersService {
     if (!user.passwordHash) throw new BadRequestException('Password not set');
     const valid = await bcrypt.compare(oldPassword, user.passwordHash);
     if (!valid) throw new BadRequestException('Current password is incorrect');
-    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     await this.prisma.user.update({ where: { id }, data: { passwordHash } });
     await this.prisma.session.deleteMany({ where: { userId: id } });
     return { message: 'Password changed successfully' };

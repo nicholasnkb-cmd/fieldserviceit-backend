@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
+import { LoggerService } from '../../../common/logger/logger.service';
 
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter;
 
-  constructor() {
+  constructor(private readonly logger: LoggerService) {
     const host = process.env.SMTP_HOST || 'localhost';
     const port = parseInt(process.env.SMTP_PORT || '1025', 10);
     const user = process.env.SMTP_USER || '';
@@ -29,7 +30,7 @@ export class EmailService {
 
   async sendPasswordResetEmail(to: string, token: string): Promise<void> {
     if (!this.transporter) {
-      console.log(`[EmailService] SMTP not configured, skipping password reset email to ${to}`);
+      this.logger.log(`[EmailService] SMTP not configured, skipping password reset email to ${to}`);
       return;
     }
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
@@ -49,13 +50,13 @@ export class EmailService {
 
     if (process.env.NODE_ENV !== 'production') {
       const previewUrl = nodemailer.getTestMessageUrl(info);
-      if (previewUrl) console.log('Preview URL:', previewUrl);
+      if (previewUrl) this.logger.log('Preview URL: ' + previewUrl);
     }
   }
 
   async sendNotificationEmail(to: string, subject: string, html: string): Promise<void> {
     if (!this.transporter) {
-      console.log(`[EmailService] SMTP not configured, skipping email to ${to}: ${subject}`);
+      this.logger.log(`[EmailService] SMTP not configured, skipping email to ${to}: ${subject}`);
       return;
     }
     await this.transporter.sendMail({

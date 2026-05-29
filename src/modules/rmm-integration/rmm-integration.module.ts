@@ -4,6 +4,9 @@ import { RmmIntegrationService } from './services/rmm-integration.service';
 import { RmmSyncService } from './services/rmm-sync.service';
 import { RmmIntegrationController } from './controllers/rmm-integration.controller';
 import { RmmProviderFactory } from './services/rmm-provider-factory.service';
+import { NinjaOneProvider } from './providers/ninjaone.provider';
+import { DattoProvider } from './providers/datto.provider';
+import { ConnectWiseProvider } from './providers/connectwise.provider';
 import { PrismaService } from '../../database/prisma.service';
 import { TicketTimelineService } from '../tickets/services/ticket-timeline.service';
 import { NotificationsService } from '../notifications/services/notifications.service';
@@ -18,6 +21,9 @@ import { TicketsModule } from '../tickets/tickets.module';
     RmmIntegrationService,
     RmmSyncService,
     RmmProviderFactory,
+    NinjaOneProvider,
+    DattoProvider,
+    ConnectWiseProvider,
     PrismaService,
     TicketTimelineService,
   ],

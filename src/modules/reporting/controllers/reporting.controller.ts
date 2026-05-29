@@ -5,6 +5,7 @@ import { TenantGuard } from '../../../common/guards/tenant.guard';
 import { BusinessOnlyGuard } from '../../../common/guards/business-only.guard';
 import { BusinessOnly } from '../../../common/decorators/business-only.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { CurrentUser as CurrentUserType } from '../../../common/types';
 
 @Controller('reports')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard)
@@ -13,27 +14,27 @@ export class ReportingController {
   constructor(private reportingService: ReportingService) {}
 
   @Get('tickets')
-  getTicketSummary(@Query('from') from: string, @Query('to') to: string, @CurrentUser() user: any) {
+  getTicketSummary(@Query('from') from: string, @Query('to') to: string, @CurrentUser() user: CurrentUserType) {
     return this.reportingService.getTicketSummary(user.companyId, from, to);
   }
 
   @Get('sla')
-  getSlaCompliance(@CurrentUser() user: any) {
+  getSlaCompliance(@CurrentUser() user: CurrentUserType) {
     return this.reportingService.getSlaCompliance(user.companyId);
   }
 
   @Get('technician')
-  getTechnicianPerformance(@CurrentUser() user: any) {
+  getTechnicianPerformance(@CurrentUser() user: CurrentUserType) {
     return this.reportingService.getTechnicianPerformance(user.companyId);
   }
 
   @Get('assets')
-  getAssetInventory(@CurrentUser() user: any) {
+  getAssetInventory(@CurrentUser() user: CurrentUserType) {
     return this.reportingService.getAssetInventory(user.companyId);
   }
 
   @Get('activity')
-  getActivityFeed(@CurrentUser() user: any) {
+  getActivityFeed(@CurrentUser() user: CurrentUserType) {
     return this.reportingService.getActivityFeed(user.companyId);
   }
 }

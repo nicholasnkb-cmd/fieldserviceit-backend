@@ -15,12 +15,36 @@ async function bootstrap() {
 
   app.use(json({ verify: (req: any, _res, buf) => { req.rawBody = buf.toString(); } }));
   app.setGlobalPrefix('v1');
+  app.enableShutdownHooks();
   app.use(helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
   }));
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '0');
+    next();
+  });
+  const nodeEnv = configService.get('NODE_ENV', 'development');
+  const corsOrigin = configService.get<string>('CORS_ORIGIN');
+  if (!corsOrigin && nodeEnv === 'production') {
+    logger.warn('CORS_ORIGIN not set — defaulting to localhost. Set CORS_ORIGIN env var for production.');
+  }
   app.enableCors({
-    origin: configService.get('CORS_ORIGIN', '*'),
-    credentials: true,
+    origin: corsOrigin || 'http://localhost:3000',
+    credentials: false,
   });
 
   const storageType = configService.get('STORAGE_TYPE', 'local');
@@ -36,8 +60,7 @@ async function bootstrap() {
   );
 
   const port = configService.get('PORT', 4000);
-  const nodeEnv = configService.get('NODE_ENV', 'development');
-  const swaggerEnabled = configService.get('SWAGGER_ENABLED', nodeEnv !== 'production');
+  const swaggerEnabled = configService.get('SWAGGER_ENABLED', 'false');
   if (swaggerEnabled === true || swaggerEnabled === 'true') {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('FieldserviceIT API')

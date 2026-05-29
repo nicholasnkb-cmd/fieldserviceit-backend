@@ -26,5 +26,9 @@
       "rxjs/*": ["node_modules/rxjs/dist/types/*"]
     }
   },
+  "ts-node": {
+    "swc": true,
+    "transpileOnly": true
+  },
   "exclude": ["node_modules", "dist", "test"]
 }

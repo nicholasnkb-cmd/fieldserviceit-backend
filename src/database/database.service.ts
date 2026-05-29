@@ -1,16 +1,19 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, OnApplicationShutdown, Logger, Optional } from '@nestjs/common';
 import { createPool, Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import { MigrationsService } from './migrations/migrations.service';
 
 interface QueryOptions {
   nestTables?: boolean;
 }
 
 @Injectable()
-export class DatabaseService implements OnModuleInit, OnModuleDestroy {
+export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplicationShutdown {
   private readonly logger = new Logger(DatabaseService.name);
   private pool: Pool;
 
-  constructor() {
+  constructor(
+    @Optional() private readonly migrationsService?: MigrationsService,
+  ) {
     const databaseUrl = process.env.DATABASE_URL || '';
     const parsed = this.parseDatabaseUrl(databaseUrl);
 
@@ -32,6 +35,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       conn.release();
       this.logger.log('Database connected');
       await this.ensureTables();
+      await this.migrationsService?.run();
     } catch (err) {
       this.logger.warn('Database unavailable: ' + (err instanceof Error ? err.message : String(err)));
     }
@@ -419,13 +423,27 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         completedAt DATETIME(3),
         INDEX(runId)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`Notification\` (
+        id VARCHAR(191) PRIMARY KEY,
+        userId VARCHAR(191) NOT NULL,
+        companyId VARCHAR(191) NOT NULL,
+        title VARCHAR(191) NOT NULL,
+        body TEXT,
+        type VARCHAR(191) DEFAULT 'info',
+        isRead TINYINT(1) DEFAULT 0,
+        link VARCHAR(191),
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(userId, isRead),
+        INDEX(companyId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
       `CREATE TABLE IF NOT EXISTS \`NotificationPreference\` (
         id VARCHAR(191) PRIMARY KEY,
         userId VARCHAR(191) NOT NULL UNIQUE,
         emailEnabled TINYINT(1) DEFAULT 1,
         pushEnabled TINYINT(1) DEFAULT 1,
         smsEnabled TINYINT(1) DEFAULT 0,
-        digestDaily TINYINT(1) DEFAULT 0
+        digestDaily TINYINT(1) DEFAULT 0,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
       `CREATE TABLE IF NOT EXISTS \`RmmProviderConfig\` (
         id VARCHAR(191) PRIMARY KEY,
@@ -446,7 +464,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         actorId VARCHAR(191) NOT NULL,
         action VARCHAR(191) NOT NULL,
         resourceType VARCHAR(191) NOT NULL,
-        resourceId VARCHAR(191) NOT NULL,
+        resourceId VARCHAR(191),
         diff TEXT,
         ip VARCHAR(191),
         userAgent VARCHAR(191),
@@ -480,14 +498,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         INDEX(companyId)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     ];
-    for (const sql of tables) {
-      try {
-        await this.execute(sql);
-        this.logger.log(`Table ensured: ${sql.split('`')[1] || 'unknown'}`);
-      } catch (err: any) {
-        this.logger.warn(`Table creation skipped: ${err?.message || err}`);
-      }
-    }
     for (const sql of tables) {
       try {
         await this.execute(sql);
@@ -573,6 +583,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     await this.pool.end();
+  }
+
+  async onApplicationShutdown(signal?: string): Promise<void> {
+    this.logger.log(`Shutting down (signal: ${signal}) — closing database pool...`);
+    if (this.pool) {
+      await this.pool.end();
+      this.logger.log('Database pool closed');
+    }
   }
 
   private parseDatabaseUrl(url: string) {
@@ -1279,6 +1297,70 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       );
       return rows[0] || null;
     },
+
+    create: async ({ data }: { data: Record<string, any> }) => {
+      return this.genericCreate('SLA', { data });
+    },
+
+    update: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
+      return this.genericUpdate('SLA', { where, data });
+    },
+
+    delete: async ({ where }: { where: Record<string, any> }) => {
+      const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
+      const values = Object.values(where);
+      const sql = `DELETE FROM SLA WHERE ${whereClauses.join(' AND ')}`;
+      const result = await this.execute(sql, values);
+      return { count: result.affectedRows };
+    },
+  };
+
+  contract = {
+    findMany: async ({ where, orderBy, skip, take }: { where?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number }) => {
+      let sql = 'SELECT * FROM Contract';
+      const values: any[] = [];
+      if (where && Object.keys(where).length > 0) {
+        const clauses = Object.entries(where).map(([k, v]) => {
+          if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+          values.push(v);
+          return `${this.escapeColumn(k)} = ?`;
+        });
+        sql += ` WHERE ${clauses.join(' AND ')}`;
+      }
+      if (orderBy) {
+        const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
+        sql += ` ORDER BY ${orderParts.join(', ')}`;
+      }
+      if (take !== undefined) { sql += ` LIMIT ?`; values.push(take); }
+      if (skip !== undefined) { sql += ` OFFSET ?`; values.push(skip); }
+      return this.query<RowDataPacket[]>(sql, values);
+    },
+
+    findFirst: async ({ where, select }: { where: Record<string, any>; select?: Record<string, any> }) => {
+      return this.genericFindFirst('Contract', { where, select });
+    },
+
+    findUnique: async ({ where }: { where: Record<string, any> }) => {
+      const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
+      const values = Object.values(where);
+      const rows = await this.query<RowDataPacket[]>(
+        `SELECT * FROM Contract WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
+        values,
+      );
+      return rows[0] || null;
+    },
+
+    create: async ({ data }: { data: Record<string, any> }) => {
+      return this.genericCreate('Contract', { data });
+    },
+
+    update: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
+      return this.genericUpdate('Contract', { where, data });
+    },
+
+    count: async ({ where }: { where?: Record<string, any> }) => {
+      return this.genericCount('Contract', { where });
+    },
   };
 
   notification = {
@@ -1829,6 +1911,38 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     },
   };
 
+  workflowRunStep = {
+    findMany: async ({ where, skip, take }: { where?: Record<string, any>; skip?: number; take?: number }) => {
+      let sql = 'SELECT * FROM WorkflowRunStep';
+      const values: any[] = [];
+      if (where && Object.keys(where).length > 0) {
+        const clauses = Object.entries(where).map(([k, v]) => {
+          if (v === null) return `${this.escapeColumn(k)} IS NULL`;
+          values.push(v);
+          return `${this.escapeColumn(k)} = ?`;
+        });
+        sql += ` WHERE ${clauses.join(' AND ')}`;
+      }
+      if (take !== undefined) { sql += ` LIMIT ?`; values.push(take); }
+      if (skip !== undefined) { sql += ` OFFSET ?`; values.push(skip); }
+      return this.query<RowDataPacket[]>(sql, values);
+    },
+
+    create: async ({ data }: { data: Record<string, any> }) => {
+      const insertData: Record<string, any> = { id: this.generateUuid(), ...data };
+      const cols = Object.keys(insertData);
+      const values = Object.values(insertData);
+      const placeholders = cols.map(() => '?').join(', ');
+      await this.execute(`INSERT INTO WorkflowRunStep (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`, values);
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM WorkflowRunStep WHERE id = ? LIMIT 1`, [insertData.id]);
+      return rows[0];
+    },
+
+    update: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
+      return this.genericUpdate('WorkflowRunStep', { where, data });
+    },
+  };
+
   rmmProviderConfig = {
     findMany: async ({ where }: { where?: Record<string, any> }) => {
       let sql = 'SELECT * FROM RmmProviderConfig';
@@ -2047,7 +2161,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private parsePlanRow(row: any) {
     if (!row) return row;
     if (typeof row.features === 'string') {
-      try { row.features = JSON.parse(row.features); } catch {}
+      try { row.features = JSON.parse(row.features); } catch { /* ignore */ }
     }
     return row;
   }
@@ -2213,10 +2327,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   private generateUuid(): string {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-      const r = Math.random() * 16 | 0;
-      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-    });
+    return require('crypto').randomUUID();
   }
 
   private resolveSelectCols(select?: Record<string, any> | null): string[] {
