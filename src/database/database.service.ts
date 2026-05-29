@@ -594,15 +594,22 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   }
 
   private parseDatabaseUrl(url: string) {
-    const match = url.match(/mysql:\/\/([^:]+):([^@]+)@([^:]+):?(\d+)?\/(.+)/);
-    if (!match) throw new Error(`Invalid DATABASE_URL: ${url}`);
-    return {
-      user: decodeURIComponent(match[1]),
-      password: decodeURIComponent(match[2]),
-      host: match[3],
-      port: parseInt(match[4] || '3306', 10),
-      database: match[5].split('?')[0],
-    };
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'mysql:' || !parsed.username || !parsed.hostname || !parsed.pathname.slice(1)) {
+        throw new Error('Missing required MySQL connection parts');
+      }
+
+      return {
+        user: decodeURIComponent(parsed.username),
+        password: decodeURIComponent(parsed.password),
+        host: parsed.hostname,
+        port: parseInt(parsed.port || '3306', 10),
+        database: decodeURIComponent(parsed.pathname.slice(1)),
+      };
+    } catch {
+      throw new Error('Invalid DATABASE_URL');
+    }
   }
 
   async query<T = RowDataPacket[]>(sql: string, values?: any[]): Promise<T> {
