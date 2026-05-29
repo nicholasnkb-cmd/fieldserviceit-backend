@@ -595,7 +595,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
   private parseDatabaseUrl(url: string) {
     try {
-      const parsed = new URL(url);
+      const normalizedUrl = url.trim().replace(/^DATABASE_URL=/, '');
+      const parsed = new URL(normalizedUrl);
       if (parsed.protocol !== 'mysql:' || !parsed.username || !parsed.hostname || !parsed.pathname.slice(1)) {
         throw new Error('Missing required MySQL connection parts');
       }
