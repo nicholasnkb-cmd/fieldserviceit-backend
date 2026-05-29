@@ -95,6 +95,308 @@ export class MigrationsService {
         name: '002_seed_reference',
         sql: "INSERT IGNORE INTO _migrations (name) VALUES ('002_seed_reference');",
       },
+      {
+        name: '003_network_monitoring',
+        sql: stripComments(`
+          CREATE TABLE IF NOT EXISTS NetworkMonitoringConfig (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191) NOT NULL,
+            pingEnabled TINYINT(1) DEFAULT 1,
+            pingIntervalSec INT DEFAULT 60,
+            snmpEnabled TINYINT(1) DEFAULT 0,
+            snmpVersion VARCHAR(32),
+            snmpCommunity VARCHAR(191),
+            snmpUsername VARCHAR(191),
+            snmpAuthProtocol VARCHAR(64),
+            snmpPrivacyProtocol VARCHAR(64),
+            syslogEnabled TINYINT(1) DEFAULT 0,
+            syslogPort INT DEFAULT 514,
+            vendor VARCHAR(64),
+            vendorControllerUrl VARCHAR(255),
+            vendorSiteId VARCHAR(191),
+            vendorApiKey TEXT,
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            UNIQUE KEY NetworkMonitoringConfig_assetId_key (assetId),
+            INDEX(companyId),
+            INDEX(assetId),
+            INDEX(vendor)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkHealthSnapshot (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191) NOT NULL,
+            status VARCHAR(32) DEFAULT 'UNKNOWN',
+            latencyMs INT,
+            packetLossPct FLOAT,
+            uptimeSec BIGINT,
+            cpuPct FLOAT,
+            memoryPct FLOAT,
+            interfaceStatus TEXT,
+            bandwidth TEXT,
+            errors TEXT,
+            source VARCHAR(32) DEFAULT 'PING',
+            message TEXT,
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId),
+            INDEX(assetId, createdAt),
+            INDEX(status)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkSyslogEvent (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191),
+            host VARCHAR(191),
+            facility VARCHAR(64),
+            severity VARCHAR(64),
+            message TEXT NOT NULL,
+            receivedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId, receivedAt),
+            INDEX(assetId, receivedAt),
+            INDEX(severity)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkAlertRule (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191),
+            name VARCHAR(191) NOT NULL,
+            metric VARCHAR(64) NOT NULL,
+            operator VARCHAR(16) DEFAULT 'GT',
+            threshold VARCHAR(191),
+            durationSec INT DEFAULT 300,
+            severity VARCHAR(32) DEFAULT 'WARNING',
+            enabled TINYINT(1) DEFAULT 1,
+            notifyEmail VARCHAR(191),
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId),
+            INDEX(assetId),
+            INDEX(metric),
+            INDEX(enabled)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkAlertEvent (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191) NOT NULL,
+            ruleId VARCHAR(191) NOT NULL,
+            snapshotId VARCHAR(191),
+            ticketId VARCHAR(191),
+            status VARCHAR(32) DEFAULT 'ACTIVE',
+            title VARCHAR(191) NOT NULL,
+            details TEXT,
+            triggeredAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            resolvedAt DATETIME(3),
+            INDEX(companyId, status),
+            INDEX(assetId, status),
+            INDEX(ruleId, status),
+            INDEX(ticketId)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkMaintenanceWindow (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191),
+            name VARCHAR(191) NOT NULL,
+            startsAt DATETIME(3) NOT NULL,
+            endsAt DATETIME(3) NOT NULL,
+            suppressAlerts TINYINT(1) DEFAULT 1,
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId, startsAt, endsAt),
+            INDEX(assetId)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkConfigBackup (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191) NOT NULL,
+            source VARCHAR(64) DEFAULT 'manual',
+            configText MEDIUMTEXT NOT NULL,
+            checksum VARCHAR(191),
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId, createdAt),
+            INDEX(assetId, createdAt),
+            INDEX(checksum)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkIpReservation (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191),
+            subnet VARCHAR(64) NOT NULL,
+            ipAddress VARCHAR(64) NOT NULL,
+            hostname VARCHAR(191),
+            macAddress VARCHAR(191),
+            status VARCHAR(32) DEFAULT 'RESERVED',
+            notes TEXT,
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            UNIQUE KEY NetworkIpReservation_company_ip_key (companyId, ipAddress),
+            INDEX(companyId, subnet),
+            INDEX(assetId)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        `),
+      },
+      {
+        name: '004_network_operations',
+        sql: stripComments(`
+          CREATE TABLE IF NOT EXISTS NetworkInterfaceMetric (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191) NOT NULL,
+            ifIndex INT NOT NULL,
+            name VARCHAR(191),
+            status VARCHAR(32),
+            speedMbps BIGINT,
+            inOctets BIGINT,
+            outOctets BIGINT,
+            inErrors BIGINT,
+            outErrors BIGINT,
+            poeWatts FLOAT,
+            vlan VARCHAR(64),
+            connectedMac VARCHAR(191),
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId),
+            INDEX(assetId, createdAt),
+            INDEX(ifIndex)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkFirmwareInventory (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191) NOT NULL,
+            vendor VARCHAR(64),
+            model VARCHAR(191),
+            firmwareVersion VARCHAR(191),
+            latestVersion VARCHAR(191),
+            eolStatus VARCHAR(64),
+            cveSummary TEXT,
+            checkedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId),
+            INDEX(assetId, checkedAt),
+            INDEX(vendor)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkDiscoveryResult (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            subnet VARCHAR(64) NOT NULL,
+            ipAddress VARCHAR(64) NOT NULL,
+            hostname VARCHAR(191),
+            macAddress VARCHAR(191),
+            vendor VARCHAR(191),
+            status VARCHAR(32) DEFAULT 'FOUND',
+            assetId VARCHAR(191),
+            discoveredAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId, subnet),
+            INDEX(ipAddress),
+            INDEX(assetId)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkSite (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            name VARCHAR(191) NOT NULL,
+            parentId VARCHAR(191),
+            type VARCHAR(64) DEFAULT 'SITE',
+            address VARCHAR(255),
+            notes TEXT,
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId),
+            INDEX(parentId)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkDeviceAction (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191) NOT NULL,
+            action VARCHAR(64) NOT NULL,
+            payload TEXT,
+            status VARCHAR(32) DEFAULT 'QUEUED',
+            result TEXT,
+            requestedById VARCHAR(191),
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            completedAt DATETIME(3),
+            INDEX(companyId),
+            INDEX(assetId, createdAt),
+            INDEX(status)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        `),
+      },
+      {
+        name: '005_network_production_ops',
+        sql: stripComments(`
+          CREATE TABLE IF NOT EXISTS NetworkCredential (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            assetId VARCHAR(191),
+            name VARCHAR(191) NOT NULL,
+            vendor VARCHAR(64),
+            authMode VARCHAR(64) DEFAULT 'API_KEY',
+            username VARCHAR(191),
+            secret TEXT,
+            metadata TEXT,
+            lastTestStatus VARCHAR(32),
+            lastTestAt DATETIME(3),
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId),
+            INDEX(assetId),
+            INDEX(vendor)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkEscalationPolicy (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            name VARCHAR(191) NOT NULL,
+            severity VARCHAR(32) DEFAULT 'WARNING',
+            firstDelayMin INT DEFAULT 0,
+            secondDelayMin INT DEFAULT 15,
+            managerDelayMin INT DEFAULT 30,
+            enabled TINYINT(1) DEFAULT 1,
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId),
+            INDEX(severity),
+            INDEX(enabled)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkSyslogSavedSearch (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            name VARCHAR(191) NOT NULL,
+            query VARCHAR(255),
+            severity VARCHAR(64),
+            facility VARCHAR(64),
+            assetId VARCHAR(191),
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId),
+            INDEX(assetId)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS NetworkRetentionPolicy (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL UNIQUE,
+            snapshotDays INT DEFAULT 30,
+            syslogDays INT DEFAULT 30,
+            maxConcurrentPolls INT DEFAULT 10,
+            vendorBackoffSec INT DEFAULT 300,
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(companyId)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          INSERT IGNORE INTO Permission (id, name, slug, grp, description, createdAt) VALUES
+            (UUID(), 'View network monitoring', 'network.monitoring.view', 'Network', 'View network health, syslog, and topology', NOW(3)),
+            (UUID(), 'Manage network configuration', 'network.config.manage', 'Network', 'Edit network device settings and monitoring configuration', NOW(3)),
+            (UUID(), 'Run network actions', 'network.actions.run', 'Network', 'Run network device actions', NOW(3)),
+            (UUID(), 'View network credentials', 'network.credentials.view', 'Network', 'View network credential metadata', NOW(3)),
+            (UUID(), 'Manage network credentials', 'network.credentials.manage', 'Network', 'Create, rotate, and test network credentials', NOW(3));
+        `),
+      },
     ];
   }
 }

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import * as Joi from 'joi';
 import { DatabaseModule } from './database/database.module';
@@ -53,6 +54,9 @@ import { AiAgentModule } from './modules/ai-agent/ai-agent.module';
         THROTTLE_LIMIT_MEDIUM: Joi.number().default(20),
         THROTTLE_TTL_LONG: Joi.number().default(60000),
         THROTTLE_LIMIT_LONG: Joi.number().default(100),
+        NETWORK_SYSLOG_ENABLED: Joi.boolean().optional().default(true),
+        NETWORK_SYSLOG_PORT: Joi.number().port().optional().default(5514),
+        CREDENTIAL_ENCRYPTION_KEY: Joi.string().optional(),
       }),
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),
@@ -64,6 +68,7 @@ import { AiAgentModule } from './modules/ai-agent/ai-agent.module';
         { name: 'long', ttl: config.get('THROTTLE_TTL_LONG', 60000), limit: config.get('THROTTLE_LIMIT_LONG', 100) },
       ],
     }),
+    ScheduleModule.forRoot(),
     LoggerModule,
     DatabaseModule,
     AuditLogModule,
