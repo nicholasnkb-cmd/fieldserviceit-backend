@@ -138,7 +138,7 @@ export class AuthService {
     const tokens = await this.generateTokens(user);
 
     return {
-      user: { ...this.responseUser(user), companyId: null, emailVerified: false },
+      user: { ...this.responseUser(user), companyId: null },
       ...tokens,
     };
   }
@@ -210,7 +210,7 @@ export class AuthService {
     const tokens = await this.generateTokens(user);
 
     return {
-      user: { ...this.responseUser(user), emailVerified: false },
+      user: { ...this.responseUser(user) },
       ...tokens,
     };
   }
