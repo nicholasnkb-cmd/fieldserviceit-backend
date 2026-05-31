@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as path from 'path';
 import * as fs from 'fs';
-import { v4 as uuid } from 'uuid';
+import { randomUUID } from 'crypto';
 import { getS3Client, getS3Bucket } from '../../config/s3.config';
 
 const ALLOWED_EXTENSIONS = new Set([
@@ -78,7 +78,7 @@ export class UploadsService {
     const ext = path.extname(sanitized) || '.bin';
     validateMagicBytes(file.buffer, ext);
     scanForKnownMalwareMarkers(file.buffer);
-    const filename = `${uuid()}${ext}`;
+    const filename = `${randomUUID()}${ext}`;
 
     if (this.storageType === 's3' && this.s3Client) {
       return this.saveToS3(file, subfolder, filename);

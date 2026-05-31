@@ -2,7 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { UploadsService } from './uploads.service';
 
-jest.mock('uuid', () => ({ v4: () => 'mocked-uuid' }));
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: () => 'mocked-uuid',
+}));
 jest.mock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(() => ({
     send: jest.fn().mockResolvedValue({}),
