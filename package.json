@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node scripts/clean-dist.js && tsc -p tsconfig.build.json",
-    "build:tsc": "tsc -p tsconfig.build.json",
+    "build": "node scripts/clean-dist.js && node node_modules/typescript/bin/tsc -p tsconfig.build.json",
+    "build:tsc": "node node_modules/typescript/bin/tsc -p tsconfig.build.json",
     "seed": "ts-node --transpile-only src/database/seed.ts",
     "validate:network-vendors": "ts-node --transpile-only scripts/validate-network-vendors.ts",
     "smoke:prod": "node ../scripts/production-smoke.mjs",
