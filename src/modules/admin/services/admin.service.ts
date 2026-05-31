@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 
 const BCRYPT_ROUNDS = 12;
 const VALID_ROLES = ['SUPER_ADMIN', 'TENANT_ADMIN', 'TECHNICIAN', 'CLIENT', 'READ_ONLY'];
+const FEATURE_KEYS = ['tickets', 'dispatch', 'assets', 'network', 'rmmIntegration', 'aiAgent', 'reporting', 'workflows', 'billing', 'settings', 'auditLogs'];
 
 @Injectable()
 export class AdminService {
@@ -548,6 +549,45 @@ export class AdminService {
       data: { settings: JSON.stringify(settings) },
       select: { id: true, name: true, settings: true },
     });
+  }
+
+  listFunctionControls() {
+    return FEATURE_KEYS.map((key) => ({ key, label: this.featureLabel(key) }));
+  }
+
+  async getCompanyFeatureControls(companyId: string) {
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) throw new NotFoundException('Company not found');
+    const settings = company.settings ? JSON.parse(company.settings) : {};
+    return {
+      companyId,
+      featureOverrides: settings.featureOverrides || {},
+      restrictions: settings.restrictions || {},
+    };
+  }
+
+  async updateUserFeatureControls(userId: string, dto: { featureOverrides?: Record<string, boolean> }) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { featureOverrides: JSON.stringify(dto.featureOverrides || {}) },
+      select: { id: true },
+    });
+    return { userId, featureOverrides: dto.featureOverrides || {} };
+  }
+
+  async getUserFeatureControls(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    return {
+      userId,
+      featureOverrides: user.featureOverrides ? JSON.parse(user.featureOverrides) : {},
+    };
+  }
+
+  private featureLabel(key: string) {
+    return key.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase());
   }
 
   async createCompanyUser(dto: { email: string; password: string; firstName: string; lastName: string; role?: string }, companyId: string) {

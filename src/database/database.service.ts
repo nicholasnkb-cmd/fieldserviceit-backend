@@ -56,6 +56,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         preferredContactMethod VARCHAR(191),
         timezone VARCHAR(191),
         avatarUrl VARCHAR(191),
+        featureOverrides TEXT,
         role VARCHAR(191) DEFAULT 'CLIENT',
         userType VARCHAR(191) DEFAULT 'BUSINESS',
         companyId VARCHAR(191),
@@ -462,6 +463,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         UNIQUE(companyId, provider),
         INDEX(companyId)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`UserPageFavorite\` (
+        id VARCHAR(191) PRIMARY KEY,
+        userId VARCHAR(191) NOT NULL,
+        label VARCHAR(191) NOT NULL,
+        path VARCHAR(191) NOT NULL,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE(userId, path),
+        INDEX(userId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
       `CREATE TABLE IF NOT EXISTS \`RmmSyncRun\` (
         id VARCHAR(191) PRIMARY KEY,
         companyId VARCHAR(191) NOT NULL,
@@ -558,6 +568,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       { name: 'location', definition: 'VARCHAR(191)' },
       { name: 'preferredContactMethod', definition: 'VARCHAR(191)' },
       { name: 'timezone', definition: 'VARCHAR(191)' },
+      { name: 'featureOverrides', definition: 'TEXT' },
     ];
 
     for (const column of columns) {

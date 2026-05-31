@@ -38,6 +38,12 @@ export class AdminController {
     return this.adminService.getSystemReadiness();
   }
 
+  @Get('function-controls')
+  @Roles('SUPER_ADMIN')
+  listFunctionControls() {
+    return this.adminService.listFunctionControls();
+  }
+
   @Get('roles')
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
   listRoles(@CurrentUser() user: CurrentUserType) {
@@ -123,6 +129,18 @@ export class AdminController {
     return this.adminService.updateUser(id, dto);
   }
 
+  @Get('users/:id/feature-controls')
+  @Roles('SUPER_ADMIN')
+  getUserFeatureControls(@Param('id') id: string) {
+    return this.adminService.getUserFeatureControls(id);
+  }
+
+  @Patch('users/:id/feature-controls')
+  @Roles('SUPER_ADMIN')
+  updateUserFeatureControls(@Param('id') id: string, @Body() dto: Record<string, any>) {
+    return this.adminService.updateUserFeatureControls(id, dto);
+  }
+
   @Delete('users/:id')
   @Roles('SUPER_ADMIN')
   removeUser(@Param('id') id: string) {
@@ -157,6 +175,12 @@ export class AdminController {
   @Roles('SUPER_ADMIN')
   updateCompanyFeatureOverrides(@Param('id') id: string, @Body() dto: Record<string, any>) {
     return this.adminService.updateCompanyFeatureOverrides(id, dto);
+  }
+
+  @Get('companies/:id/feature-controls')
+  @Roles('SUPER_ADMIN')
+  getCompanyFeatureControls(@Param('id') id: string) {
+    return this.adminService.getCompanyFeatureControls(id);
   }
 
   @Patch('companies/:id')

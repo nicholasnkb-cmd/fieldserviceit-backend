@@ -63,6 +63,53 @@ export class UsersService {
     return user;
   }
 
+  async getEffectiveFeatures(userId: string) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null } });
+    if (!user) throw new NotFoundException('User not found');
+    const company = user.companyId ? await this.prisma.company.findUnique({ where: { id: user.companyId } }) : null;
+    const companySettings = company?.settings ? JSON.parse(company.settings) : {};
+    const userOverrides = user.featureOverrides ? JSON.parse(user.featureOverrides) : {};
+    return {
+      companyId: user.companyId,
+      features: {
+        ...(companySettings.featureOverrides || {}),
+        ...userOverrides,
+      },
+      userOverrides,
+      companyOverrides: companySettings.featureOverrides || {},
+    };
+  }
+
+  async listFavorites(userId: string) {
+    return this.prisma.query<any[]>(
+      `SELECT id, label, path, createdAt FROM UserPageFavorite WHERE userId = ? ORDER BY createdAt DESC`,
+      [userId],
+    );
+  }
+
+  async addFavorite(userId: string, dto: { label?: string; path?: string }) {
+    const path = String(dto.path || '').trim();
+    if (!path.startsWith('/')) throw new BadRequestException('Favorite path must start with /');
+    const label = String(dto.label || path).trim().slice(0, 120);
+    const existing = await this.prisma.query<any[]>(
+      `SELECT * FROM UserPageFavorite WHERE userId = ? AND path = ? LIMIT 1`,
+      [userId, path],
+    );
+    if (existing[0]) return existing[0];
+    const id = `fav-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await this.prisma.execute(
+      `INSERT INTO UserPageFavorite (id, userId, label, path, createdAt) VALUES (?, ?, ?, ?, ?)`,
+      [id, userId, label, path, new Date()],
+    );
+    const rows = await this.prisma.query<any[]>(`SELECT * FROM UserPageFavorite WHERE id = ? LIMIT 1`, [id]);
+    return rows[0];
+  }
+
+  async removeFavorite(userId: string, path: string) {
+    await this.prisma.execute(`DELETE FROM UserPageFavorite WHERE userId = ? AND path = ?`, [userId, path]);
+    return { removed: true };
+  }
+
   async findOne(id: string, companyId: string) {
     const user = await this.prisma.user.findFirst({
       where: { id, companyId, deletedAt: null },

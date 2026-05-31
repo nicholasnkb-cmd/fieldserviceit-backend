@@ -46,6 +46,37 @@ export class AiAgentService {
     };
   }
 
+  async ask(question: string, user: any) {
+    const cleanQuestion = this.cleanGoal(question);
+    const snapshot = await this.workspaceSnapshot(user.companyId);
+    const normalized = cleanQuestion.toLowerCase();
+    const facts: string[] = [
+      `Tickets: ${snapshot.tickets}`,
+      `Open tickets: ${snapshot.openTickets}`,
+      `Assets: ${snapshot.assets}`,
+      `Enrolled devices: ${snapshot.enrolledDevices}`,
+    ];
+
+    let focus = 'I can answer questions about tickets, assets, compliance, enrollment, RMM/network operations, and create a plan for tasks.';
+    if (this.matches(normalized, ['ticket', 'incident', 'request'])) {
+      focus = `There are ${snapshot.openTickets} open tickets out of ${snapshot.tickets} total tickets.`;
+    } else if (this.matches(normalized, ['asset', 'device', 'laptop', 'phone'])) {
+      focus = `There are ${snapshot.assets} assets, including ${snapshot.enrolledDevices} enrolled devices.`;
+    } else if (this.matches(normalized, ['compliance', 'security', 'stale', 'unmanaged'])) {
+      const report = await this.deviceComplianceReport(user.companyId);
+      focus = report.status === 'completed'
+        ? `Device compliance: ${report.data.complianceRate}% compliant, ${report.data.nonCompliant} non-compliant, ${report.data.stale} stale, ${report.data.unmanaged} unmanaged.`
+        : report.message;
+    }
+
+    return {
+      question: cleanQuestion,
+      answer: `${focus} ${this.nextStepForQuestion(normalized)}`,
+      facts,
+      snapshot,
+    };
+  }
+
   async execute(goal: string, user: any, approvedActions: string[]) {
     const planned = await this.plan(goal, user);
     const approved = new Set(approvedActions);
@@ -232,5 +263,12 @@ export class AiAgentService {
     const completed = results.filter((result) => result.status === 'completed').length;
     const skipped = results.filter((result) => result.status === 'skipped').length;
     return `Goal handled: "${this.goalTitle(goal)}". Completed ${completed} tool action${completed === 1 ? '' : 's'}${skipped ? ` and skipped ${skipped} action${skipped === 1 ? '' : 's'} pending approval or context` : ''}.`;
+  }
+
+  private nextStepForQuestion(normalized: string) {
+    if (this.matches(normalized, ['create', 'open', 'make', 'generate', 'enroll'])) {
+      return 'Use Create plan to review and approve any write action before I run it.';
+    }
+    return 'Ask a follow-up or use Create plan if you want me to take action.';
   }
 }

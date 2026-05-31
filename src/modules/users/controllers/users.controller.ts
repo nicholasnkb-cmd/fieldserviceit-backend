@@ -28,6 +28,26 @@ export class UsersController {
     return this.usersService.changePassword(user.id, dto.oldPassword, dto.newPassword);
   }
 
+  @Get('me/features')
+  getEffectiveFeatures(@CurrentUser() user: CurrentUserType) {
+    return this.usersService.getEffectiveFeatures(user.id);
+  }
+
+  @Get('me/favorites')
+  listFavorites(@CurrentUser() user: CurrentUserType) {
+    return this.usersService.listFavorites(user.id);
+  }
+
+  @Post('me/favorites')
+  addFavorite(@Body() dto: { label?: string; path?: string }, @CurrentUser() user: CurrentUserType) {
+    return this.usersService.addFavorite(user.id, dto);
+  }
+
+  @Delete('me/favorites')
+  removeFavorite(@Body() dto: { path: string }, @CurrentUser() user: CurrentUserType) {
+    return this.usersService.removeFavorite(user.id, dto.path);
+  }
+
   @Post()
   create(@Body() dto: { email: string; password: string; firstName: string; lastName: string; role?: string }, @CurrentUser() user: CurrentUserType) {
     return this.usersService.create(dto as any, user.companyId);

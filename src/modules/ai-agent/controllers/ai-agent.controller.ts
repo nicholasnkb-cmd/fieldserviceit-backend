@@ -19,6 +19,11 @@ export class AiAgentController {
     return this.aiAgentService.plan(body.goal, user);
   }
 
+  @Post('ask')
+  ask(@Body() body: { question: string }, @CurrentUser() user: any) {
+    return this.aiAgentService.ask(body.question, user);
+  }
+
   @Post('execute')
   execute(@Body() body: { goal: string; approvedActions?: string[] }, @CurrentUser() user: any) {
     return this.aiAgentService.execute(body.goal, user, body.approvedActions || []);
