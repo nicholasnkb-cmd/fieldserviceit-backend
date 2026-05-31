@@ -341,11 +341,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const tokens = await this.generateTokens(session.user);
-
     await this.prisma.session.deleteMany({ where: { id: session.id } });
 
-    return tokens;
+    return this.generateTokens(session.user);
   }
 
   async logout(refreshToken: string) {

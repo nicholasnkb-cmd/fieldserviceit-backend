@@ -669,22 +669,12 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     },
 
     findMany: async ({ where, select, orderBy, skip, take, include }: { where?: Record<string, any>; select?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number; include?: Record<string, any> }) => {
-      const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
+      const cols = this.resolveSelectCols(select);
       let sql = `SELECT ${cols.join(', ')} FROM User`;
       const values: any[] = [];
 
       if (where && Object.keys(where).length > 0) {
-        const clauses = Object.entries(where).map(([k, v]) => {
-          if (v === null) return `${this.escapeColumn(k)} IS NULL`;
-          if (typeof v === 'object' && v !== null) {
-            if (v.contains !== undefined) { values.push(`%${v.contains}%`); return `${this.escapeColumn(k)} LIKE ?`; }
-            if (v.gte !== undefined) { values.push(v.gte); return `${this.escapeColumn(k)} >= ?`; }
-            if (v.lte !== undefined) { values.push(v.lte); return `${this.escapeColumn(k)} <= ?`; }
-            if (v.in !== undefined) { values.push(v.in); return `${this.escapeColumn(k)} IN (?)`; }
-          }
-          values.push(v);
-          return `${this.escapeColumn(k)} = ?`;
-        });
+        const clauses = this.buildWhereClauses('User', where, values);
         sql += ` WHERE ${clauses.join(' AND ')}`;
       }
 
@@ -703,6 +693,26 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       }
 
       const rows = await this.query<RowDataPacket[]>(sql, values);
+      if (select?.company || include?.company) {
+        for (const row of rows) {
+          if (row.companyId) {
+            const companyRows = await this.query<RowDataPacket[]>(`SELECT id, name FROM Company WHERE id = ? LIMIT 1`, [row.companyId]);
+            row.company = companyRows[0] || null;
+          } else {
+            row.company = null;
+          }
+        }
+      }
+      if (include?.assignedTickets) {
+        for (const row of rows) {
+          row.assignedTickets = await this.query<RowDataPacket[]>(`SELECT id, createdAt, resolvedAt FROM Ticket WHERE assignedToId = ? AND status = 'RESOLVED' AND deletedAt IS NULL`, [row.id]);
+        }
+      }
+      if (include?.dispatches) {
+        for (const row of rows) {
+          row.dispatches = await this.query<RowDataPacket[]>(`SELECT * FROM Dispatch WHERE technicianId = ?`, [row.id]);
+        }
+      }
       return rows;
     },
 
@@ -710,11 +720,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       let sql = 'SELECT COUNT(*) as count FROM User';
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
-        const clauses = Object.entries(where).map(([k, v]) => {
-          if (v === null) return `${this.escapeColumn(k)} IS NULL`;
-          values.push(v);
-          return `${this.escapeColumn(k)} = ?`;
-        });
+        const clauses = this.buildWhereClauses('User', where, values);
         sql += ` WHERE ${clauses.join(' AND ')}`;
       }
       const rows = await this.query<RowDataPacket[]>(sql, values);
@@ -801,11 +807,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       let sql = `SELECT ${cols.join(', ')} FROM Company`;
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
-        const clauses = Object.entries(where).map(([k, v]) => {
-          if (v === null) return `${this.escapeColumn(k)} IS NULL`;
-          values.push(v);
-          return `${this.escapeColumn(k)} = ?`;
-        });
+        const clauses = this.buildWhereClauses('Company', where, values);
         sql += ` WHERE ${clauses.join(' AND ')}`;
       }
       if (orderBy) {
@@ -880,15 +882,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       let sql = `SELECT ${cols.join(', ')} FROM Ticket`;
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
-        const clauses = Object.entries(where).map(([k, v]) => {
-          if (v === null) return `${this.escapeColumn(k)} IS NULL`;
-          if (typeof v === 'object' && v !== null) {
-            if (v.contains !== undefined) { values.push(`%${v.contains}%`); return `${this.escapeColumn(k)} LIKE ?`; }
-            if (v.gte !== undefined) { values.push(v.gte); return `${this.escapeColumn(k)} >= ?`; }
-          }
-          values.push(v);
-          return `${this.escapeColumn(k)} = ?`;
-        });
+        const clauses = this.buildWhereClauses('Ticket', where, values);
         sql += ` WHERE ${clauses.join(' AND ')}`;
       }
       if (orderBy) {
@@ -905,11 +899,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       let sql = 'SELECT COUNT(*) as count FROM Ticket';
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
-        const clauses = Object.entries(where).map(([k, v]) => {
-          if (v === null) return `${this.escapeColumn(k)} IS NULL`;
-          values.push(v);
-          return `${this.escapeColumn(k)} = ?`;
-        });
+        const clauses = this.buildWhereClauses('Ticket', where, values);
         sql += ` WHERE ${clauses.join(' AND ')}`;
       }
       const rows = await this.query<RowDataPacket[]>(sql, values);
@@ -984,7 +974,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       const values = [...Object.values(data), ...Object.values(where)];
       const sql = `UPDATE Session SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`;
       await this.execute(sql, values);
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Session WHERE refreshToken = ? LIMIT 1`, [where.refreshToken]);
+      const lookupColumn = where.id ? 'id' : 'refreshToken';
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Session WHERE ${this.escapeColumn(lookupColumn)} = ? LIMIT 1`, [where[lookupColumn]]);
       return rows[0];
     },
 
@@ -1028,11 +1019,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       let sql = 'SELECT * FROM TicketTemplate';
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
-        const clauses = Object.entries(where).map(([k, v]) => {
-          if (v === null) return `${this.escapeColumn(k)} IS NULL`;
-          values.push(v);
-          return `${this.escapeColumn(k)} = ?`;
-        });
+        const clauses = this.buildWhereClauses('TicketTimeline', where, values);
         sql += ` WHERE ${clauses.join(' AND ')}`;
       }
       if (orderBy) {
@@ -1555,7 +1542,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
   permission = {
     findMany: async ({ where, orderBy }: { where?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'> | Record<string, 'asc' | 'desc'>[] }) => {
-      let sql = 'SELECT * FROM Permission';
+      let sql = 'SELECT *, grp as `group` FROM Permission';
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
         const clauses = Object.entries(where).map(([k, v]) => {
@@ -1570,11 +1557,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         if (Array.isArray(orderBy)) {
           const orderParts = orderBy.map((o: any) => {
             const key = Object.keys(o)[0];
-            return `${this.escapeColumn(key)} ${o[key].toUpperCase()}`;
+            return `${this.escapeColumn(this.normalizeColumn('Permission', key))} ${o[key].toUpperCase()}`;
           });
           sql += ` ORDER BY ${orderParts.join(', ')}`;
         } else {
-          const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
+          const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(this.normalizeColumn('Permission', k))} ${v.toUpperCase()}`);
           sql += ` ORDER BY ${orderParts.join(', ')}`;
         }
       }
@@ -2334,6 +2321,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     return `\`${col.replace(/`/g, '')}\``;
   }
 
+  private normalizeColumn(table: string, col: string): string {
+    if (table === 'Permission' && col === 'group') return 'grp';
+    return col;
+  }
+
   private generateUuid(): string {
     return require('crypto').randomUUID();
   }
@@ -2343,6 +2335,53 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     return Object.keys(select).filter(k => select[k] === true);
   }
 
+  private buildWhereClauses(table: string, where: Record<string, any>, values: any[]): string[] {
+    return Object.entries(where).flatMap(([key, value]) => {
+      if (key === 'OR' && Array.isArray(value)) {
+        const orClauses = value.flatMap((condition: Record<string, any>) => this.buildWhereClauses(table, condition, values));
+        return orClauses.length ? [`(${orClauses.join(' OR ')})`] : [];
+      }
+
+      if (table === 'TicketTimeline' && key === 'ticket' && value && typeof value === 'object') {
+        const ticketValues: any[] = [];
+        const ticketClauses = this.buildWhereClauses('Ticket', value, ticketValues);
+        values.push(...ticketValues);
+        return [`EXISTS (SELECT 1 FROM Ticket WHERE Ticket.id = TicketTimeline.ticketId AND ${ticketClauses.join(' AND ')})`];
+      }
+
+      const column = this.normalizeColumn(table, key);
+      if (value === null) return [`${this.escapeColumn(column)} IS NULL`];
+
+      if (value && typeof value === 'object') {
+        if (value.contains !== undefined) {
+          values.push(`%${value.contains}%`);
+          return [`${this.escapeColumn(column)} LIKE ?`];
+        }
+        if (value.gte !== undefined) {
+          values.push(value.gte);
+          return [`${this.escapeColumn(column)} >= ?`];
+        }
+        if (value.lte !== undefined) {
+          values.push(value.lte);
+          return [`${this.escapeColumn(column)} <= ?`];
+        }
+        if (value.not !== undefined) {
+          if (value.not === null) return [`${this.escapeColumn(column)} IS NOT NULL`];
+          values.push(value.not);
+          return [`${this.escapeColumn(column)} <> ?`];
+        }
+        if (Array.isArray(value.in)) {
+          if (value.in.length === 0) return ['1 = 0'];
+          values.push(...value.in);
+          return [`${this.escapeColumn(column)} IN (${value.in.map(() => '?').join(', ')})`];
+        }
+      }
+
+      values.push(value);
+      return [`${this.escapeColumn(column)} = ?`];
+    });
+  }
+
   private async genericGroupBy(table: string, params: { by: string[]; where?: Record<string, any>; _count?: any; _sum?: any; _avg?: any; _min?: any; _max?: any }): Promise<RowDataPacket[]> {
     const byCols = params.by.map(c => this.escapeColumn(c)).join(', ');
     let sql = `SELECT ${byCols}`;
@@ -2350,11 +2389,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     const values: any[] = [];
     let whereClause = '';
     if (params.where && Object.keys(params.where).length > 0) {
-      const clauses = Object.entries(params.where).map(([k, v]) => {
-        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
-        values.push(v);
-        return `${this.escapeColumn(k)} = ?`;
-      });
+      const clauses = this.buildWhereClauses(table, params.where, values);
       whereClause = ` WHERE ${clauses.join(' AND ')}`;
     }
     sql += ` FROM ${table}${whereClause} GROUP BY ${byCols}`;
@@ -2414,11 +2449,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     let sql = `SELECT COUNT(*) as count FROM ${table}`;
     const values: any[] = [];
     if (where && Object.keys(where).length > 0) {
-      const clauses = Object.entries(where).map(([k, v]) => {
-        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
-        values.push(v);
-        return `${this.escapeColumn(k)} = ?`;
-      });
+      const clauses = this.buildWhereClauses(table, where, values);
       sql += ` WHERE ${clauses.join(' AND ')}`;
     }
     const rows = await this.query<RowDataPacket[]>(sql, values);
