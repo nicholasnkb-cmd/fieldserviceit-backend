@@ -7,6 +7,7 @@ describe('HealthController', () => {
   beforeEach(() => {
     mockPrisma = {
       $queryRaw: jest.fn(),
+      query: jest.fn().mockResolvedValue([{ lastPollAt: null, snapshotsLastHour: 0 }]),
     };
     controller = new HealthController(mockPrisma as any);
   });
@@ -18,6 +19,8 @@ describe('HealthController', () => {
       const result: any = await controller.check();
       expect(result.status).toBe('ok');
       expect(result.database.status).toBe('ok');
+      expect(result.version.backend).toBeDefined();
+      expect(result.worker.status).toBe('ok');
       expect(result.timestamp).toBeDefined();
     });
 

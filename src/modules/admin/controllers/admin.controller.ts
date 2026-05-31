@@ -177,6 +177,12 @@ export class AdminController {
     return this.adminService.generateInviteCode(id, expiresInDays);
   }
 
+  @Post('company-context/audit')
+  @Roles('SUPER_ADMIN')
+  auditCompanyContext(@Body('companyId') companyId: string, @CurrentUser() user: CurrentUserType) {
+    return this.adminService.auditCompanyContext(user.id, companyId);
+  }
+
   @Get('audit-logs')
   @Roles('SUPER_ADMIN')
   listAuditLogs(@Query() query: PaginationQueryDto) {

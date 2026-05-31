@@ -426,6 +426,22 @@ export class AdminService {
     });
   }
 
+  async auditCompanyContext(actorId: string, companyId: string) {
+    const company = await this.prisma.company.findFirst({ where: { id: companyId, deletedAt: null } });
+    if (!company) throw new NotFoundException('Company not found');
+
+    await this.auditLogService.create({
+      companyId,
+      actorId,
+      action: 'SUPER_ADMIN.COMPANY_CONTEXT',
+      resourceType: 'Company',
+      resourceId: companyId,
+      diff: JSON.stringify({ selectedCompany: { id: company.id, name: company.name } }),
+    });
+
+    return { ok: true };
+  }
+
   async listCompanyUsers(companyId: string, query: { page?: number; limit?: number; search?: string }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 25;
