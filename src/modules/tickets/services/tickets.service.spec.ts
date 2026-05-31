@@ -29,6 +29,7 @@ describe('TicketsService', () => {
     mockPrisma = {
       ticket: {
         count: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
       },
     };
@@ -93,6 +94,7 @@ describe('TicketsService', () => {
       };
 
       mockPrisma.ticket.count.mockResolvedValue(0);
+      mockPrisma.ticket.findFirst.mockResolvedValue(null);
       mockPrisma.ticket.create.mockResolvedValue(mockTicket);
 
       const result = await service.create(validDto as any, 'c1', 'u1', 'BUSINESS');
@@ -114,6 +116,7 @@ describe('TicketsService', () => {
       };
 
       mockPrisma.ticket.count.mockResolvedValue(0);
+      mockPrisma.ticket.findFirst.mockResolvedValue(null);
       mockPrisma.ticket.create.mockResolvedValue(mockTicket);
 
       const result = await service.create(validDto as any, null, 'u-pub', 'PUBLIC');
@@ -133,6 +136,7 @@ describe('TicketsService', () => {
       };
 
       mockPrisma.ticket.count.mockResolvedValue(1);
+      mockPrisma.ticket.findFirst.mockResolvedValue(null);
       mockPrisma.ticket.create.mockResolvedValue(mockTicket);
       mockUsageService.incrementUsage.mockRejectedValue(new Error('DB error'));
 
@@ -144,6 +148,7 @@ describe('TicketsService', () => {
 
     it('should generate correct sequential ticket numbers', async () => {
       mockPrisma.ticket.count.mockResolvedValue(42);
+      mockPrisma.ticket.findFirst.mockResolvedValue(null);
       mockPrisma.ticket.create.mockImplementation(async ({ data }: any) => ({
         id: 'ticket-seq',
         ticketNumber: data.ticketNumber,
@@ -153,6 +158,22 @@ describe('TicketsService', () => {
 
       const result = await service.create(validDto as any, 'company-id', 'u1', 'BUSINESS');
       expect(result.ticketNumber).toMatch(/^TKT-COMP-00043$/);
+    });
+
+    it('should skip colliding ticket numbers', async () => {
+      mockPrisma.ticket.count.mockResolvedValue(0);
+      mockPrisma.ticket.findFirst
+        .mockResolvedValueOnce({ id: 'existing' })
+        .mockResolvedValueOnce(null);
+      mockPrisma.ticket.create.mockImplementation(async ({ data }: any) => ({
+        id: 'ticket-next',
+        ticketNumber: data.ticketNumber,
+        companyId: data.companyId,
+        createdById: data.createdById,
+      }));
+
+      const result = await service.create(validDto as any, null, 'u1', 'BUSINESS');
+      expect(result.ticketNumber).toBe('TKT-PUB-00002');
     });
   });
 });

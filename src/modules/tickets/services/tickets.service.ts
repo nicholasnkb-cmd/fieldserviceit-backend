@@ -41,6 +41,20 @@ export class TicketsService {
     }
   }
 
+  private async nextTicketNumber(prefix: string, startingCount: number) {
+    let next = startingCount + 1;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const ticketNumber = `${prefix}-${next.toString().padStart(5, '0')}`;
+      const existing = await this.prisma.ticket.findFirst({
+        where: { ticketNumber },
+        select: { id: true },
+      });
+      if (!existing) return ticketNumber;
+      next += 1;
+    }
+    return `${prefix}-${Date.now().toString(36).toUpperCase()}`;
+  }
+
   async create(dto: CreateTicketDto, companyId: string | null, userId: string, userType: string) {
     if (!dto.contactName || !dto.contactEmail || !dto.contactPhone) {
       throw new BadRequestException('contactName, contactEmail, and contactPhone are required');
@@ -57,7 +71,7 @@ export class TicketsService {
     const prefix = companyIdForTicket
       ? `TKT-${companyIdForTicket.slice(0, 4).toUpperCase()}`
       : `TKT-PUB`;
-    const ticketNumber = `${prefix}-${(count + 1).toString().padStart(5, '0')}`;
+    const ticketNumber = await this.nextTicketNumber(prefix, count);
     const trackingToken = crypto.randomBytes(16).toString('hex');
 
     const ticket = await this.prisma.ticket.create({

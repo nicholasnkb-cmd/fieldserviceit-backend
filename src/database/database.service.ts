@@ -890,8 +890,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     create: async ({ data }: { data: Record<string, any> }) => {
       const now = new Date();
       const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
-      const cols = Object.keys(insertData);
-      const values = Object.values(insertData);
+      const cols = Object.keys(insertData).filter(k => insertData[k] !== undefined);
+      const values = cols.map(k => insertData[k]);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO Company (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
       await this.execute(sql, values);
@@ -1058,8 +1058,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   ticketAttachment = {
     create: async ({ data, include }: { data: Record<string, any>; include?: Record<string, any> }) => {
       const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: new Date(), ...data };
-      const cols = Object.keys(insertData);
-      const values = Object.values(insertData);
+      const cols = Object.keys(insertData).filter(k => insertData[k] !== undefined);
+      const values = cols.map(k => insertData[k]);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO TicketAttachment (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
       await this.execute(sql, values);
