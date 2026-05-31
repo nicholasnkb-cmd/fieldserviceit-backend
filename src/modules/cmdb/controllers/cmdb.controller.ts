@@ -10,10 +10,13 @@ import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
 import { CreateAssetDto } from '../dto/create-asset.dto';
 import { UpdateAssetDto } from '../dto/update-asset.dto';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { RequireFeature } from '../../../common/decorators/feature.decorator';
+import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 
 @Controller('assets')
-@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
 @BusinessOnly()
+@RequireFeature('assets')
 export class CmdbController {
   constructor(private cmdbService: CmdbService) {}
 

@@ -14,9 +14,12 @@ import { BusinessOnly } from '../../../common/decorators/business-only.decorator
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { PrismaService } from '../../../database/prisma.service';
+import { RequireFeature } from '../../../common/decorators/feature.decorator';
+import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 
 @Controller('tickets')
-@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
+@RequireFeature('tickets')
 export class TicketsController {
   constructor(
     private ticketsService: TicketsService,

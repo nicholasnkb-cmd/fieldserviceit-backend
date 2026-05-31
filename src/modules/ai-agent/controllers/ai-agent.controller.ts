@@ -3,9 +3,12 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
 import { AiAgentService } from '../services/ai-agent.service';
+import { RequireFeature } from '../../../common/decorators/feature.decorator';
+import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 
 @Controller('ai-agent')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, FeatureAccessGuard)
+@RequireFeature('aiAgent')
 export class AiAgentController {
   constructor(private aiAgentService: AiAgentService) {}
 

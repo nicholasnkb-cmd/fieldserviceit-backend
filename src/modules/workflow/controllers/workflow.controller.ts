@@ -4,9 +4,12 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
+import { RequireFeature } from '../../../common/decorators/feature.decorator';
+import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 
 @Controller('workflows')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, FeatureAccessGuard)
+@RequireFeature('workflows')
 export class WorkflowController {
   constructor(private workflowService: WorkflowService) {}
 

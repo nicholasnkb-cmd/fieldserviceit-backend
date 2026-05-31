@@ -332,6 +332,9 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
     const session = await this.prisma.session.findUnique({
       where: { refreshToken },
       include: { user: true },
@@ -347,6 +350,7 @@ export class AuthService {
   }
 
   async logout(refreshToken: string) {
+    if (!refreshToken) return;
     await this.prisma.session.deleteMany({ where: { refreshToken } }).catch(() => {});
   }
 

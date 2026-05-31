@@ -8,10 +8,13 @@ import { BusinessOnlyGuard } from '../../../common/guards/business-only.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { PrismaService } from '../../../database/prisma.service';
+import { RequireFeature } from '../../../common/decorators/feature.decorator';
+import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 import * as crypto from 'crypto';
 
 @Controller('integrations/rmm')
-@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
+@RequireFeature('rmmIntegration')
 export class RmmIntegrationController {
   constructor(
     private rmmIntegration: RmmIntegrationService,

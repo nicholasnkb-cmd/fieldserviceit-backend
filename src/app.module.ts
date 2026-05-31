@@ -28,6 +28,7 @@ import { BillingModule } from './modules/billing/billing.module';
 import { LoggerModule } from './common/logger/logger.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
 import { AiAgentModule } from './modules/ai-agent/ai-agent.module';
+import { ErrorReportsModule } from './modules/error-reports/error-reports.module';
 
 @Module({
   imports: [
@@ -89,6 +90,7 @@ import { AiAgentModule } from './modules/ai-agent/ai-agent.module';
     HealthModule,
     BillingModule,
     AiAgentModule,
+    ErrorReportsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },

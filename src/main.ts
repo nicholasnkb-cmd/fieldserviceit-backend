@@ -44,7 +44,7 @@ async function bootstrap() {
   }
   app.enableCors({
     origin: corsOrigin || 'http://localhost:3000',
-    credentials: false,
+    credentials: true,
   });
 
   const storageType = configService.get('STORAGE_TYPE', 'local');

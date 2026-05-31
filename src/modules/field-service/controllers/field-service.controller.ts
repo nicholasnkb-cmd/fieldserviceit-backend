@@ -6,10 +6,13 @@ import { BusinessOnlyGuard } from '../../../common/guards/business-only.guard';
 import { BusinessOnly } from '../../../common/decorators/business-only.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
+import { RequireFeature } from '../../../common/decorators/feature.decorator';
+import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 
 @Controller('dispatch')
-@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
 @BusinessOnly()
+@RequireFeature('dispatch')
 export class FieldServiceController {
   constructor(private fieldService: FieldServiceService) {}
 

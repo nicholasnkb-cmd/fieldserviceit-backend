@@ -4,6 +4,9 @@ import { PlansService } from '../services/plans.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
+import { TenantGuard } from '../../../common/guards/tenant.guard';
+import { RequireFeature } from '../../../common/decorators/feature.decorator';
+import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 
 @Controller('billing')
 export class BillingController {
@@ -12,7 +15,8 @@ export class BillingController {
     private plansService: PlansService,
   ) {}
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, FeatureAccessGuard)
+  @RequireFeature('billing')
   @Get('current-plan')
   async getCurrentPlan(@CurrentUser() user: CurrentUserType) {
     const companyId = user.companyId;
@@ -20,7 +24,8 @@ export class BillingController {
     return this.plansService.getCompanyPlan(companyId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, FeatureAccessGuard)
+  @RequireFeature('billing')
   @Post('checkout')
   async createCheckout(
     @Body() body: { planId: string; successUrl?: string; cancelUrl?: string },
@@ -37,7 +42,8 @@ export class BillingController {
     );
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, FeatureAccessGuard)
+  @RequireFeature('billing')
   @Get('invoices')
   async getInvoices(@CurrentUser() user: CurrentUserType) {
     const companyId = user.companyId;
