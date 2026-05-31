@@ -127,6 +127,9 @@ export class RmmSyncService implements OnModuleInit {
     if (!config) {
       return { synced: false, error: `No RMM configuration found for ${provider} in this company` };
     }
+    if (!config.isActive) {
+      return { synced: false, error: `${provider} configuration is inactive` };
+    }
     await this.syncProviderAssets(config as any);
     return { synced: true, provider, companyId };
   }

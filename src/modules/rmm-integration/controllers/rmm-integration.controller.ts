@@ -1,15 +1,16 @@
-import { Controller, Get, Post, Body, Param, Delete, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Delete, ForbiddenException, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { RmmIntegrationService } from '../services/rmm-integration.service';
 import { RmmSyncService } from '../services/rmm-sync.service';
 import { RmmProviderFactory } from '../services/rmm-provider-factory.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
+import { BusinessOnlyGuard } from '../../../common/guards/business-only.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { PrismaService } from '../../../database/prisma.service';
 
 @Controller('integrations/rmm')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard)
 export class RmmIntegrationController {
   constructor(
     private rmmIntegration: RmmIntegrationService,
@@ -25,42 +26,82 @@ export class RmmIntegrationController {
 
   @Post('sync-asset')
   syncAsset(@Body() body: { provider: string; assetData: any }, @CurrentUser() user: CurrentUserType) {
-    return this.rmmIntegration.syncAsset(body.provider, body.assetData, user.companyId);
+    const companyId = this.requireCompanyId(user);
+    return this.rmmIntegration.syncAsset(body.provider, body.assetData, companyId);
   }
 
   @Post('alert')
   createFromAlert(@Body() body: { provider: string; alert: any }, @CurrentUser() user: CurrentUserType) {
-    return this.rmmIntegration.createTicketFromAlert(body.provider, body.alert, user.companyId);
+    const companyId = this.requireCompanyId(user);
+    return this.rmmIntegration.createTicketFromAlert(body.provider, body.alert, companyId);
   }
 
   @Get('configs')
-  listConfigs(@CurrentUser() user: CurrentUserType) {
-    return this.prisma.rmmProviderConfig.findMany({ where: { companyId: user.companyId } });
+  async listConfigs(@CurrentUser() user: CurrentUserType) {
+    const companyId = this.requireCompanyId(user);
+    const configs = await this.prisma.rmmProviderConfig.findMany({ where: { companyId } });
+    return configs.map((config: any) => this.sanitizeConfig(config));
   }
 
   @Post('configs')
   async saveConfig(@Body() body: { provider: string; credentials: any; syncIntervalMin?: number }, @CurrentUser() user: CurrentUserType) {
-    const config = await this.prisma.rmmProviderConfig.upsert({
-      where: { companyId_provider: { companyId: user.companyId, provider: body.provider } },
-      update: { credentials: JSON.stringify(body.credentials), syncIntervalMin: body.syncIntervalMin ?? 60, isActive: true },
-      create: { companyId: user.companyId, provider: body.provider, credentials: JSON.stringify(body.credentials), syncIntervalMin: body.syncIntervalMin ?? 60 },
-    });
-    await this.rmmSync.refreshSyncSchedule(user.companyId, body.provider);
-    return config;
+    const companyId = this.requireCompanyId(user);
+    const provider = this.normalizeProvider(body.provider);
+    this.providerFactory.getProvider(provider);
+
+    const syncIntervalMin = Math.max(5, Number(body.syncIntervalMin) || 60);
+    const credentials = JSON.stringify(body.credentials || {});
+    const existing = await this.prisma.rmmProviderConfig.findFirst({ where: { companyId, provider } });
+    const config = existing
+      ? await this.prisma.rmmProviderConfig.update({
+          where: { id: existing.id },
+          data: { credentials, syncIntervalMin, isActive: true },
+        })
+      : await this.prisma.rmmProviderConfig.create({
+          data: { companyId, provider, credentials, syncIntervalMin, isActive: true },
+        });
+
+    await this.rmmSync.refreshSyncSchedule(companyId, provider);
+    return this.sanitizeConfig(config);
   }
 
   @Delete('configs/:provider')
   async removeConfig(@Param('provider') provider: string, @CurrentUser() user: CurrentUserType) {
+    const companyId = this.requireCompanyId(user);
+    const normalizedProvider = this.normalizeProvider(provider);
+    const existing = await this.prisma.rmmProviderConfig.findFirst({ where: { companyId, provider: normalizedProvider } });
+    if (!existing) throw new BadRequestException('RMM configuration not found');
+
     const config = await this.prisma.rmmProviderConfig.update({
-      where: { companyId_provider: { companyId: user.companyId, provider } },
+      where: { id: existing.id },
       data: { isActive: false },
     });
-    await this.rmmSync.refreshSyncSchedule(user.companyId, provider);
-    return config;
+    await this.rmmSync.refreshSyncSchedule(companyId, normalizedProvider);
+    return this.sanitizeConfig(config);
   }
 
   @Post('sync-now/:provider')
   syncNow(@Param('provider') provider: string, @CurrentUser() user: CurrentUserType) {
-    return this.rmmSync.syncProviderNow(user.companyId, provider);
+    const companyId = this.requireCompanyId(user);
+    return this.rmmSync.syncProviderNow(companyId, this.normalizeProvider(provider));
+  }
+
+  private requireCompanyId(user: CurrentUserType) {
+    if (!user.companyId) throw new ForbiddenException('Select a company context before using RMM integrations');
+    return user.companyId;
+  }
+
+  private normalizeProvider(provider: string) {
+    const normalized = String(provider || '').trim().toLowerCase();
+    if (!normalized) throw new BadRequestException('RMM provider is required');
+    return normalized;
+  }
+
+  private sanitizeConfig(config: any) {
+    const { credentials, ...safeConfig } = config;
+    return {
+      ...safeConfig,
+      hasCredentials: Boolean(credentials),
+    };
   }
 }
