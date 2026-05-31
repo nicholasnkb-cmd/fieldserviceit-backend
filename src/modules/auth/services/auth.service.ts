@@ -364,17 +364,26 @@ export class AuthService {
     };
 
     const accessToken = this.jwtService.sign(payload);
-    const refreshToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        refreshToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-    });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const refreshToken = crypto.randomBytes(32).toString('hex');
+      try {
+        await this.prisma.session.create({
+          data: {
+            userId: user.id,
+            refreshToken,
+            expiresAt,
+          },
+        });
 
-    return { accessToken, refreshToken, expiresIn: 900 };
+        return { accessToken, refreshToken, expiresIn: 900 };
+      } catch (err: any) {
+        if (!String(err?.message || '').includes('Duplicate entry') || attempt === 2) throw err;
+      }
+    }
+
+    throw new UnauthorizedException('Unable to create session');
   }
 
   private async enforceLoginBackoff(email: string) {

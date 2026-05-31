@@ -708,14 +708,21 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
   user = {
     findUnique: async ({ where, select }: { where: Record<string, any>; select?: Record<string, any> }) => {
-      const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
+      if (Object.values(where).some(v => v === undefined)) return null;
+      const cols = this.resolveSelectCols(select);
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
       const values = Object.values(where);
       const rows = await this.query<RowDataPacket[]>(
         `SELECT ${cols.join(', ')} FROM User WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
         values,
       );
-      return rows[0] || null;
+      const user = rows[0] || null;
+      if (user && select?.company) {
+        user.company = user.companyId
+          ? (await this.query<RowDataPacket[]>(`SELECT id, name FROM Company WHERE id = ? LIMIT 1`, [user.companyId]))[0] || null
+          : null;
+      }
+      return user;
     },
 
     findFirst: async ({ where, select, include, orderBy }: { where: Record<string, any>; select?: Record<string, any>; include?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'> }) => {
@@ -797,21 +804,22 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     create: async ({ data, select }: { data: Record<string, any>; select?: Record<string, any> }) => {
       const now = new Date();
       const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
-      const cols = Object.keys(insertData);
-      const values = Object.values(insertData);
+      const cols = Object.keys(insertData).filter(k => insertData[k] !== undefined);
+      const values = cols.map(k => insertData[k]);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO User (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
       await this.execute(sql, values);
-      const selCols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
+      const selCols = this.resolveSelectCols(select);
       const rows = await this.query<RowDataPacket[]>(`SELECT ${selCols.join(', ')} FROM User WHERE id = ? LIMIT 1`, [insertData.id]);
       return rows[0];
     },
 
     update: async ({ where, data, select }: { where: Record<string, any>; data: Record<string, any>; select?: Record<string, any> }) => {
-      const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
-      const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+      const cols = this.resolveSelectCols(select);
+      const dataKeys = Object.keys(data).filter(k => data[k] !== undefined);
+      const setClauses = dataKeys.map(k => `${this.escapeColumn(k)} = ?`);
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
-      const values = [...Object.values(data), ...Object.values(where)];
+      const values = [...dataKeys.map(k => data[k]), ...Object.values(where)];
       const sql = `UPDATE User SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`;
       await this.execute(sql, values);
       const rows = await this.query<RowDataPacket[]>(`SELECT ${cols.join(', ')} FROM User WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
@@ -1010,6 +1018,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
   session = {
     findUnique: async ({ where, include }: { where: Record<string, any>; include?: Record<string, any> }) => {
+      if (Object.values(where).some(v => v === undefined)) return null;
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
       const values = Object.values(where);
       const rows = await this.query<RowDataPacket[]>(
@@ -1026,8 +1035,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
     create: async ({ data }: { data: Record<string, any> }) => {
       const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: new Date(), ...data };
-      const cols = Object.keys(insertData);
-      const values = Object.values(insertData);
+      const cols = Object.keys(insertData).filter(k => insertData[k] !== undefined);
+      const values = cols.map(k => insertData[k]);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO Session (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
       await this.execute(sql, values);
@@ -1613,10 +1622,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       const values: any[] = [];
       if (where && Object.keys(where).length > 0) {
         const clauses = Object.entries(where).map(([k, v]) => {
-          if (v === null) return `${this.escapeColumn(k)} IS NULL`;
-          if (typeof v === 'object' && v?.in !== undefined) { values.push(v.in); return `${this.escapeColumn(k)} IN (?)`; }
+          const column = this.normalizeColumn('Permission', k);
+          if (v === null) return `${this.escapeColumn(column)} IS NULL`;
+          if (typeof v === 'object' && v?.in !== undefined) { values.push(v.in); return `${this.escapeColumn(column)} IN (?)`; }
           values.push(v);
-          return `${this.escapeColumn(k)} = ?`;
+          return `${this.escapeColumn(column)} = ?`;
         });
         sql += ` WHERE ${clauses.join(' AND ')}`;
       }
@@ -1632,7 +1642,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
           sql += ` ORDER BY ${orderParts.join(', ')}`;
         }
       }
-      return this.query<RowDataPacket[]>(sql, values);
+      try {
+        return await this.query<RowDataPacket[]>(sql, values);
+      } catch (err: any) {
+        if (!String(err?.message || '').includes("Unknown column 'grp'")) throw err;
+        const fallbackSql = sql.replace('grp as `group`', '`group`').replace(/`grp`/g, '`group`');
+        return this.query<RowDataPacket[]>(fallbackSql, values);
+      }
     },
   };
 
