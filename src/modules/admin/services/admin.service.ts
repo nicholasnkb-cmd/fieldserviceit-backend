@@ -617,6 +617,34 @@ export class AdminService {
       add('MDM command queue', false, 'MDM command table has not been initialized yet.', 'warning');
     }
 
+    let lastRmmSync: any = null;
+    try {
+      const rows = await this.prisma.query<any[]>(
+        `SELECT provider, status, completedAt, assetsCreated, assetsUpdated, assetsSkipped, errorMessage
+         FROM RmmSyncRun
+         ORDER BY startedAt DESC
+         LIMIT 1`,
+      );
+      lastRmmSync = rows[0] || null;
+      add('RMM sync worker', true, lastRmmSync ? `Last ${lastRmmSync.provider} sync ${lastRmmSync.status}.` : 'No RMM sync runs recorded yet.', 'warning');
+    } catch {
+      add('RMM sync worker', false, 'RMM sync history table has not been initialized yet.', 'warning');
+    }
+
+    let lastNetworkPoll: any = null;
+    try {
+      const rows = await this.prisma.query<any[]>(
+        `SELECT source, status, createdAt
+         FROM NetworkHealthSnapshot
+         ORDER BY createdAt DESC
+         LIMIT 1`,
+      );
+      lastNetworkPoll = rows[0] || null;
+      add('Monitoring worker', true, lastNetworkPoll ? `Last ${lastNetworkPoll.source} poll reported ${lastNetworkPoll.status}.` : 'No monitoring snapshots recorded yet.', 'warning');
+    } catch {
+      add('Monitoring worker', false, 'Monitoring tables have not been initialized yet.', 'warning');
+    }
+
     const status = checks.some((check) => check.status === 'critical')
       ? 'blocked'
       : checks.some((check) => check.status === 'warning')
@@ -630,6 +658,14 @@ export class AdminService {
       databaseName: process.env.DB_NAME || 'configured',
       apiPrefix: '/v1',
       stripeWebhookPath: '/v1/billing/webhook',
+      deployment: {
+        frontendVersion: process.env.FRONTEND_VERSION || process.env.APP_VERSION || 'unknown',
+        backendVersion: process.env.BACKEND_VERSION || process.env.APP_VERSION || process.env.npm_package_version || 'unknown',
+        nodeEnv: process.env.NODE_ENV || 'development',
+        corsOrigin: process.env.CORS_ORIGIN || null,
+        lastNetworkPoll,
+        lastRmmSync,
+      },
       plans: plans.map((plan: any) => ({
         id: plan.id,
         name: plan.name,

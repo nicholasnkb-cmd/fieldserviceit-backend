@@ -8,6 +8,7 @@ import { BusinessOnlyGuard } from '../../../common/guards/business-only.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { PrismaService } from '../../../database/prisma.service';
+import * as crypto from 'crypto';
 
 @Controller('integrations/rmm')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard)
@@ -43,15 +44,33 @@ export class RmmIntegrationController {
     return configs.map((config: any) => this.sanitizeConfig(config));
   }
 
+  @Get('sync-history')
+  async listSyncHistory(@CurrentUser() user: CurrentUserType) {
+    const companyId = this.requireCompanyId(user);
+    return this.prisma.query(
+      `SELECT * FROM RmmSyncRun WHERE companyId = ? ORDER BY startedAt DESC LIMIT 50`,
+      [companyId],
+    );
+  }
+
+  @Post('configs/test')
+  async testUnsavedConfig(@Body() body: { provider: string; credentials: any }, @CurrentUser() user: CurrentUserType) {
+    this.requireCompanyId(user);
+    const provider = this.normalizeProvider(body.provider);
+    const rmmProvider = this.providerFactory.getProvider(provider);
+    const valid = await rmmProvider.validateCredentials(body.credentials || {});
+    return { provider, status: valid ? 'PASS' : 'FAIL' };
+  }
+
   @Post('configs')
   async saveConfig(@Body() body: { provider: string; credentials: any; syncIntervalMin?: number }, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     const provider = this.normalizeProvider(body.provider);
     this.providerFactory.getProvider(provider);
 
-    const syncIntervalMin = Math.max(5, Number(body.syncIntervalMin) || 60);
-    const credentials = JSON.stringify(body.credentials || {});
     const existing = await this.prisma.rmmProviderConfig.findFirst({ where: { companyId, provider } });
+    const syncIntervalMin = Math.max(5, Number(body.syncIntervalMin) || 60);
+    const credentials = this.encryptSecret(JSON.stringify(this.mergeCredentials(existing?.credentials, body.credentials || {})));
     const config = existing
       ? await this.prisma.rmmProviderConfig.update({
           where: { id: existing.id },
@@ -80,6 +99,26 @@ export class RmmIntegrationController {
     return this.sanitizeConfig(config);
   }
 
+  @Post('configs/:provider/test')
+  async testSavedConfig(@Param('provider') provider: string, @CurrentUser() user: CurrentUserType) {
+    const companyId = this.requireCompanyId(user);
+    const normalizedProvider = this.normalizeProvider(provider);
+    const config = await this.prisma.rmmProviderConfig.findFirst({ where: { companyId, provider: normalizedProvider } });
+    if (!config) throw new BadRequestException('RMM configuration not found');
+
+    const rmmProvider = this.providerFactory.getProvider(normalizedProvider);
+    const credentials = this.parseCredentials(config.credentials);
+    const valid = await rmmProvider.validateCredentials(credentials);
+    const status = valid ? 'PASS' : 'FAIL';
+
+    await this.prisma.rmmProviderConfig.update({
+      where: { id: config.id },
+      data: { lastTestStatus: status, lastTestAt: new Date() },
+    });
+
+    return { provider: normalizedProvider, status };
+  }
+
   @Post('sync-now/:provider')
   syncNow(@Param('provider') provider: string, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
@@ -103,5 +142,37 @@ export class RmmIntegrationController {
       ...safeConfig,
       hasCredentials: Boolean(credentials),
     };
+  }
+
+  private encryptionKey() {
+    return crypto.createHash('sha256').update(process.env.CREDENTIAL_ENCRYPTION_KEY || process.env.JWT_SECRET || 'fieldserviceit-dev-key').digest();
+  }
+
+  private encryptSecret(value: string) {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', this.encryptionKey(), iv);
+    const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return `ENC:${iv.toString('base64')}:${tag.toString('base64')}:${encrypted.toString('base64')}`;
+  }
+
+  private decryptSecret(value: string) {
+    if (!value?.startsWith('ENC:')) return value;
+    const [, iv, tag, encrypted] = value.split(':');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', this.encryptionKey(), Buffer.from(iv, 'base64'));
+    decipher.setAuthTag(Buffer.from(tag, 'base64'));
+    return Buffer.concat([decipher.update(Buffer.from(encrypted, 'base64')), decipher.final()]).toString('utf8');
+  }
+
+  private parseCredentials(value: string) {
+    return JSON.parse(this.decryptSecret(value || '{}'));
+  }
+
+  private mergeCredentials(existingCredentials: string | undefined, nextCredentials: Record<string, any>) {
+    const existing = existingCredentials ? this.parseCredentials(existingCredentials) : {};
+    const cleaned = Object.fromEntries(
+      Object.entries(nextCredentials || {}).filter(([, value]) => value !== undefined && value !== null && value !== '' && value !== '********'),
+    );
+    return { ...existing, ...cleaned };
   }
 }

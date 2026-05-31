@@ -453,10 +453,29 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         isActive TINYINT(1) DEFAULT 1,
         syncIntervalMin INT DEFAULT 60,
         lastSyncAt DATETIME(3),
+        lastSyncStatus VARCHAR(32),
+        lastSyncMessage TEXT,
+        lastTestStatus VARCHAR(32),
+        lastTestAt DATETIME(3),
         createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
         updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
         UNIQUE(companyId, provider),
         INDEX(companyId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`RmmSyncRun\` (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        provider VARCHAR(191) NOT NULL,
+        status VARCHAR(32) NOT NULL,
+        startedAt DATETIME(3) NOT NULL,
+        completedAt DATETIME(3),
+        assetsCreated INT DEFAULT 0,
+        assetsUpdated INT DEFAULT 0,
+        assetsSkipped INT DEFAULT 0,
+        errorMessage TEXT,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(companyId, provider, startedAt),
+        INDEX(status)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
       `CREATE TABLE IF NOT EXISTS \`AuditLog\` (
         id VARCHAR(191) PRIMARY KEY,
@@ -508,6 +527,27 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     }
     await this.ensureUserProfileColumns();
     await this.ensureAssetMdmColumns();
+    await this.ensureRmmColumns();
+  }
+
+  private async ensureRmmColumns() {
+    const columns: Array<{ name: string; definition: string }> = [
+      { name: 'lastSyncStatus', definition: 'VARCHAR(32)' },
+      { name: 'lastSyncMessage', definition: 'TEXT' },
+      { name: 'lastTestStatus', definition: 'VARCHAR(32)' },
+      { name: 'lastTestAt', definition: 'DATETIME(3)' },
+    ];
+
+    for (const column of columns) {
+      try {
+        await this.execute(`ALTER TABLE RmmProviderConfig ADD COLUMN ${this.escapeColumn(column.name)} ${column.definition}`);
+        this.logger.log(`RMM config column ensured: ${column.name}`);
+      } catch (err: any) {
+        if (!String(err?.message || '').includes('Duplicate column')) {
+          this.logger.warn(`RMM config column skipped (${column.name}): ${err?.message || err}`);
+        }
+      }
+    }
   }
 
   private async ensureUserProfileColumns() {
