@@ -16,6 +16,58 @@ export class AdminService {
     private auditLogService: AuditLogService,
   ) {}
 
+  private normalizeRole(role: any) {
+    if (!role) return role;
+    const permissions = Array.isArray(role.permissions) ? role.permissions : [];
+    return {
+      ...role,
+      permissions: permissions.map((entry: any) => {
+        if (entry.permission) return entry;
+        return {
+          roleId: entry.roleId ?? role.id,
+          permissionId: entry.permissionId ?? entry.id,
+          createdAt: entry.createdAt,
+          permission: {
+            id: entry.permissionId ?? entry.id,
+            name: entry.name,
+            slug: entry.slug,
+            group: entry.group,
+            description: entry.description,
+          },
+        };
+      }),
+      _count: role._count || { userRoles: Number(role.userRoleCount || 0) },
+    };
+  }
+
+  private async findPermissionsBySlugs(slugs: string[]) {
+    const uniqueSlugs = [...new Set(slugs.filter(Boolean))];
+    if (uniqueSlugs.length === 0) return [];
+
+    const placeholders = uniqueSlugs.map(() => '?').join(', ');
+    let permissions: any[];
+    try {
+      permissions = await this.prisma.query<any[]>(
+        `SELECT id, name, slug, grp as \`group\`, description FROM Permission WHERE slug IN (${placeholders})`,
+        uniqueSlugs,
+      );
+    } catch (err: any) {
+      if (!String(err?.message || '').includes("Unknown column 'grp'")) throw err;
+      permissions = await this.prisma.query<any[]>(
+        `SELECT id, name, slug, \`group\`, description FROM Permission WHERE slug IN (${placeholders})`,
+        uniqueSlugs,
+      );
+    }
+
+    const found = new Set(permissions.map((permission) => permission.slug));
+    const missing = uniqueSlugs.filter((slug) => !found.has(slug));
+    if (missing.length > 0) {
+      throw new BadRequestException(`Unknown permission(s): ${missing.join(', ')}`);
+    }
+
+    return permissions;
+  }
+
   // ── Permissions ──
 
   async listPermissions() {
@@ -59,7 +111,7 @@ export class AdminService {
     if (companyId) {
       where.OR = [{ companyId }, { isSystem: true }];
     }
-    return this.prisma.role.findMany({
+    const roles = await this.prisma.role.findMany({
       where,
       include: {
         permissions: {
@@ -69,6 +121,7 @@ export class AdminService {
       },
       orderBy: { name: 'asc' },
     });
+    return roles.map((role: any) => this.normalizeRole(role));
   }
 
   async getRole(roleId: string) {
@@ -82,7 +135,7 @@ export class AdminService {
       },
     });
     if (!role) throw new NotFoundException('Role not found');
-    return role;
+    return this.normalizeRole(role);
   }
 
   async createRole(dto: { name: string; slug: string; description?: string; companyId?: string; permissionSlugs?: string[] }) {
@@ -91,24 +144,23 @@ export class AdminService {
     });
     if (existing) throw new BadRequestException('Role slug already exists for this company');
 
-    return this.prisma.role.create({
+    const role = await this.prisma.role.create({
       data: {
         name: dto.name,
         slug: dto.slug,
         description: dto.description,
         companyId: dto.companyId || null,
-        permissions: dto.permissionSlugs?.length
-          ? {
-              create: dto.permissionSlugs.map((slug) => ({
-                permission: { connect: { slug } },
-              })),
-            }
-          : undefined,
-      },
-      include: {
-        permissions: { include: { permission: true } },
       },
     });
+
+    if (dto.permissionSlugs?.length) {
+      const permissions = await this.findPermissionsBySlugs(dto.permissionSlugs);
+      await this.prisma.rolePermission.createMany({
+        data: permissions.map((permission) => ({ roleId: role.id, permissionId: permission.id })),
+      });
+    }
+
+    return this.getRole(role.id);
   }
 
   async updateRole(roleId: string, dto: { name?: string; description?: string; permissionSlugs?: string[] }) {
@@ -119,12 +171,10 @@ export class AdminService {
     if (dto.name) updateData.name = dto.name;
     if (dto.description !== undefined) updateData.description = dto.description;
 
-    if (dto.permissionSlugs) {
+    if (dto.permissionSlugs !== undefined) {
       await this.prisma.rolePermission.deleteMany({ where: { roleId } });
       if (dto.permissionSlugs.length > 0) {
-        const perms = await this.prisma.permission.findMany({
-          where: { slug: { in: dto.permissionSlugs } },
-        });
+        const perms = await this.findPermissionsBySlugs(dto.permissionSlugs);
         await this.prisma.rolePermission.createMany({
           data: perms.map((p) => ({ roleId, permissionId: p.id })),
         });
@@ -136,8 +186,9 @@ export class AdminService {
       data: updateData,
       include: {
         permissions: { include: { permission: true } },
+        _count: { select: { userRoles: true } },
       },
-    });
+    }).then((updated: any) => this.normalizeRole(updated));
   }
 
   async deleteRole(roleId: string) {
