@@ -251,6 +251,7 @@ export class TicketsService {
       contactEmail: dto.contactEmail,
       contactPhone: dto.contactPhone,
     };
+    Object.keys(data).forEach((key) => data[key] === undefined && delete data[key]);
     if (dto.assignedToId) {
       if (!newStatus && ticket.status === 'OPEN') {
         data.status = 'ASSIGNED';

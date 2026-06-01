@@ -1025,11 +1025,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
     findFirst: async ({ where, select, include }: { where: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
-      const whereClauses = Object.entries(where).map(([k, v]) => {
-        if (v === null) return `${this.escapeColumn(k)} IS NULL`;
-        return `${this.escapeColumn(k)} = ?`;
-      }).filter(Boolean);
-      const values = Object.values(where).filter(v => v !== null);
+      const values: any[] = [];
+      const whereClauses = this.buildWhereClauses('Ticket', where, values);
       const rows = await this.query<RowDataPacket[]>(
         `SELECT ${cols.join(', ')} FROM Ticket WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
         values,
@@ -1079,9 +1076,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     },
 
     update: async ({ where, data, select, include }: { where: Record<string, any>; data: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) => {
-      const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+      const dataKeys = Object.keys(data).filter(k => data[k] !== undefined);
+      if (dataKeys.length === 0) {
+        const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Ticket WHERE id = ? LIMIT 1`, [where.id]);
+        return this.enrichTicket(rows[0], include);
+      }
+      const setClauses = dataKeys.map(k => `${this.escapeColumn(k)} = ?`);
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
-      const values = [...Object.values(data), ...Object.values(where)];
+      const values = [...dataKeys.map(k => data[k]), ...Object.values(where)];
       const sql = `UPDATE Ticket SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`;
       await this.execute(sql, values);
       const rows = await this.query<RowDataPacket[]>(`SELECT * FROM Ticket WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
@@ -2518,6 +2520,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         const ticketClauses = this.buildWhereClauses('Ticket', value, ticketValues);
         values.push(...ticketValues);
         return [`EXISTS (SELECT 1 FROM Ticket WHERE Ticket.id = TicketTimeline.ticketId AND ${ticketClauses.join(' AND ')})`];
+      }
+
+      if (table === 'Ticket' && key === 'createdBy' && value && typeof value === 'object') {
+        const userValues: any[] = [];
+        const userClauses = this.buildWhereClauses('User', value, userValues);
+        values.push(...userValues);
+        return [`EXISTS (SELECT 1 FROM User WHERE User.id = Ticket.createdById AND ${userClauses.join(' AND ')})`];
       }
 
       const column = this.normalizeColumn(table, key);
