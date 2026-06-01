@@ -305,9 +305,9 @@ export class AdminService {
            creator.firstName as createdByFirstName, creator.lastName as createdByLastName,
            assignee.firstName as assignedToFirstName, assignee.lastName as assignedToLastName
          FROM Ticket t
-         LEFT JOIN Company c ON c.id = t.companyId
-         LEFT JOIN User creator ON creator.id = t.createdById
-         LEFT JOIN User assignee ON assignee.id = t.assignedToId
+         LEFT JOIN \`Company\` c ON c.id = t.companyId
+         LEFT JOIN \`User\` creator ON creator.id = t.createdById
+         LEFT JOIN \`User\` assignee ON assignee.id = t.assignedToId
          WHERE ${whereSql}
          ORDER BY t.createdAt DESC
          LIMIT ? OFFSET ?`,
