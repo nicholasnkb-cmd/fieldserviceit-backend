@@ -366,7 +366,7 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       const refreshToken = crypto.randomBytes(32).toString('hex');
       try {
         await this.prisma.session.create({
@@ -379,7 +379,8 @@ export class AuthService {
 
         return { accessToken, refreshToken, expiresIn: 900 };
       } catch (err: any) {
-        if (!String(err?.message || '').includes('Duplicate entry') || attempt === 2) throw err;
+        if (!String(err?.message || '').includes('Duplicate entry') || attempt === 4) throw err;
+        await new Promise((r) => setTimeout(r, 50));
       }
     }
 

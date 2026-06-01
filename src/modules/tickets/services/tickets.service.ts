@@ -120,7 +120,9 @@ export class TicketsService {
 
     const where: any = { deletedAt: null };
 
-    if (user.userType === 'PUBLIC') {
+    if (user.role === 'SUPER_ADMIN' && !user.companyId) {
+      // Global super admin view: no tenant selected means all tickets, including public/free users.
+    } else if (user.userType === 'PUBLIC') {
       where.createdById = user.id;
     } else {
       where.companyId = user.companyId;
@@ -156,7 +158,9 @@ export class TicketsService {
   async findOne(id: string, user: any) {
     const where: any = { id, deletedAt: null };
 
-    if (user.userType === 'PUBLIC') {
+    if (user.role === 'SUPER_ADMIN' && !user.companyId) {
+      // Global super admin detail view.
+    } else if (user.userType === 'PUBLIC') {
       where.createdById = user.id;
     } else {
       where.companyId = user.companyId;

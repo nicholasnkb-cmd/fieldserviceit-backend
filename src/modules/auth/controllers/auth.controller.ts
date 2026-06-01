@@ -11,7 +11,7 @@ import { ResetPasswordDto } from '../dto/reset-password.dto';
 import { RefreshDto } from '../dto/refresh.dto';
 import { TrackTicketDto } from '../dto/track-ticket.dto';
 import { ResendVerificationDto } from '../dto/resend-verification.dto';
-import { clearAuthCookies, readRefreshCookie, setAuthCookies, stripTokens } from '../auth-cookies';
+import { clearAuthCookies, readRefreshCookie, setAuthCookies } from '../auth-cookies';
 
 @Controller('auth')
 export class AuthController {
@@ -24,7 +24,7 @@ export class AuthController {
   async login(@Body() body: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(body.email, body.password);
     setAuthCookies(res, result, req);
-    return stripTokens(result);
+    return result;
   }
 
   @Public()
@@ -34,7 +34,7 @@ export class AuthController {
   async register(@Body() body: RegisterDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.registerPublic(body);
     setAuthCookies(res, result, req);
-    return stripTokens(result);
+    return result;
   }
 
   @Public()
@@ -44,7 +44,7 @@ export class AuthController {
   async registerBusiness(@Body() body: RegisterBusinessDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.registerBusiness(body);
     setAuthCookies(res, result, req);
-    return stripTokens(result);
+    return result;
   }
 
   @Public()
@@ -79,7 +79,7 @@ export class AuthController {
     const refreshToken = body.refreshToken || readRefreshCookie(req);
     const result = await this.authService.refresh(refreshToken);
     setAuthCookies(res, result, req);
-    return stripTokens(result);
+    return result;
   }
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })
