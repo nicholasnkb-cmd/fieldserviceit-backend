@@ -30,6 +30,7 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
 import { AiAgentModule } from './modules/ai-agent/ai-agent.module';
 import { ErrorReportsModule } from './modules/error-reports/error-reports.module';
 import { OperationsModule } from './modules/operations/operations.module';
+import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
 
 @Module({
   imports: [
@@ -93,6 +94,7 @@ import { OperationsModule } from './modules/operations/operations.module';
     AiAgentModule,
     ErrorReportsModule,
     OperationsModule,
+    KnowledgeBaseModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },

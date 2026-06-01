@@ -558,6 +558,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     await this.ensureUserCoreColumns();
     await this.ensureAssetMdmColumns();
     await this.ensureRmmColumns();
+    await this.ensureKbArticleColumns();
   }
 
   private async ensureCompanyCoreColumns() {
@@ -598,6 +599,24 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       { name: 'deletedAt', definition: 'DATETIME(3)' },
     ];
     await this.ensureColumns('Ticket', columns);
+  }
+
+  private async ensureKbArticleColumns() {
+    const columns: Array<{ name: string; definition: string }> = [
+      { name: 'summary', definition: 'TEXT' },
+      { name: 'status', definition: "VARCHAR(32) DEFAULT 'DRAFT'" },
+      { name: 'visibility', definition: "VARCHAR(32) DEFAULT 'INTERNAL'" },
+      { name: 'articleType', definition: "VARCHAR(32) DEFAULT 'ARTICLE'" },
+      { name: 'aiEnabled', definition: 'TINYINT(1) DEFAULT 0' },
+      { name: 'sourceTicketId', definition: 'VARCHAR(191)' },
+      { name: 'ownerId', definition: 'VARCHAR(191)' },
+      { name: 'createdById', definition: 'VARCHAR(191)' },
+      { name: 'updatedById', definition: 'VARCHAR(191)' },
+      { name: 'reviewDueAt', definition: 'DATETIME(3)' },
+      { name: 'publishedAt', definition: 'DATETIME(3)' },
+      { name: 'updatedAt', definition: 'DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)' },
+    ];
+    await this.ensureColumns('KbArticle', columns);
   }
 
   private async ensureAuditLogCoreColumns() {
