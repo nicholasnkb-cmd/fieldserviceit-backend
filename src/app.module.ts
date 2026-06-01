@@ -29,6 +29,7 @@ import { LoggerModule } from './common/logger/logger.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
 import { AiAgentModule } from './modules/ai-agent/ai-agent.module';
 import { ErrorReportsModule } from './modules/error-reports/error-reports.module';
+import { OperationsModule } from './modules/operations/operations.module';
 
 @Module({
   imports: [
@@ -91,6 +92,7 @@ import { ErrorReportsModule } from './modules/error-reports/error-reports.module
     BillingModule,
     AiAgentModule,
     ErrorReportsModule,
+    OperationsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },
