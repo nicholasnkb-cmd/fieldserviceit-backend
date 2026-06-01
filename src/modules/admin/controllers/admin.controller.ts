@@ -124,7 +124,7 @@ export class AdminController {
 
   @Post('users')
   @Roles('SUPER_ADMIN')
-  createUser(@Body() dto: { email: string; password: string; firstName: string; lastName: string; role?: string; companyId: string }) {
+  createUser(@Body() dto: { email: string; password: string; firstName: string; lastName: string; role?: string; companyId?: string }) {
     return this.adminService.createUser(dto);
   }
 

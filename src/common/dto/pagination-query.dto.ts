@@ -34,4 +34,8 @@ export class PaginationQueryDto {
   @IsOptional()
   @IsString()
   userType?: string;
+
+  @IsOptional()
+  @IsString()
+  role?: string;
 }

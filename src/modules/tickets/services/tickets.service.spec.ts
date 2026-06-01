@@ -200,5 +200,22 @@ describe('TicketsService', () => {
         where: { deletedAt: null, createdById: 'public-1' },
       }));
     });
+
+    it('should scope GLOBAL_TECH users to individual public tickets', async () => {
+      mockPrisma.ticket.findMany = jest.fn().mockResolvedValue([]);
+      mockPrisma.ticket.count.mockResolvedValue(0);
+
+      await service.findAll({ id: 'global-tech-1', role: 'GLOBAL_TECH', userType: 'BUSINESS', companyId: null }, {});
+
+      expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: {
+          deletedAt: null,
+          OR: [
+            { companyId: null },
+            { createdBy: { userType: 'PUBLIC' } },
+          ],
+        },
+      }));
+    });
   });
 });

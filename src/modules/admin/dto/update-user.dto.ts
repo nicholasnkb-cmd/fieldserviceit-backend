@@ -1,6 +1,6 @@
 import { IsOptional, IsString, IsBoolean, IsIn } from 'class-validator';
 
-const VALID_ROLES = ['SUPER_ADMIN', 'TENANT_ADMIN', 'TECHNICIAN', 'CLIENT', 'READ_ONLY'];
+const VALID_ROLES = ['SUPER_ADMIN', 'GLOBAL_TECH', 'TENANT_ADMIN', 'TECHNICIAN', 'CLIENT', 'READ_ONLY'];
 
 export class UpdateUserDto {
   @IsOptional()

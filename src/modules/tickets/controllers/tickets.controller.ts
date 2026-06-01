@@ -32,6 +32,11 @@ export class TicketsController {
     const where: any = { id, deletedAt: null };
     if (user.role === 'SUPER_ADMIN' && !user.companyId) {
       // Global super admin can access all tickets, including public/free-user tickets.
+    } else if (user.role === 'GLOBAL_TECH') {
+      where.OR = [
+        { companyId: null },
+        { createdBy: { userType: 'PUBLIC' } },
+      ];
     } else if (user.userType === 'PUBLIC') {
       where.createdById = user.id;
     } else {
@@ -65,6 +70,11 @@ export class TicketsController {
     const where: any = { deletedAt: null };
     if (user.role === 'SUPER_ADMIN' && !user.companyId) {
       // Global super admin board.
+    } else if (user.role === 'GLOBAL_TECH') {
+      where.OR = [
+        { companyId: null },
+        { createdBy: { userType: 'PUBLIC' } },
+      ];
     } else {
       where.companyId = user.companyId;
     }

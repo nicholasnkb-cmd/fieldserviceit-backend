@@ -160,6 +160,7 @@ async function ensurePermissionsAndRoles(db: DatabaseService) {
 
   const roles = [
     ['SUPER_ADMIN', 'super-admin', 'Full system access across all tenants'],
+    ['GLOBAL_TECH', 'global-tech', 'Platform technician for free and starter individual tickets'],
     ['TENANT_ADMIN', 'tenant-admin', 'Company administrator'],
     ['TECHNICIAN', 'technician', 'Field service technician'],
     ['CLIENT', 'client', 'End user/requestor'],

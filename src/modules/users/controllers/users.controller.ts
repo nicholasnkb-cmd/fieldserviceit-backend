@@ -55,7 +55,7 @@ export class UsersController {
 
   @Get()
   findAll(@Query() query: PaginationQueryDto, @CurrentUser() user: CurrentUserType) {
-    return this.usersService.findAll(user.companyId, query);
+    return this.usersService.findAll(user.companyId, query, user);
   }
 
   @Get(':id')

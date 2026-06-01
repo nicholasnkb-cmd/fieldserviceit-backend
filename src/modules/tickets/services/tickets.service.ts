@@ -41,6 +41,17 @@ export class TicketsService {
     }
   }
 
+  private isGlobalTech(user: any) {
+    return user?.role === 'GLOBAL_TECH';
+  }
+
+  private applyGlobalTechTicketScope(where: any) {
+    where.OR = [
+      { companyId: null },
+      { createdBy: { userType: 'PUBLIC' } },
+    ];
+  }
+
   private async nextTicketNumber(prefix: string, startingCount: number) {
     let next = startingCount + 1;
     for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -122,6 +133,8 @@ export class TicketsService {
 
     if (user.role === 'SUPER_ADMIN' && !user.companyId) {
       // Global super admin view: no tenant selected means all tickets, including public/free users.
+    } else if (this.isGlobalTech(user)) {
+      this.applyGlobalTechTicketScope(where);
     } else if (user.userType === 'PUBLIC') {
       where.createdById = user.id;
     } else {
@@ -160,6 +173,8 @@ export class TicketsService {
 
     if (user.role === 'SUPER_ADMIN' && !user.companyId) {
       // Global super admin detail view.
+    } else if (this.isGlobalTech(user)) {
+      this.applyGlobalTechTicketScope(where);
     } else if (user.userType === 'PUBLIC') {
       where.createdById = user.id;
     } else {

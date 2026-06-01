@@ -17,8 +17,13 @@ export class TenantGuard implements CanActivate {
       throw new ForbiddenException('Authentication required');
     }
 
-    if (user.role === 'SUPER_ADMIN') {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'GLOBAL_TECH') {
       const companyContext = this.getCompanyContextHeader(request.headers);
+      if (user.role === 'GLOBAL_TECH') {
+        request.companyId = null;
+        return true;
+      }
+
       if (!companyContext) {
         request.companyId = null;
         return true;

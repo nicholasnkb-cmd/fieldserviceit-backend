@@ -6,6 +6,7 @@ const BCRYPT_ROUNDS = 12;
 
 enum UserRole {
   SUPER_ADMIN = 'SUPER_ADMIN',
+  GLOBAL_TECH = 'GLOBAL_TECH',
   TENANT_ADMIN = 'TENANT_ADMIN',
   TECHNICIAN = 'TECHNICIAN',
   CLIENT = 'CLIENT',
@@ -32,20 +33,24 @@ export class UsersService {
     });
   }
 
-  async findAll(companyId: string, query: { page?: number; limit?: number }) {
+  async findAll(companyId: string | null, query: { page?: number; limit?: number }, currentUser?: { role?: string }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 25;
     const skip = (page - 1) * limit;
 
+    const where = currentUser?.role === UserRole.GLOBAL_TECH
+      ? { role: UserRole.GLOBAL_TECH, deletedAt: null }
+      : { companyId, deletedAt: null };
+
     const [data, total] = await Promise.all([
       this.prisma.user.findMany({
-        where: { companyId, deletedAt: null },
+        where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
         select: { id: true, email: true, firstName: true, lastName: true, role: true, isActive: true, lastLoginAt: true, createdAt: true },
       }),
-      this.prisma.user.count({ where: { companyId, deletedAt: null } }),
+      this.prisma.user.count({ where }),
     ]);
 
     return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
@@ -110,7 +115,7 @@ export class UsersService {
     return { removed: true };
   }
 
-  async findOne(id: string, companyId: string) {
+  async findOne(id: string, companyId: string | null) {
     const user = await this.prisma.user.findFirst({
       where: { id, companyId, deletedAt: null },
       select: { id: true, email: true, firstName: true, lastName: true, role: true, phone: true, avatarUrl: true, isActive: true, lastLoginAt: true, createdAt: true },
@@ -120,7 +125,7 @@ export class UsersService {
     return user;
   }
 
-  async update(id: string, dto: { firstName?: string; lastName?: string; phone?: string }, companyId: string) {
+  async update(id: string, dto: { firstName?: string; lastName?: string; phone?: string }, companyId: string | null) {
     await this.findOne(id, companyId);
     return this.prisma.user.update({
       where: { id },
@@ -151,7 +156,7 @@ export class UsersService {
     return { message: 'Password changed successfully' };
   }
 
-  async remove(id: string, companyId: string) {
+  async remove(id: string, companyId: string | null) {
     await this.findOne(id, companyId);
     return this.prisma.user.update({
       where: { id },

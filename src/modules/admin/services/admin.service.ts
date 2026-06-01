@@ -5,7 +5,8 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 
 const BCRYPT_ROUNDS = 12;
-const VALID_ROLES = ['SUPER_ADMIN', 'TENANT_ADMIN', 'TECHNICIAN', 'CLIENT', 'READ_ONLY'];
+const VALID_ROLES = ['SUPER_ADMIN', 'GLOBAL_TECH', 'TENANT_ADMIN', 'TECHNICIAN', 'CLIENT', 'READ_ONLY'];
+const GLOBAL_ROLES = ['SUPER_ADMIN', 'GLOBAL_TECH'];
 const FEATURE_KEYS = ['tickets', 'dispatch', 'assets', 'network', 'rmmIntegration', 'aiAgent', 'reporting', 'workflows', 'billing', 'settings', 'auditLogs'];
 
 @Injectable()
@@ -204,6 +205,7 @@ export class AdminService {
   private getRoleDescription(role: string): string {
     const descriptions: Record<string, string> = {
       SUPER_ADMIN: 'Full system access across all tenants',
+      GLOBAL_TECH: 'Platform technician for free and starter individual tickets',
       TENANT_ADMIN: 'Administrator for a single company/tenant',
       TECHNICIAN: 'Field service technician with dispatch access',
       CLIENT: 'Standard end user',
@@ -337,15 +339,19 @@ export class AdminService {
     };
   }
 
-  async createUser(dto: { email: string; password: string; firstName: string; lastName: string; role?: string; companyId: string }) {
+  async createUser(dto: { email: string; password: string; firstName: string; lastName: string; role?: string; companyId?: string }) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('Email already in use');
 
-    const company = await this.prisma.company.findUnique({ where: { id: dto.companyId } });
-    if (!company) throw new BadRequestException('Company not found');
-
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const role = dto.role && VALID_ROLES.includes(dto.role) ? dto.role : 'CLIENT';
+    const isGlobalRole = GLOBAL_ROLES.includes(role);
+
+    if (!isGlobalRole) {
+      if (!dto.companyId) throw new BadRequestException('Company is required for tenant users');
+      const company = await this.prisma.company.findUnique({ where: { id: dto.companyId } });
+      if (!company) throw new BadRequestException('Company not found');
+    }
 
     return this.prisma.user.create({
       data: {
@@ -355,7 +361,7 @@ export class AdminService {
         lastName: dto.lastName,
         role,
         userType: 'BUSINESS',
-        companyId: dto.companyId,
+        companyId: isGlobalRole ? null : dto.companyId,
       },
       select: { id: true, email: true, firstName: true, lastName: true, role: true, companyId: true },
     });
@@ -371,7 +377,7 @@ export class AdminService {
 
     return this.prisma.user.update({
       where: { id: userId },
-      data: { role },
+      data: { role, ...(GLOBAL_ROLES.includes(role) ? { companyId: null } : {}) },
       select: { id: true, email: true, firstName: true, lastName: true, role: true },
     });
   }
@@ -383,7 +389,10 @@ export class AdminService {
     const updateData: any = {};
     if (dto.firstName) updateData.firstName = dto.firstName;
     if (dto.lastName) updateData.lastName = dto.lastName;
-    if (dto.role && VALID_ROLES.includes(dto.role)) updateData.role = dto.role;
+    if (dto.role && VALID_ROLES.includes(dto.role)) {
+      updateData.role = dto.role;
+      if (GLOBAL_ROLES.includes(dto.role)) updateData.companyId = null;
+    }
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
     if (dto.companyId) {
       const company = await this.prisma.company.findUnique({ where: { id: dto.companyId } });
