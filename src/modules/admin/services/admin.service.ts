@@ -270,6 +270,73 @@ export class AdminService {
     return user;
   }
 
+  async listTickets(query: { page?: number; limit?: number; search?: string; status?: string; priority?: string; companyId?: string }) {
+    const page = Math.max(Number(query.page) || 1, 1);
+    const limit = Math.min(Math.max(Number(query.limit) || 25, 1), 100);
+    const skip = (page - 1) * limit;
+    const where = ['t.deletedAt IS NULL'];
+    const values: any[] = [];
+
+    if (query.companyId) {
+      where.push('t.companyId = ?');
+      values.push(query.companyId);
+    }
+    if (query.status) {
+      where.push('t.status = ?');
+      values.push(query.status);
+    }
+    if (query.priority) {
+      where.push('t.priority = ?');
+      values.push(query.priority);
+    }
+    if (query.search) {
+      where.push('(t.title LIKE ? OR t.ticketNumber LIKE ? OR t.description LIKE ? OR t.contactName LIKE ? OR t.contactEmail LIKE ?)');
+      const term = `%${query.search}%`;
+      values.push(term, term, term, term, term);
+    }
+
+    const whereSql = where.join(' AND ');
+    const [data, totalRows] = await Promise.all([
+      this.prisma.query<any[]>(
+        `SELECT
+           t.id, t.ticketNumber, t.title, t.status, t.priority, t.category, t.contactName, t.contactEmail,
+           t.companyId, t.createdById, t.assignedToId, t.createdAt, t.updatedAt,
+           c.name as companyName,
+           creator.firstName as createdByFirstName, creator.lastName as createdByLastName,
+           assignee.firstName as assignedToFirstName, assignee.lastName as assignedToLastName
+         FROM Ticket t
+         LEFT JOIN Company c ON c.id = t.companyId
+         LEFT JOIN User creator ON creator.id = t.createdById
+         LEFT JOIN User assignee ON assignee.id = t.assignedToId
+         WHERE ${whereSql}
+         ORDER BY t.createdAt DESC
+         LIMIT ? OFFSET ?`,
+        [...values, limit, skip],
+      ),
+      this.prisma.query<any[]>(`SELECT COUNT(*) as count FROM Ticket t WHERE ${whereSql}`, values),
+    ]);
+
+    return {
+      data: data.map((ticket) => ({
+        id: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        title: ticket.title,
+        status: ticket.status,
+        priority: ticket.priority,
+        category: ticket.category,
+        contactName: ticket.contactName,
+        contactEmail: ticket.contactEmail,
+        companyId: ticket.companyId,
+        createdAt: ticket.createdAt,
+        updatedAt: ticket.updatedAt,
+        company: ticket.companyId ? { id: ticket.companyId, name: ticket.companyName || 'Unknown company' } : null,
+        createdBy: ticket.createdById ? { id: ticket.createdById, firstName: ticket.createdByFirstName, lastName: ticket.createdByLastName } : null,
+        assignedTo: ticket.assignedToId ? { id: ticket.assignedToId, firstName: ticket.assignedToFirstName, lastName: ticket.assignedToLastName } : null,
+      })),
+      meta: { page, limit, total: Number(totalRows[0]?.count || 0), totalPages: Math.ceil(Number(totalRows[0]?.count || 0) / limit) },
+    };
+  }
+
   async createUser(dto: { email: string; password: string; firstName: string; lastName: string; role?: string; companyId: string }) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('Email already in use');

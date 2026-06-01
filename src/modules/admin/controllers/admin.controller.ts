@@ -105,6 +105,12 @@ export class AdminController {
     return this.adminService.listUsers(query);
   }
 
+  @Get('tickets')
+  @Roles('SUPER_ADMIN')
+  listTickets(@Query() query: PaginationQueryDto & { status?: string; priority?: string }) {
+    return this.adminService.listTickets(query);
+  }
+
   @Get('users/:id')
   @Roles('SUPER_ADMIN')
   getUser(@Param('id') id: string) {
