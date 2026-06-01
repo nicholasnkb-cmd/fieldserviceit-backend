@@ -212,7 +212,7 @@ export class AdminService {
     return descriptions[role] || '';
   }
 
-  async listUsers(query: { page?: number; limit?: number; search?: string; role?: string; userType?: string }) {
+  async listUsers(query: { page?: number; limit?: number; search?: string; role?: string; userType?: string; companyId?: string }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 25;
     const skip = (page - 1) * limit;
@@ -228,6 +228,7 @@ export class AdminService {
     }
     if (query.role) where.role = query.role;
     if (query.userType) where.userType = query.userType;
+    if (query.companyId) where.companyId = query.companyId;
 
     const [data, total] = await Promise.all([
       this.prisma.user.findMany({

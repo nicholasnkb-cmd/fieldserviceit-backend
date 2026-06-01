@@ -176,4 +176,29 @@ describe('TicketsService', () => {
       expect(result.ticketNumber).toBe('TKT-PUB-00002');
     });
   });
+
+  describe('findAll', () => {
+    it('should let global SUPER_ADMIN list all tickets without a company filter', async () => {
+      mockPrisma.ticket.findMany = jest.fn().mockResolvedValue([]);
+      mockPrisma.ticket.count.mockResolvedValue(0);
+
+      await service.findAll({ id: 'super-1', role: 'SUPER_ADMIN', userType: 'BUSINESS', companyId: null }, {});
+
+      expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { deletedAt: null },
+      }));
+      expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: { deletedAt: null } });
+    });
+
+    it('should keep public users scoped to their own tickets', async () => {
+      mockPrisma.ticket.findMany = jest.fn().mockResolvedValue([]);
+      mockPrisma.ticket.count.mockResolvedValue(0);
+
+      await service.findAll({ id: 'public-1', role: 'CLIENT', userType: 'PUBLIC', companyId: null }, {});
+
+      expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { deletedAt: null, createdById: 'public-1' },
+      }));
+    });
+  });
 });
