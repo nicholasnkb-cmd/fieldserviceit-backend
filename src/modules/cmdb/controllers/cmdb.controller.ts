@@ -9,6 +9,9 @@ import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
 import { CreateAssetDto } from '../dto/create-asset.dto';
 import { UpdateAssetDto } from '../dto/update-asset.dto';
+import { CreateEnrollmentTokenDto } from '../dto/create-enrollment-token.dto';
+import { CreateNetworkCredentialDto } from '../dto/create-network-credential.dto';
+import { RotateNetworkCredentialDto } from '../dto/rotate-network-credential.dto';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
@@ -39,7 +42,7 @@ export class CmdbController {
   }
 
   @Post('mdm/enrollment-tokens')
-  createEnrollmentToken(@Body() dto: Record<string, any>, @CurrentUser() user: CurrentUserType) {
+  createEnrollmentToken(@Body() dto: CreateEnrollmentTokenDto, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.createEnrollmentToken(user.companyId, dto);
   }
@@ -113,7 +116,7 @@ export class CmdbController {
 
   @Post('network/credentials')
   @RequirePermissions('network.credentials.manage')
-  createNetworkCredential(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
+  createNetworkCredential(@Body() body: CreateNetworkCredentialDto, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.createNetworkCredential(user.companyId, body, user.id);
   }
@@ -127,7 +130,7 @@ export class CmdbController {
 
   @Post('network/credentials/:credentialId/rotate')
   @RequirePermissions('network.credentials.manage')
-  rotateNetworkCredential(@Param('credentialId') credentialId: string, @Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
+  rotateNetworkCredential(@Param('credentialId') credentialId: string, @Body() body: RotateNetworkCredentialDto, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.rotateNetworkCredential(credentialId, user.companyId, body, user.id);
   }

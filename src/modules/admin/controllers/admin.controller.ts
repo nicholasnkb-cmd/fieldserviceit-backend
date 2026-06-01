@@ -8,6 +8,11 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
 import { UpdatePlanDto } from '../dto/update-plan.dto';
+import { UpdateUserDto } from '../dto/update-user.dto';
+import { UpdateCompanyDto } from '../dto/update-company.dto';
+import { UpdateCompanySettingsDto } from '../dto/update-company-settings.dto';
+import { UpdateFeatureOverridesDto } from '../dto/update-feature-overrides.dto';
+import { UpdateUserFeatureControlsDto } from '../dto/update-user-feature-controls.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, BusinessOnlyGuard, RolesGuard)
@@ -131,7 +136,7 @@ export class AdminController {
 
   @Patch('users/:id')
   @Roles('SUPER_ADMIN')
-  updateUser(@Param('id') id: string, @Body() dto: Record<string, any>) {
+  updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.adminService.updateUser(id, dto);
   }
 
@@ -143,7 +148,7 @@ export class AdminController {
 
   @Patch('users/:id/feature-controls')
   @Roles('SUPER_ADMIN')
-  updateUserFeatureControls(@Param('id') id: string, @Body() dto: Record<string, any>) {
+  updateUserFeatureControls(@Param('id') id: string, @Body() dto: UpdateUserFeatureControlsDto) {
     return this.adminService.updateUserFeatureControls(id, dto);
   }
 
@@ -173,13 +178,13 @@ export class AdminController {
 
   @Patch('companies/:id/settings')
   @Roles('SUPER_ADMIN')
-  updateManagedCompanySettings(@Param('id') id: string, @Body() dto: Record<string, any>) {
+  updateManagedCompanySettings(@Param('id') id: string, @Body() dto: UpdateCompanySettingsDto) {
     return this.adminService.updateCompanySettings(id, dto);
   }
 
   @Patch('companies/:id/feature-overrides')
   @Roles('SUPER_ADMIN')
-  updateCompanyFeatureOverrides(@Param('id') id: string, @Body() dto: Record<string, any>) {
+  updateCompanyFeatureOverrides(@Param('id') id: string, @Body() dto: UpdateFeatureOverridesDto) {
     return this.adminService.updateCompanyFeatureOverrides(id, dto);
   }
 
@@ -191,7 +196,7 @@ export class AdminController {
 
   @Patch('companies/:id')
   @Roles('SUPER_ADMIN')
-  updateCompany(@Param('id') id: string, @Body() dto: Record<string, any>) {
+  updateCompany(@Param('id') id: string, @Body() dto: UpdateCompanyDto) {
     return this.adminService.updateCompany(id, dto);
   }
 
@@ -293,7 +298,7 @@ export class AdminController {
 
   @Patch('company/settings')
   @Roles('TENANT_ADMIN')
-  updateCompanySettings(@Body() dto: Record<string, any>, @CurrentUser() user: CurrentUserType) {
+  updateCompanySettings(@Body() dto: UpdateCompanySettingsDto, @CurrentUser() user: CurrentUserType) {
     return this.adminService.updateCompanySettings(user.companyId, dto);
   }
 }

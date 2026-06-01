@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, OnApplicationShutdown, Logger, Optional } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, OnApplicationShutdown, Logger, Optional, BadRequestException } from '@nestjs/common';
 import { createPool, Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { MigrationsService } from './migrations/migrations.service';
 
@@ -2486,7 +2486,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   };
 
   private escapeColumn(col: string): string {
-    return `\`${col.replace(/`/g, '')}\``;
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(col)) {
+      throw new BadRequestException(`Invalid column name: ${col}`);
+    }
+    return `\`${col}\``;
   }
 
   private normalizeColumn(table: string, col: string): string {
