@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { UploadsService } from './uploads.service';
 
 jest.mock('crypto', () => ({
@@ -15,6 +18,7 @@ jest.mock('@aws-sdk/client-s3', () => ({
 
 describe('UploadsService', () => {
   let service: UploadsService;
+  let uploadDir: string;
 
   const mockFile: Express.Multer.File = {
     fieldname: 'file',
@@ -31,17 +35,28 @@ describe('UploadsService', () => {
 
   describe('local storage mode', () => {
     beforeEach(async () => {
+      uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fsit-uploads-'));
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           UploadsService,
           {
             provide: ConfigService,
-            useValue: { get: jest.fn().mockReturnValue('local') },
+            useValue: {
+              get: jest.fn((key: string, defaultValue?: any) => {
+                if (key === 'STORAGE_TYPE') return 'local';
+                if (key === 'UPLOAD_DIR') return uploadDir;
+                return defaultValue;
+              }),
+            },
           },
         ],
       }).compile();
 
       service = module.get<UploadsService>(UploadsService);
+    });
+
+    afterEach(() => {
+      if (uploadDir) fs.rmSync(uploadDir, { recursive: true, force: true });
     });
 
     it('should be defined', () => {

@@ -16,7 +16,7 @@ export class AuditLogInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap((result) => {
         if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && user) {
-          const auditCompanyId = companyId || user.companyId;
+          const auditCompanyId = companyId || user.companyId || result?.companyId || result?.data?.companyId;
           if (!auditCompanyId) return;
           this.auditLogService.create({
             companyId: auditCompanyId,

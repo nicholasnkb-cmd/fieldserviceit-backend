@@ -61,12 +61,13 @@ function scanForKnownMalwareMarkers(buffer: Buffer): void {
 @Injectable()
 export class UploadsService {
   private readonly logger = new Logger(UploadsService.name);
-  private readonly uploadDir = path.join(process.cwd(), 'uploads');
+  private readonly uploadDir: string;
   private readonly storageType: string;
   private s3Client: S3Client | null = null;
   private s3Bucket: string = '';
 
   constructor(private config: ConfigService) {
+    this.uploadDir = this.config.get('UPLOAD_DIR', path.join(process.cwd(), 'uploads'));
     this.storageType = this.config.get('STORAGE_TYPE', 'local');
     if (this.storageType === 's3') {
       this.s3Client = getS3Client(this.config);
