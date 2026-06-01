@@ -27,6 +27,10 @@ describe('TicketsService', () => {
 
   beforeEach(() => {
     mockPrisma = {
+      user: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
       ticket: {
         count: jest.fn(),
         findFirst: jest.fn(),
@@ -123,6 +127,35 @@ describe('TicketsService', () => {
 
       expect(mockUsageService.incrementUsage).not.toHaveBeenCalled();
       expect(mockGateway.notifyTicketUpdate).not.toHaveBeenCalled();
+      expect(result.ticketNumber).toBe('TKT-PUB-00001');
+    });
+
+    it('should create a public requester when submitting an unauthenticated ticket', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({ id: 'public-user-1' });
+      mockPrisma.ticket.count.mockResolvedValue(0);
+      mockPrisma.ticket.findFirst.mockResolvedValue(null);
+      mockPrisma.ticket.create.mockImplementation(async ({ data }: any) => ({
+        id: 'ticket-public-submit',
+        ticketNumber: data.ticketNumber,
+        companyId: data.companyId,
+        createdById: data.createdById,
+      }));
+
+      const result = await service.createPublic(validDto as any);
+
+      expect(mockPrisma.user.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          email: 'john@example.com',
+          userType: 'PUBLIC',
+        }),
+      }));
+      expect(mockPrisma.ticket.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          companyId: null,
+          createdById: 'public-user-1',
+        }),
+      }));
       expect(result.ticketNumber).toBe('TKT-PUB-00001');
     });
 

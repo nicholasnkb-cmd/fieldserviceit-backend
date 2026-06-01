@@ -16,6 +16,7 @@ import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { PrismaService } from '../../../database/prisma.service';
 import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
+import { Public } from '../../../common/decorators/public.decorator';
 
 @Controller('tickets')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
@@ -47,8 +48,12 @@ export class TicketsController {
     return ticket;
   }
 
+  @Public()
   @Post()
-  create(@Body() dto: CreateTicketDto, @CurrentUser() user: CurrentUserType) {
+  create(@Body() dto: CreateTicketDto, @CurrentUser() user?: CurrentUserType) {
+    if (!user) {
+      return this.ticketsService.createPublic(dto);
+    }
     return this.ticketsService.create(dto, user.companyId, user.id, user.userType);
   }
 
@@ -89,6 +94,14 @@ export class TicketsController {
     const columns = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ON_HOLD', 'RESOLVED', 'CLOSED'];
     const board = columns.map((s) => ({ status: s, tickets: tickets.filter((t: any) => t.status === s) }));
     return { columns: board };
+  }
+
+  @Get('templates/list')
+  async listTemplates(@CurrentUser() user: CurrentUserType) {
+    return this.prisma.ticketTemplate.findMany({
+      where: { companyId: user.companyId, isActive: true },
+      orderBy: { name: 'asc' },
+    });
   }
 
   @Get(':id')
@@ -191,14 +204,6 @@ export class TicketsController {
       } catch { results.push({ id, success: false }); }
     }
     return { results };
-  }
-
-  @Get('templates/list')
-  async listTemplates(@CurrentUser() user: CurrentUserType) {
-    return this.prisma.ticketTemplate.findMany({
-      where: { companyId: user.companyId, isActive: true },
-      orderBy: { name: 'asc' },
-    });
   }
 
   @BusinessOnly()

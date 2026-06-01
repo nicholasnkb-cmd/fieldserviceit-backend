@@ -9,13 +9,22 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     super();
   }
 
-  canActivate(context: ExecutionContext) {
+  async canActivate(context: ExecutionContext) {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    if (isPublic) return true;
-    return super.canActivate(context);
+    if (isPublic) {
+      const request = context.switchToHttp().getRequest();
+      if (!this.hasAuthCredentials(request)) return true;
+
+      try {
+        return await (super.canActivate(context) as boolean | Promise<boolean>);
+      } catch {
+        return true;
+      }
+    }
+    return await (super.canActivate(context) as boolean | Promise<boolean>);
   }
 
   handleRequest(err: any, user: any) {
@@ -23,5 +32,14 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw err || new UnauthorizedException();
     }
     return user;
+  }
+
+  private hasAuthCredentials(request: any): boolean {
+    const authorization = request?.headers?.authorization;
+    const cookie = request?.headers?.cookie;
+    return Boolean(
+      (typeof authorization === 'string' && authorization.trim().length > 0) ||
+      (typeof cookie === 'string' && cookie.includes('fsit_access='))
+    );
   }
 }

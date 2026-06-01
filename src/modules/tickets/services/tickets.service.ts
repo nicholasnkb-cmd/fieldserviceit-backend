@@ -124,6 +124,26 @@ export class TicketsService {
     return ticket;
   }
 
+  async createPublic(dto: CreateTicketDto) {
+    const email = dto.contactEmail.toLowerCase().trim();
+    let user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          firstName: dto.contactName.trim() || email,
+          lastName: 'Requester',
+          phone: dto.contactPhone,
+          role: 'CLIENT',
+          userType: 'PUBLIC',
+          emailVerified: true,
+        },
+      });
+    }
+
+    return this.create(dto, null, user.id, 'PUBLIC');
+  }
+
   async findAll(user: any, query: { page?: number; limit?: number; status?: string; search?: string }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 25;
