@@ -30,7 +30,9 @@ export class TicketsController {
 
   private async assertTicketAccess(id: string, user: CurrentUserType) {
     const where: any = { id, deletedAt: null };
-    if (user.userType === 'PUBLIC') {
+    if (user.role === 'SUPER_ADMIN' && !user.companyId) {
+      // Global super admin can access all tickets, including public/free-user tickets.
+    } else if (user.userType === 'PUBLIC') {
       where.createdById = user.id;
     } else {
       where.companyId = user.companyId;
@@ -60,8 +62,14 @@ export class TicketsController {
 
   @Get('board')
   async getBoard(@CurrentUser() user: CurrentUserType) {
+    const where: any = { deletedAt: null };
+    if (user.role === 'SUPER_ADMIN' && !user.companyId) {
+      // Global super admin board.
+    } else {
+      where.companyId = user.companyId;
+    }
     const tickets = await this.prisma.ticket.findMany({
-      where: { companyId: user.companyId, deletedAt: null },
+      where,
       orderBy: { updatedAt: 'desc' },
       take: 200,
       include: {
@@ -81,25 +89,25 @@ export class TicketsController {
   @BusinessOnly()
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateTicketDto, @CurrentUser() user: CurrentUserType) {
-    return this.ticketsService.update(id, dto, user.companyId, user.id);
+    return this.ticketsService.update(id, dto, user, user.id);
   }
 
   @BusinessOnly()
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
-    return this.ticketsService.remove(id, user.companyId);
+    return this.ticketsService.remove(id, user);
   }
 
   @BusinessOnly()
   @Post(':id/assign')
   assign(@Param('id') id: string, @Body('userId') userId: string, @CurrentUser() user: CurrentUserType) {
-    return this.ticketsService.assign(id, userId, user.companyId, user.id);
+    return this.ticketsService.assign(id, userId, user, user.id);
   }
 
   @BusinessOnly()
   @Post(':id/resolve')
   resolve(@Param('id') id: string, @Body('resolution') resolution: string, @CurrentUser() user: CurrentUserType) {
-    return this.ticketsService.resolve(id, resolution, user.companyId, user.id);
+    return this.ticketsService.resolve(id, resolution, user, user.id);
   }
 
   @Post(':id/comments')
@@ -117,8 +125,7 @@ export class TicketsController {
   @BusinessOnly()
   @Post(':id/attachments')
   async addAttachment(@Param('id') id: string, @Body() body: { fileUrl: string; fileName: string; fileSize: number; mimeType: string }, @CurrentUser() user: CurrentUserType) {
-    const ticket = await this.prisma.ticket.findFirst({ where: { id, companyId: user.companyId, deletedAt: null }, select: { id: true } });
-    if (!ticket) throw new NotFoundException('Ticket not found');
+    await this.assertTicketAccess(id, user);
     const attachment = await this.prisma.ticketAttachment.create({
       data: { ticketId: id, fileUrl: body.fileUrl, fileName: body.fileName, fileSize: body.fileSize, mimeType: body.mimeType, uploadedById: user.id },
       include: { uploadedBy: { select: { id: true, firstName: true, lastName: true } } },
@@ -130,12 +137,8 @@ export class TicketsController {
   @BusinessOnly()
   @Delete(':id/attachments/:attachmentId')
   async removeAttachment(@Param('id') id: string, @Param('attachmentId') attachmentId: string, @CurrentUser() user: CurrentUserType) {
-    const ticket = await this.prisma.ticket.findFirst({ where: { id, companyId: user.companyId, deletedAt: null }, select: { id: true } });
-    if (!ticket) throw new NotFoundException('Ticket not found');
-    const rows = await this.prisma.query<any[]>(
-      `SELECT ta.id FROM TicketAttachment ta INNER JOIN Ticket t ON t.id = ta.ticketId WHERE ta.id = ? AND ta.ticketId = ? AND t.companyId = ? AND t.deletedAt IS NULL LIMIT 1`,
-      [attachmentId, id, user.companyId],
-    );
+    await this.assertTicketAccess(id, user);
+    const rows = await this.prisma.query<any[]>(`SELECT id FROM TicketAttachment WHERE id = ? AND ticketId = ? LIMIT 1`, [attachmentId, id]);
     if (!rows[0]) throw new NotFoundException('Attachment not found');
     await this.prisma.ticketAttachment.delete({ where: { id: attachmentId } });
     return { success: true };
@@ -147,7 +150,7 @@ export class TicketsController {
     const results = [];
     for (const id of body.ids) {
       try {
-        const r = await this.ticketsService.update(id, { status: body.status }, user.companyId, user.id);
+        await this.ticketsService.update(id, { status: body.status }, user, user.id);
         results.push({ id, success: true });
       } catch { results.push({ id, success: false }); }
     }
@@ -160,7 +163,7 @@ export class TicketsController {
     const results = [];
     for (const id of body.ids) {
       try {
-        await this.ticketsService.assign(id, body.userId, user.companyId, user.id);
+        await this.ticketsService.assign(id, body.userId, user, user.id);
         results.push({ id, success: true });
       } catch { results.push({ id, success: false }); }
     }
@@ -173,7 +176,7 @@ export class TicketsController {
     const results = [];
     for (const id of body.ids) {
       try {
-        await this.ticketsService.remove(id, user.companyId);
+        await this.ticketsService.remove(id, user);
         results.push({ id, success: true });
       } catch { results.push({ id, success: false }); }
     }

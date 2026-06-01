@@ -551,9 +551,63 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         this.logger.warn(`Table creation skipped: ${err?.message || err}`);
       }
     }
+    await this.ensureCompanyCoreColumns();
+    await this.ensureTicketCoreColumns();
+    await this.ensureAuditLogCoreColumns();
     await this.ensureUserProfileColumns();
+    await this.ensureUserCoreColumns();
     await this.ensureAssetMdmColumns();
     await this.ensureRmmColumns();
+  }
+
+  private async ensureCompanyCoreColumns() {
+    const columns: Array<{ name: string; definition: string }> = [
+      { name: 'domain', definition: 'VARCHAR(191)' },
+      { name: 'logo', definition: 'VARCHAR(191)' },
+      { name: 'settings', definition: 'TEXT' },
+      { name: 'isActive', definition: 'TINYINT(1) DEFAULT 1' },
+      { name: 'updatedAt', definition: 'DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)' },
+      { name: 'deletedAt', definition: 'DATETIME(3)' },
+      { name: 'branding', definition: 'TEXT' },
+      { name: 'inviteCode', definition: 'VARCHAR(191)' },
+      { name: 'inviteExpiresAt', definition: 'DATETIME(3)' },
+    ];
+    await this.ensureColumns('Company', columns);
+  }
+
+  private async ensureTicketCoreColumns() {
+    const columns: Array<{ name: string; definition: string }> = [
+      { name: 'contactName', definition: 'VARCHAR(191)' },
+      { name: 'contactEmail', definition: 'VARCHAR(191)' },
+      { name: 'contactPhone', definition: 'VARCHAR(191)' },
+      { name: 'category', definition: 'VARCHAR(191)' },
+      { name: 'subcategory', definition: 'VARCHAR(191)' },
+      { name: 'location', definition: 'VARCHAR(191)' },
+      { name: 'latitude', definition: 'FLOAT' },
+      { name: 'longitude', definition: 'FLOAT' },
+      { name: 'type', definition: "VARCHAR(191) DEFAULT 'INCIDENT'" },
+      { name: 'assignedToId', definition: 'VARCHAR(191)' },
+      { name: 'assetId', definition: 'VARCHAR(191)' },
+      { name: 'slaId', definition: 'VARCHAR(191)' },
+      { name: 'trackingToken', definition: 'VARCHAR(191)' },
+      { name: 'onHoldReason', definition: 'TEXT' },
+      { name: 'resolution', definition: 'TEXT' },
+      { name: 'resolvedAt', definition: 'DATETIME(3)' },
+      { name: 'resolvedById', definition: 'VARCHAR(191)' },
+      { name: 'updatedAt', definition: 'DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)' },
+      { name: 'deletedAt', definition: 'DATETIME(3)' },
+    ];
+    await this.ensureColumns('Ticket', columns);
+  }
+
+  private async ensureAuditLogCoreColumns() {
+    const columns: Array<{ name: string; definition: string }> = [
+      { name: 'resourceId', definition: 'VARCHAR(191)' },
+      { name: 'diff', definition: 'TEXT' },
+      { name: 'ip', definition: 'VARCHAR(191)' },
+      { name: 'userAgent', definition: 'VARCHAR(191)' },
+    ];
+    await this.ensureColumns('AuditLog', columns);
   }
 
   private async ensureRmmColumns() {
@@ -594,6 +648,37 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       } catch (err: any) {
         if (!String(err?.message || '').includes('Duplicate column')) {
           this.logger.warn(`User column skipped (${column.name}): ${err?.message || err}`);
+        }
+      }
+    }
+  }
+
+  private async ensureUserCoreColumns() {
+    const columns: Array<{ name: string; definition: string }> = [
+      { name: 'role', definition: "VARCHAR(191) DEFAULT 'CLIENT'" },
+      { name: 'userType', definition: "VARCHAR(191) DEFAULT 'BUSINESS'" },
+      { name: 'companyId', definition: 'VARCHAR(191)' },
+      { name: 'isActive', definition: 'TINYINT(1) DEFAULT 1' },
+      { name: 'emailVerified', definition: 'TINYINT(1) DEFAULT 0' },
+      { name: 'lastLoginAt', definition: 'DATETIME(3)' },
+      { name: 'resetToken', definition: 'VARCHAR(191)' },
+      { name: 'resetTokenExpiresAt', definition: 'DATETIME(3)' },
+      { name: 'emailVerificationToken', definition: 'VARCHAR(191)' },
+      { name: 'emailVerificationExpiresAt', definition: 'DATETIME(3)' },
+      { name: 'updatedAt', definition: 'DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3)' },
+      { name: 'deletedAt', definition: 'DATETIME(3)' },
+    ];
+    await this.ensureColumns('User', columns);
+  }
+
+  private async ensureColumns(table: string, columns: Array<{ name: string; definition: string }>) {
+    for (const column of columns) {
+      try {
+        await this.execute(`ALTER TABLE ${this.escapeColumn(table)} ADD COLUMN ${this.escapeColumn(column.name)} ${column.definition}`);
+        this.logger.log(`${table} column ensured: ${column.name}`);
+      } catch (err: any) {
+        if (!String(err?.message || '').includes('Duplicate column')) {
+          this.logger.warn(`${table} column skipped (${column.name}): ${err?.message || err}`);
         }
       }
     }

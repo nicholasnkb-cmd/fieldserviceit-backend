@@ -191,8 +191,9 @@ export class TicketsService {
     return ticket;
   }
 
-  async update(id: string, dto: UpdateTicketDto, companyId: string, userId?: string) {
-    const ticket = await this.findOne(id, { companyId, userType: 'BUSINESS' });
+  async update(id: string, dto: UpdateTicketDto, user: any, userId?: string) {
+    const ticket = await this.findOne(id, user);
+    const companyId = ticket.companyId;
     const newStatus = dto.status;
     if (newStatus && newStatus !== ticket.status) {
       this.validateTransition(ticket.status, newStatus);
@@ -249,10 +250,9 @@ export class TicketsService {
       await this.timeline.addEntry(id, userId!, 'STATUS_CHANGED', `Status changed from ${ticket.status} to ${newStatus}`, ticket.status, newStatus);
       if (newStatus === 'ON_HOLD') {
         await this.timeline.addEntry(id, userId!, 'HOLD', dto.onHoldReason || 'Ticket placed on hold');
-        const holdActor = await this.prisma.user.findUnique({ where: { id: userId } });
         if (ticket.assignedToId) {
           const assignedUser = await this.prisma.user.findUnique({ where: { id: ticket.assignedToId } });
-          if (assignedUser) {
+          if (assignedUser && companyId) {
             await this.notificationsService.create({ userId: assignedUser.id, companyId, title: `Ticket ${ticket.ticketNumber} on hold`, body: dto.onHoldReason, type: 'info', link: `/tickets/${id}` });
             if (assignedUser.email) {
               this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} on hold`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been placed on hold.</p><p>Reason: ${sanitizeHtml(dto.onHoldReason || '')}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
@@ -262,7 +262,7 @@ export class TicketsService {
       }
       if (newStatus === 'RESOLVED') {
         await this.timeline.addEntry(id, userId!, 'RESOLVED', dto.resolution || 'Ticket resolved', ticket.status, 'RESOLVED');
-        if (ticket.createdById) {
+        if (ticket.createdById && companyId) {
           await this.notificationsService.create({ userId: ticket.createdById, companyId, title: `Ticket ${ticket.ticketNumber} resolved`, body: dto.resolution || 'Ticket has been resolved', type: 'success', link: `/tickets/${id}` });
           if ((ticket as any).contactEmail) {
             this.emailService.sendNotificationEmail((ticket as any).contactEmail, `Ticket ${ticket.ticketNumber} resolved`, `<p>Your ticket <strong>${ticket.ticketNumber}</strong> has been resolved.</p><p>Resolution: ${sanitizeHtml(dto.resolution || 'N/A')}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
@@ -274,7 +274,7 @@ export class TicketsService {
     if (dto.assignedToId && dto.assignedToId !== ticket.assignedToId) {
       await this.timeline.addEntry(id, userId!, 'ASSIGNED', `Assigned to user ${dto.assignedToId}`, ticket.assignedToId || 'unassigned', dto.assignedToId);
       const assignedUser = await this.prisma.user.findUnique({ where: { id: dto.assignedToId } });
-      if (assignedUser) {
+      if (assignedUser && companyId) {
         await this.notificationsService.create({ userId: assignedUser.id, companyId, title: `Ticket ${ticket.ticketNumber} assigned to you`, body: ticket.title, type: 'info', link: `/tickets/${id}` });
         if (assignedUser.email) {
           this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} assigned to you`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been assigned to you.</p><p>Title: ${sanitizeHtml(ticket.title)}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
@@ -282,22 +282,23 @@ export class TicketsService {
       }
     }
 
-    this.gateway.notifyTicketUpdate(companyId, 'ticket:updated', updated);
+    if (companyId) this.gateway.notifyTicketUpdate(companyId, 'ticket:updated', updated);
     return updated;
   }
 
-  async remove(id: string, companyId: string) {
-    await this.findOne(id, { companyId, userType: 'BUSINESS' });
+  async remove(id: string, user: any) {
+    const ticket = await this.findOne(id, user);
     const deleted = await this.prisma.ticket.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
-    this.gateway.notifyTicketUpdate(companyId, 'ticket:deleted', { id });
+    if (ticket.companyId) this.gateway.notifyTicketUpdate(ticket.companyId, 'ticket:deleted', { id });
     return deleted;
   }
 
-  async assign(id: string, targetUserId: string, companyId: string, actorUserId?: string) {
-    const ticket = await this.findOne(id, { companyId, userType: 'BUSINESS' });
+  async assign(id: string, targetUserId: string, user: any, actorUserId?: string) {
+    const ticket = await this.findOne(id, user);
+    const companyId = ticket.companyId;
     this.validateTransition(ticket.status, 'ASSIGNED');
     const updated = await this.prisma.ticket.update({
       where: { id },
@@ -308,18 +309,19 @@ export class TicketsService {
     });
     await this.timeline.addEntry(id, actorUserId || targetUserId, 'ASSIGNED', `Assigned to user`, ticket.assignedToId || 'unassigned', targetUserId);
     const assignedUser = await this.prisma.user.findUnique({ where: { id: targetUserId } });
-    if (assignedUser) {
+    if (assignedUser && companyId) {
       await this.notificationsService.create({ userId: assignedUser.id, companyId, title: `Ticket ${ticket.ticketNumber} assigned to you`, body: ticket.title, type: 'info', link: `/tickets/${id}` });
       if (assignedUser.email) {
         this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} assigned to you`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been assigned to you.</p><p>Title: ${sanitizeHtml(ticket.title)}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
       }
     }
-    this.gateway.notifyTicketUpdate(companyId, 'ticket:assigned', updated);
+    if (companyId) this.gateway.notifyTicketUpdate(companyId, 'ticket:assigned', updated);
     return updated;
   }
 
-  async resolve(id: string, resolution: string, companyId: string, userId?: string) {
-    const ticket = await this.findOne(id, { companyId, userType: 'BUSINESS' });
+  async resolve(id: string, resolution: string, user: any, userId?: string) {
+    const ticket = await this.findOne(id, user);
+    const companyId = ticket.companyId;
     this.validateTransition(ticket.status, 'RESOLVED');
     const updated = await this.prisma.ticket.update({
       where: { id },
@@ -329,13 +331,13 @@ export class TicketsService {
       },
     });
     await this.timeline.addEntry(id, userId!, 'RESOLVED', resolution || 'Ticket resolved', ticket.status, 'RESOLVED');
-    if (ticket.createdById) {
+    if (ticket.createdById && companyId) {
       await this.notificationsService.create({ userId: ticket.createdById, companyId, title: `Ticket ${ticket.ticketNumber} resolved`, body: resolution || 'Ticket has been resolved', type: 'success', link: `/tickets/${id}` });
       if ((ticket as any).contactEmail) {
         this.emailService.sendNotificationEmail((ticket as any).contactEmail, `Ticket ${ticket.ticketNumber} resolved`, `<p>Your ticket <strong>${ticket.ticketNumber}</strong> has been resolved.</p><p>Resolution: ${sanitizeHtml(resolution || 'N/A')}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
       }
     }
-    this.gateway.notifyTicketUpdate(companyId, 'ticket:resolved', updated);
+    if (companyId) this.gateway.notifyTicketUpdate(companyId, 'ticket:resolved', updated);
     return updated;
   }
 }
