@@ -161,9 +161,10 @@ export class TicketsController {
   @Delete(':id/attachments/:attachmentId')
   async removeAttachment(@Param('id') id: string, @Param('attachmentId') attachmentId: string, @CurrentUser() user: CurrentUserType) {
     await this.assertTicketAccess(id, user);
-    const rows = await this.prisma.query<any[]>(`SELECT id FROM TicketAttachment WHERE id = ? AND ticketId = ? LIMIT 1`, [attachmentId, id]);
+    const rows = await this.prisma.query<any[]>(`SELECT id, fileName FROM TicketAttachment WHERE id = ? AND ticketId = ? LIMIT 1`, [attachmentId, id]);
     if (!rows[0]) throw new NotFoundException('Attachment not found');
     await this.prisma.ticketAttachment.delete({ where: { id: attachmentId } });
+    await this.timelineService.addEntry(id, user.id, 'ATTACHMENT_REMOVED', `File removed: ${rows[0].fileName || attachmentId}`);
     return { success: true };
   }
 
