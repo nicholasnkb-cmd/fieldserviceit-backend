@@ -9,7 +9,7 @@
     "validate:network-vendors": "ts-node --transpile-only scripts/validate-network-vendors.ts",
     "smoke:prod": "node ../scripts/production-smoke.mjs",
     "migration:create": "ts-node --transpile-only scripts/create-migration.ts",
-    "start": "node dist/main.js",
+    "start": "bash start-hostinger.sh",
     "start:dev": "nest start --watch --builder swc",
     "start:prod": "node dist/main.js",
     "start:hostinger": "bash start-hostinger.sh",
