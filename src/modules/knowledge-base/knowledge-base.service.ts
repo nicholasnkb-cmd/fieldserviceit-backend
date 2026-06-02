@@ -8,6 +8,7 @@ const VISIBILITIES = ['INTERNAL', 'CUSTOMER', 'PUBLIC'];
 const ARTICLE_TYPES = ['ARTICLE', 'RUNBOOK', 'FAQ', 'TROUBLESHOOTING'];
 
 type ArticlePayload = {
+  companyId?: string;
   title?: string;
   summary?: string;
   content?: string;
@@ -27,21 +28,23 @@ export class KnowledgeBaseService {
   constructor(private db: DatabaseService) {}
 
   async summary(user: CurrentUser) {
-    const companyId = this.requireCompany(user);
+    const scope = this.scopeFor(user);
+    const whereSql = scope.companyId ? 'WHERE companyId = ?' : '';
+    const values = scope.companyId ? [scope.companyId] : [];
     const [statusRows, categoryRows, staleRows] = await Promise.all([
       this.db.query<any[]>(
-        `SELECT status, COUNT(*) as count FROM KbArticle WHERE companyId = ? GROUP BY status`,
-        [companyId],
+        `SELECT status, COUNT(*) as count FROM KbArticle ${whereSql} GROUP BY status`,
+        values,
       ),
       this.db.query<any[]>(
         `SELECT COALESCE(NULLIF(category, ''), 'Uncategorized') as category, COUNT(*) as count
-         FROM KbArticle WHERE companyId = ? GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized') ORDER BY count DESC`,
-        [companyId],
+         FROM KbArticle ${whereSql} GROUP BY COALESCE(NULLIF(category, ''), 'Uncategorized') ORDER BY count DESC`,
+        values,
       ),
       this.db.query<any[]>(
         `SELECT COUNT(*) as count FROM KbArticle
-         WHERE companyId = ? AND reviewDueAt IS NOT NULL AND reviewDueAt < NOW(3) AND status <> 'ARCHIVED'`,
-        [companyId],
+         WHERE ${scope.companyId ? 'companyId = ? AND ' : ''}reviewDueAt IS NOT NULL AND reviewDueAt < NOW(3) AND status <> 'ARCHIVED'`,
+        values,
       ),
     ]);
 
@@ -58,9 +61,13 @@ export class KnowledgeBaseService {
   }
 
   async findAll(user: CurrentUser, query: { search?: string; category?: string; status?: string; visibility?: string; aiEnabled?: string; limit?: string }) {
-    const companyId = this.requireCompany(user);
-    const clauses = ['a.companyId = ?'];
-    const values: any[] = [companyId];
+    const scope = this.scopeFor(user);
+    const clauses: string[] = [];
+    const values: any[] = [];
+    if (scope.companyId) {
+      clauses.push('a.companyId = ?');
+      values.push(scope.companyId);
+    }
 
     if (query.status) {
       clauses.push('a.status = ?');
@@ -87,11 +94,12 @@ export class KnowledgeBaseService {
     const limit = Math.min(Math.max(Number(query.limit) || 100, 1), 200);
     values.push(limit);
     const rows = await this.db.query<any[]>(
-      `SELECT a.*, u.firstName as ownerFirstName, u.lastName as ownerLastName, t.ticketNumber as sourceTicketNumber, t.title as sourceTicketTitle
+      `SELECT a.*, c.name as companyName, c.slug as companySlug, u.firstName as ownerFirstName, u.lastName as ownerLastName, t.ticketNumber as sourceTicketNumber, t.title as sourceTicketTitle
        FROM KbArticle a
+       LEFT JOIN Company c ON c.id = a.companyId
        LEFT JOIN User u ON u.id = a.ownerId
        LEFT JOIN Ticket t ON t.id = a.sourceTicketId
-       WHERE ${clauses.join(' AND ')}
+       ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
        ORDER BY a.updatedAt DESC, a.createdAt DESC
        LIMIT ?`,
       values,
@@ -106,7 +114,7 @@ export class KnowledgeBaseService {
   }
 
   async create(dto: ArticlePayload, user: CurrentUser) {
-    const companyId = this.requireCompany(user);
+    const companyId = this.resolveWriteCompany(user, dto.companyId);
     const data = this.normalizePayload(dto, true);
     const id = randomUUID();
     const now = new Date();
@@ -162,13 +170,16 @@ export class KnowledgeBaseService {
   }
 
   async createFromTicket(ticketId: string, user: CurrentUser) {
-    const companyId = this.requireCompany(user);
+    const scope = this.scopeFor(user);
+    const values: any[] = [ticketId];
+    const companyClause = scope.companyId ? 'AND companyId = ?' : '';
+    if (scope.companyId) values.push(scope.companyId);
     const rows = await this.db.query<any[]>(
-      `SELECT id, ticketNumber, title, description, category, subcategory, resolution
+      `SELECT id, companyId, ticketNumber, title, description, category, subcategory, resolution
        FROM Ticket
-       WHERE id = ? AND companyId = ? AND deletedAt IS NULL
+       WHERE id = ? ${companyClause} AND deletedAt IS NULL
        LIMIT 1`,
-      [ticketId, companyId],
+      values,
     );
     const ticket = rows[0];
     if (!ticket) throw new NotFoundException('Ticket not found');
@@ -192,19 +203,24 @@ export class KnowledgeBaseService {
       visibility: 'INTERNAL',
       articleType: 'ARTICLE',
       sourceTicketId: ticket.id,
+      companyId: ticket.companyId,
     }, user);
   }
 
   private async getArticle(id: string, user: CurrentUser) {
-    const companyId = this.requireCompany(user);
+    const scope = this.scopeFor(user);
+    const values: any[] = [id];
+    const companyClause = scope.companyId ? 'AND a.companyId = ?' : '';
+    if (scope.companyId) values.push(scope.companyId);
     const rows = await this.db.query<any[]>(
-      `SELECT a.*, u.firstName as ownerFirstName, u.lastName as ownerLastName, t.ticketNumber as sourceTicketNumber, t.title as sourceTicketTitle
+      `SELECT a.*, c.name as companyName, c.slug as companySlug, u.firstName as ownerFirstName, u.lastName as ownerLastName, t.ticketNumber as sourceTicketNumber, t.title as sourceTicketTitle
        FROM KbArticle a
+       LEFT JOIN Company c ON c.id = a.companyId
        LEFT JOIN User u ON u.id = a.ownerId
        LEFT JOIN Ticket t ON t.id = a.sourceTicketId
-       WHERE a.id = ? AND a.companyId = ?
+       WHERE a.id = ? ${companyClause}
        LIMIT 1`,
-      [id, companyId],
+      values,
     );
     if (!rows[0]) throw new NotFoundException('Knowledge article not found');
     return rows[0];
@@ -252,12 +268,20 @@ export class KnowledgeBaseService {
       tags: typeof row.tags === 'string' && row.tags ? row.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean) : [],
       owner: row.ownerId ? { id: row.ownerId, firstName: row.ownerFirstName, lastName: row.ownerLastName } : null,
       sourceTicket: row.sourceTicketId ? { id: row.sourceTicketId, ticketNumber: row.sourceTicketNumber, title: row.sourceTicketTitle } : null,
+      company: row.companyId ? { id: row.companyId, name: row.companyName || row.companySlug || null } : null,
     };
   }
 
-  private requireCompany(user: CurrentUser) {
-    if (!user.companyId) throw new ForbiddenException('Select a company context to manage the knowledge base');
-    return user.companyId;
+  private scopeFor(user: CurrentUser) {
+    if (user.companyId) return { companyId: user.companyId };
+    if (user.role === 'SUPER_ADMIN') return { companyId: null };
+    throw new ForbiddenException('Select a company context to manage the knowledge base');
+  }
+
+  private resolveWriteCompany(user: CurrentUser, requestedCompanyId?: string) {
+    if (user.companyId) return user.companyId;
+    if (user.role === 'SUPER_ADMIN' && requestedCompanyId) return requestedCompanyId;
+    throw new ForbiddenException('Select a company context before creating knowledge articles');
   }
 
   private escapeColumn(column: string) {
