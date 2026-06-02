@@ -546,6 +546,33 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  async listNetworkAlertRules(companyId: string) {
+    return this.prisma.query(
+      `SELECT r.*, a.name as assetName, a.hostname as assetHostname
+       FROM NetworkAlertRule r
+       LEFT JOIN Asset a ON a.id = r.assetId
+       WHERE r.companyId = ?
+       ORDER BY r.createdAt DESC
+       LIMIT 200`,
+      [companyId],
+    );
+  }
+
+  async createNetworkAlertRule(companyId: string, dto: any = {}) {
+    if (dto.assetId) await this.findOne(dto.assetId, companyId);
+    const data = this.normalizeAlertRule(dto);
+    const id = crypto.randomUUID();
+    const now = new Date();
+    await this.prisma.execute(
+      `INSERT INTO NetworkAlertRule
+       (id, companyId, assetId, name, metric, operator, threshold, durationSec, severity, enabled, notifyEmail, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, companyId, dto.assetId || null, data.name, data.metric, data.operator, data.threshold, data.durationSec, data.severity, data.enabled, data.notifyEmail, now, now],
+    );
+    const rows = await this.prisma.query<any[]>(`SELECT * FROM NetworkAlertRule WHERE id = ? LIMIT 1`, [id]);
+    return rows[0];
+  }
+
   async createAlertRule(assetId: string, companyId: string, dto: any = {}) {
     await this.findOne(assetId, companyId);
     const data = this.normalizeAlertRule(dto);
@@ -579,14 +606,40 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
   async listNetworkAlertEvents(companyId: string, status = 'ACTIVE') {
     const values: any[] = [companyId];
     let where = `companyId = ?`;
-    if (status) {
+    if (status && status.toUpperCase() !== 'ALL') {
       where += ` AND status = ?`;
       values.push(status.toUpperCase());
     }
     return this.prisma.query(
-      `SELECT * FROM NetworkAlertEvent WHERE ${where} ORDER BY triggeredAt DESC LIMIT 100`,
+      `SELECT e.*, a.name as assetName, a.hostname as assetHostname, r.severity, r.metric, r.operator, r.threshold, t.ticketNumber
+       FROM NetworkAlertEvent e
+       LEFT JOIN Asset a ON a.id = e.assetId
+       LEFT JOIN NetworkAlertRule r ON r.id = e.ruleId
+       LEFT JOIN Ticket t ON t.id = e.ticketId
+       WHERE ${where}
+       ORDER BY e.triggeredAt DESC
+       LIMIT 100`,
       values,
     );
+  }
+
+  async updateNetworkAlertEvent(companyId: string, eventId: string, status: string, actorId?: string) {
+    const normalized = String(status || '').toUpperCase();
+    if (!['ACTIVE', 'ACKNOWLEDGED', 'RESOLVED'].includes(normalized)) {
+      throw new BadRequestException('Invalid alert status');
+    }
+    const data: any = { status: normalized };
+    if (normalized === 'RESOLVED') data.resolvedAt = new Date();
+    if (normalized !== 'RESOLVED') data.resolvedAt = null;
+    const keys = Object.keys(data);
+    await this.prisma.execute(
+      `UPDATE NetworkAlertEvent SET ${keys.map((key) => `${key} = ?`).join(', ')} WHERE id = ? AND companyId = ?`,
+      [...keys.map((key) => data[key]), eventId, companyId],
+    );
+    await this.auditNetworkChange(companyId, actorId, `network.alert.${normalized.toLowerCase()}`, 'NetworkAlertEvent', eventId);
+    const rows = await this.prisma.query<any[]>(`SELECT * FROM NetworkAlertEvent WHERE id = ? AND companyId = ? LIMIT 1`, [eventId, companyId]);
+    if (!rows[0]) throw new NotFoundException('Alert event not found');
+    return rows[0];
   }
 
   async listMaintenanceWindows(companyId: string) {
@@ -1079,7 +1132,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     const created = [];
     for (const rule of matching) {
       const existing = await this.prisma.query<any[]>(
-        `SELECT * FROM NetworkAlertEvent WHERE assetId = ? AND companyId = ? AND ruleId = ? AND status = 'ACTIVE' LIMIT 1`,
+        `SELECT * FROM NetworkAlertEvent WHERE assetId = ? AND companyId = ? AND ruleId = ? AND status IN ('ACTIVE', 'ACKNOWLEDGED') LIMIT 1`,
         [assetId, companyId, rule.id],
       );
       if (existing[0]) {
@@ -1195,11 +1248,11 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
 
   private async resolveInactiveAlerts(assetId: string, companyId: string) {
     const active = await this.prisma.query<any[]>(
-      `SELECT * FROM NetworkAlertEvent WHERE assetId = ? AND companyId = ? AND status = 'ACTIVE'`,
+      `SELECT * FROM NetworkAlertEvent WHERE assetId = ? AND companyId = ? AND status IN ('ACTIVE', 'ACKNOWLEDGED')`,
       [assetId, companyId],
     );
     await this.prisma.execute(
-      `UPDATE NetworkAlertEvent SET status = 'RESOLVED', resolvedAt = ? WHERE assetId = ? AND companyId = ? AND status = 'ACTIVE'`,
+      `UPDATE NetworkAlertEvent SET status = 'RESOLVED', resolvedAt = ? WHERE assetId = ? AND companyId = ? AND status IN ('ACTIVE', 'ACKNOWLEDGED')`,
       [new Date(), assetId, companyId],
     );
     for (const alert of active) {

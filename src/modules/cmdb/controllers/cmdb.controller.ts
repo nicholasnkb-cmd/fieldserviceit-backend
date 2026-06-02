@@ -65,6 +65,24 @@ export class CmdbController {
     return this.cmdbService.listNetworkAlertEvents(user.companyId, status);
   }
 
+  @Patch('network/alert-events/:eventId')
+  updateNetworkAlertEvent(@Param('eventId') eventId: string, @Body('status') status: string, @CurrentUser() user: CurrentUserType) {
+    if (!user.companyId) throw new ForbiddenException('No company context available');
+    return this.cmdbService.updateNetworkAlertEvent(user.companyId, eventId, status, user.id);
+  }
+
+  @Get('network/alert-rules')
+  listNetworkAlertRules(@CurrentUser() user: CurrentUserType) {
+    if (!user.companyId) throw new ForbiddenException('No company context available');
+    return this.cmdbService.listNetworkAlertRules(user.companyId);
+  }
+
+  @Post('network/alert-rules')
+  createNetworkAlertRule(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
+    if (!user.companyId) throw new ForbiddenException('No company context available');
+    return this.cmdbService.createNetworkAlertRule(user.companyId, body);
+  }
+
   @Get('network/maintenance-windows')
   listMaintenanceWindows(@CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
