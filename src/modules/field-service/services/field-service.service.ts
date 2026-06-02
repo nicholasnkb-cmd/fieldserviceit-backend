@@ -6,7 +6,7 @@ import { TicketsGateway } from '../../tickets/events/tickets.gateway';
 export class FieldServiceService {
   constructor(private prisma: PrismaService, private gateway: TicketsGateway) {}
 
-  async mobileSummary(companyId: string, user?: { id?: string; role?: string }) {
+  async mobileSummary(companyId: string | null, user?: { id?: string; role?: string }) {
     const board = await this.getDispatchBoard(companyId);
     const technicianBoard = user?.role === 'TECHNICIAN'
       ? board.filter((item: any) => item.technicianId === user.id)
@@ -37,9 +37,9 @@ export class FieldServiceService {
     return result;
   }
 
-  async getDispatchBoard(companyId: string) {
+  async getDispatchBoard(companyId: string | null) {
     return this.prisma.dispatch.findMany({
-      where: { companyId },
+      where: companyId ? { companyId } : {},
       orderBy: { createdAt: 'desc' },
       include: {
         ticket: { select: { id: true, ticketNumber: true, title: true, priority: true, status: true } },

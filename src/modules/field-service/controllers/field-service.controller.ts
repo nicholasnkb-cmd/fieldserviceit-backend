@@ -24,12 +24,12 @@ export class FieldServiceController {
 
   @Get('mobile/summary')
   mobileSummary(@CurrentUser() user: CurrentUserType) {
-    return this.fieldService.mobileSummary(this.companyId(user), user);
+    return this.fieldService.mobileSummary(this.readCompanyId(user), user);
   }
 
   @Get()
   getBoard(@CurrentUser() user: CurrentUserType) {
-    return this.fieldService.getDispatchBoard(this.companyId(user));
+    return this.fieldService.getDispatchBoard(this.readCompanyId(user));
   }
 
   @Patch(':id')
@@ -60,6 +60,13 @@ export class FieldServiceController {
   @Post(':id/photos')
   addPhotos(@Param('id') id: string, @Body('photoUrls') photoUrls: string[], @CurrentUser() user: CurrentUserType) {
     return this.fieldService.addPhotos(id, photoUrls, this.companyId(user));
+  }
+
+  private readCompanyId(user: CurrentUserType) {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'GLOBAL_TECH') {
+      return user.effectiveCompanyId || user.companyId || null;
+    }
+    return this.companyId(user);
   }
 
   private companyId(user: CurrentUserType) {
