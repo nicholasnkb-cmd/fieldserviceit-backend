@@ -32,6 +32,7 @@ import { ErrorReportsModule } from './modules/error-reports/error-reports.module
 import { OperationsModule } from './modules/operations/operations.module';
 import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
 import { QuotesInvoicesModule } from './modules/quotes-invoices/quotes-invoices.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
 
 @Module({
   imports: [
@@ -97,6 +98,7 @@ import { QuotesInvoicesModule } from './modules/quotes-invoices/quotes-invoices.
     OperationsModule,
     KnowledgeBaseModule,
     QuotesInvoicesModule,
+    InventoryModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },
