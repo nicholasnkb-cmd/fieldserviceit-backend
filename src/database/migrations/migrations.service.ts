@@ -428,6 +428,107 @@ export class MigrationsService {
             (UUID(), 'Manage operational workspaces', 'operations.manage', 'Operations', 'Create and update operational workspace records', NOW(3));
         `),
       },
+      {
+        name: '010_quotes_invoices',
+        sql: stripComments(`
+          CREATE TABLE IF NOT EXISTS ServiceQuote (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            quoteNumber VARCHAR(64) NOT NULL,
+            title VARCHAR(191) NOT NULL,
+            customerName VARCHAR(191),
+            customerEmail VARCHAR(191),
+            customerPhone VARCHAR(64),
+            ticketId VARCHAR(191),
+            status VARCHAR(32) DEFAULT 'DRAFT',
+            currency VARCHAR(8) DEFAULT 'USD',
+            subtotal DECIMAL(12,2) DEFAULT 0,
+            taxRate DECIMAL(8,4) DEFAULT 0,
+            taxTotal DECIMAL(12,2) DEFAULT 0,
+            discountTotal DECIMAL(12,2) DEFAULT 0,
+            total DECIMAL(12,2) DEFAULT 0,
+            notes TEXT,
+            terms TEXT,
+            validUntil DATETIME(3),
+            approvedAt DATETIME(3),
+            convertedInvoiceId VARCHAR(191),
+            createdById VARCHAR(191),
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            UNIQUE(companyId, quoteNumber),
+            INDEX(companyId, status, updatedAt),
+            INDEX(ticketId),
+            INDEX(customerEmail)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS ServiceQuoteLine (
+            id VARCHAR(191) PRIMARY KEY,
+            quoteId VARCHAR(191) NOT NULL,
+            position INT DEFAULT 1,
+            description TEXT NOT NULL,
+            quantity DECIMAL(12,2) DEFAULT 1,
+            unitPrice DECIMAL(12,2) DEFAULT 0,
+            taxable TINYINT(1) DEFAULT 1,
+            total DECIMAL(12,2) DEFAULT 0,
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(quoteId),
+            INDEX(position)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS ServiceInvoice (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL,
+            invoiceNumber VARCHAR(64) NOT NULL,
+            quoteId VARCHAR(191),
+            ticketId VARCHAR(191),
+            title VARCHAR(191) NOT NULL,
+            customerName VARCHAR(191),
+            customerEmail VARCHAR(191),
+            customerPhone VARCHAR(64),
+            status VARCHAR(32) DEFAULT 'DRAFT',
+            currency VARCHAR(8) DEFAULT 'USD',
+            subtotal DECIMAL(12,2) DEFAULT 0,
+            taxRate DECIMAL(8,4) DEFAULT 0,
+            taxTotal DECIMAL(12,2) DEFAULT 0,
+            discountTotal DECIMAL(12,2) DEFAULT 0,
+            total DECIMAL(12,2) DEFAULT 0,
+            amountPaid DECIMAL(12,2) DEFAULT 0,
+            balanceDue DECIMAL(12,2) DEFAULT 0,
+            notes TEXT,
+            terms TEXT,
+            dueAt DATETIME(3),
+            sentAt DATETIME(3),
+            paidAt DATETIME(3),
+            createdById VARCHAR(191),
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            UNIQUE(companyId, invoiceNumber),
+            INDEX(companyId, status, updatedAt),
+            INDEX(quoteId),
+            INDEX(ticketId),
+            INDEX(customerEmail),
+            INDEX(dueAt)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          CREATE TABLE IF NOT EXISTS ServiceInvoiceLine (
+            id VARCHAR(191) PRIMARY KEY,
+            invoiceId VARCHAR(191) NOT NULL,
+            position INT DEFAULT 1,
+            description TEXT NOT NULL,
+            quantity DECIMAL(12,2) DEFAULT 1,
+            unitPrice DECIMAL(12,2) DEFAULT 0,
+            taxable TINYINT(1) DEFAULT 1,
+            total DECIMAL(12,2) DEFAULT 0,
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(invoiceId),
+            INDEX(position)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+          INSERT IGNORE INTO Permission (id, name, slug, grp, description, createdAt) VALUES
+            (UUID(), 'View quotes and invoices', 'quotes-invoices.view', 'Billing', 'View service quotes, estimates, and invoices', NOW(3)),
+            (UUID(), 'Manage quotes and invoices', 'quotes-invoices.manage', 'Billing', 'Create, update, approve, convert, and close service quote and invoice records', NOW(3));
+        `),
+      },
     ];
   }
 }

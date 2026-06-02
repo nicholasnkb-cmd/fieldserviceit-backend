@@ -31,6 +31,7 @@ import { AiAgentModule } from './modules/ai-agent/ai-agent.module';
 import { ErrorReportsModule } from './modules/error-reports/error-reports.module';
 import { OperationsModule } from './modules/operations/operations.module';
 import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
+import { QuotesInvoicesModule } from './modules/quotes-invoices/quotes-invoices.module';
 
 @Module({
   imports: [
@@ -95,6 +96,7 @@ import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.mod
     ErrorReportsModule,
     OperationsModule,
     KnowledgeBaseModule,
+    QuotesInvoicesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },
