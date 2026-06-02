@@ -35,6 +35,7 @@ import { QuotesInvoicesModule } from './modules/quotes-invoices/quotes-invoices.
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { CustomerPortalModule } from './modules/customer-portal/customer-portal.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { SecurityCenterModule } from './modules/security-center/security-center.module';
 
 @Module({
   imports: [
@@ -103,6 +104,7 @@ import { MaintenanceModule } from './modules/maintenance/maintenance.module';
     InventoryModule,
     CustomerPortalModule,
     MaintenanceModule,
+    SecurityCenterModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },
