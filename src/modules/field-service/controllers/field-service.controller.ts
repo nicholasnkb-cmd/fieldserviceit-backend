@@ -18,37 +18,53 @@ export class FieldServiceController {
 
   @Post()
   dispatch(@Body() body: { ticketId: string; technicianId: string }, @CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.fieldService.dispatch(body.ticketId, body.technicianId, user.companyId);
+    const companyId = this.companyId(user);
+    return this.fieldService.dispatch(body.ticketId, body.technicianId, companyId);
+  }
+
+  @Get('mobile/summary')
+  mobileSummary(@CurrentUser() user: CurrentUserType) {
+    return this.fieldService.mobileSummary(this.companyId(user), user);
   }
 
   @Get()
   getBoard(@CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.fieldService.getDispatchBoard(user.companyId);
+    return this.fieldService.getDispatchBoard(this.companyId(user));
   }
 
   @Patch(':id')
   updateStatus(@Param('id') id: string, @Body('status') status: string, @CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.fieldService.updateStatus(id, status, user.companyId);
+    return this.fieldService.updateStatus(id, status, this.companyId(user));
+  }
+
+  @Post(':id/checkin')
+  checkIn(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.fieldService.updateStatus(id, 'ON_SITE', this.companyId(user));
+  }
+
+  @Post(':id/checkout')
+  checkOut(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.fieldService.updateStatus(id, 'COMPLETED', this.companyId(user));
   }
 
   @Post(':id/notes')
   addNotes(@Param('id') id: string, @Body('notes') notes: string, @CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.fieldService.addNotes(id, notes, user.companyId);
+    return this.fieldService.addNotes(id, notes, this.companyId(user));
   }
 
   @Post(':id/signature')
   addSignature(@Param('id') id: string, @Body('signature') signature: string, @CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.fieldService.addSignature(id, signature, user.companyId);
+    return this.fieldService.addSignature(id, signature, this.companyId(user));
   }
 
   @Post(':id/photos')
   addPhotos(@Param('id') id: string, @Body('photoUrls') photoUrls: string[], @CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.fieldService.addPhotos(id, photoUrls, user.companyId);
+    return this.fieldService.addPhotos(id, photoUrls, this.companyId(user));
+  }
+
+  private companyId(user: CurrentUserType) {
+    const companyId = user.effectiveCompanyId || user.companyId;
+    if (!companyId) throw new ForbiddenException('No company context available');
+    return companyId;
   }
 }

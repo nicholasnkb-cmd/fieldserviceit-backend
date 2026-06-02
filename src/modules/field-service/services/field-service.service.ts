@@ -1,10 +1,29 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { TicketsGateway } from '../../tickets/events/tickets.gateway';
 
 @Injectable()
 export class FieldServiceService {
   constructor(private prisma: PrismaService, private gateway: TicketsGateway) {}
+
+  async mobileSummary(companyId: string, user?: { id?: string; role?: string }) {
+    const board = await this.getDispatchBoard(companyId);
+    const technicianBoard = user?.role === 'TECHNICIAN'
+      ? board.filter((item: any) => item.technicianId === user.id)
+      : board;
+    const counts = technicianBoard.reduce<Record<string, number>>((acc, item: any) => {
+      acc[item.status] = (acc[item.status] || 0) + 1;
+      return acc;
+    }, {});
+    const active = technicianBoard.filter((item: any) => !['COMPLETED', 'CANCELLED'].includes(item.status));
+    return {
+      counts,
+      activeCount: active.length,
+      enRouteCount: counts.EN_ROUTE || 0,
+      onSiteCount: counts.ON_SITE || 0,
+      completedToday: technicianBoard.filter((item: any) => item.completedAt && new Date(item.completedAt).toDateString() === new Date().toDateString()).length,
+    };
+  }
 
   async dispatch(ticketId: string, technicianId: string, companyId: string) {
     const ticket = await this.prisma.ticket.findFirst({ where: { id: ticketId, companyId } });
@@ -32,10 +51,14 @@ export class FieldServiceService {
   async updateStatus(id: string, status: string, companyId: string) {
     const dispatch = await this.prisma.dispatch.findFirst({ where: { id, companyId } });
     if (!dispatch) throw new NotFoundException('Dispatch not found');
+    const normalized = String(status || '').toUpperCase();
+    if (!['DISPATCHED', 'EN_ROUTE', 'ON_SITE', 'COMPLETED', 'CANCELLED'].includes(normalized)) {
+      throw new BadRequestException('Invalid dispatch status');
+    }
 
-    const updateData: any = { status };
-    if (status === 'EN_ROUTE') updateData.arrivedAt = new Date();
-    if (status === 'COMPLETED') updateData.completedAt = new Date();
+    const updateData: any = { status: normalized };
+    if (normalized === 'ON_SITE') updateData.arrivedAt = new Date();
+    if (normalized === 'COMPLETED') updateData.completedAt = new Date();
 
     const result = await this.prisma.dispatch.update({ where: { id }, data: updateData });
     this.gateway.notifyTicketUpdate(companyId, 'dispatch:updated', result);
