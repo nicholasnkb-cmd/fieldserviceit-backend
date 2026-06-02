@@ -15,9 +15,12 @@ type LinePayload = {
 
 @Injectable()
 export class QuotesInvoicesService {
+  private schemaReady?: Promise<void>;
+
   constructor(private db: DatabaseService) {}
 
   async summary(user: CurrentUser) {
+    await this.ensureSchema();
     const scope = this.scopeFor(user);
     const quoteWhere = scope.companyId ? 'WHERE companyId = ?' : '';
     const invoiceWhere = scope.companyId ? 'WHERE companyId = ?' : '';
@@ -43,6 +46,7 @@ export class QuotesInvoicesService {
   }
 
   async listQuotes(user: CurrentUser, query: { status?: string; search?: string; limit?: string }) {
+    await this.ensureSchema();
     const scope = this.scopeFor(user);
     const clauses: string[] = [];
     const values: any[] = [];
@@ -75,6 +79,7 @@ export class QuotesInvoicesService {
   }
 
   async createQuote(user: CurrentUser, dto: any) {
+    await this.ensureSchema();
     const companyId = this.resolveWriteCompany(user, dto.companyId);
     const data = this.normalizeDocumentPayload(dto, true);
     const lines = this.normalizeLines(dto.lines);
@@ -114,6 +119,7 @@ export class QuotesInvoicesService {
   }
 
   async updateQuote(user: CurrentUser, id: string, dto: any) {
+    await this.ensureSchema();
     const existing = await this.getQuote(user, id);
     if (existing.status === 'CONVERTED' && dto.lines) {
       throw new BadRequestException('Converted quotes cannot have line items changed');
@@ -135,6 +141,7 @@ export class QuotesInvoicesService {
   }
 
   async convertQuoteToInvoice(user: CurrentUser, id: string, dto: any) {
+    await this.ensureSchema();
     const quote = await this.getQuote(user, id);
     if (quote.convertedInvoiceId) return this.getInvoice(user, quote.convertedInvoiceId);
     if (!quote.lines?.length) throw new BadRequestException('Quote needs at least one line item before conversion');
@@ -176,6 +183,7 @@ export class QuotesInvoicesService {
   }
 
   async listInvoices(user: CurrentUser, query: { status?: string; search?: string; limit?: string }) {
+    await this.ensureSchema();
     const scope = this.scopeFor(user);
     const clauses: string[] = [];
     const values: any[] = [];
@@ -209,6 +217,7 @@ export class QuotesInvoicesService {
   }
 
   async updateInvoice(user: CurrentUser, id: string, dto: any) {
+    await this.ensureSchema();
     await this.getInvoice(user, id);
     const updates: Record<string, any> = { updatedAt: new Date() };
     for (const key of ['title', 'customerName', 'customerEmail', 'customerPhone', 'notes', 'terms'] as const) {
@@ -446,5 +455,112 @@ export class QuotesInvoicesService {
 
   private round(value: number) {
     return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  private ensureSchema() {
+    if (!this.schemaReady) {
+      this.schemaReady = this.createSchema();
+    }
+    return this.schemaReady;
+  }
+
+  private async createSchema() {
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS ServiceQuote (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        quoteNumber VARCHAR(64) NOT NULL,
+        title VARCHAR(191) NOT NULL,
+        customerName VARCHAR(191),
+        customerEmail VARCHAR(191),
+        customerPhone VARCHAR(64),
+        ticketId VARCHAR(191),
+        status VARCHAR(32) DEFAULT 'DRAFT',
+        currency VARCHAR(8) DEFAULT 'USD',
+        subtotal DECIMAL(12,2) DEFAULT 0,
+        taxRate DECIMAL(8,4) DEFAULT 0,
+        taxTotal DECIMAL(12,2) DEFAULT 0,
+        discountTotal DECIMAL(12,2) DEFAULT 0,
+        total DECIMAL(12,2) DEFAULT 0,
+        notes TEXT,
+        terms TEXT,
+        validUntil DATETIME(3),
+        approvedAt DATETIME(3),
+        convertedInvoiceId VARCHAR(191),
+        createdById VARCHAR(191),
+        createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE(companyId, quoteNumber),
+        INDEX(companyId, status, updatedAt),
+        INDEX(ticketId),
+        INDEX(customerEmail)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS ServiceQuoteLine (
+        id VARCHAR(191) PRIMARY KEY,
+        quoteId VARCHAR(191) NOT NULL,
+        position INT DEFAULT 1,
+        description TEXT NOT NULL,
+        quantity DECIMAL(12,2) DEFAULT 1,
+        unitPrice DECIMAL(12,2) DEFAULT 0,
+        taxable TINYINT(1) DEFAULT 1,
+        total DECIMAL(12,2) DEFAULT 0,
+        createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(quoteId),
+        INDEX(position)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS ServiceInvoice (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        invoiceNumber VARCHAR(64) NOT NULL,
+        quoteId VARCHAR(191),
+        ticketId VARCHAR(191),
+        title VARCHAR(191) NOT NULL,
+        customerName VARCHAR(191),
+        customerEmail VARCHAR(191),
+        customerPhone VARCHAR(64),
+        status VARCHAR(32) DEFAULT 'DRAFT',
+        currency VARCHAR(8) DEFAULT 'USD',
+        subtotal DECIMAL(12,2) DEFAULT 0,
+        taxRate DECIMAL(8,4) DEFAULT 0,
+        taxTotal DECIMAL(12,2) DEFAULT 0,
+        discountTotal DECIMAL(12,2) DEFAULT 0,
+        total DECIMAL(12,2) DEFAULT 0,
+        amountPaid DECIMAL(12,2) DEFAULT 0,
+        balanceDue DECIMAL(12,2) DEFAULT 0,
+        notes TEXT,
+        terms TEXT,
+        dueAt DATETIME(3),
+        sentAt DATETIME(3),
+        paidAt DATETIME(3),
+        createdById VARCHAR(191),
+        createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE(companyId, invoiceNumber),
+        INDEX(companyId, status, updatedAt),
+        INDEX(quoteId),
+        INDEX(ticketId),
+        INDEX(customerEmail),
+        INDEX(dueAt)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS ServiceInvoiceLine (
+        id VARCHAR(191) PRIMARY KEY,
+        invoiceId VARCHAR(191) NOT NULL,
+        position INT DEFAULT 1,
+        description TEXT NOT NULL,
+        quantity DECIMAL(12,2) DEFAULT 1,
+        unitPrice DECIMAL(12,2) DEFAULT 0,
+        taxable TINYINT(1) DEFAULT 1,
+        total DECIMAL(12,2) DEFAULT 0,
+        createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(invoiceId),
+        INDEX(position)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
   }
 }
