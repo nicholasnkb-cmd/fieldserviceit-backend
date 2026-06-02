@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { TopologyController } from './topology.controller';
+import { PublicTopologyController, TopologyController } from './topology.controller';
 import { TopologyService } from './topology.service';
 
 @Module({
-  controllers: [TopologyController],
+  controllers: [TopologyController, PublicTopologyController],
   providers: [TopologyService],
 })
 export class TopologyModule {}

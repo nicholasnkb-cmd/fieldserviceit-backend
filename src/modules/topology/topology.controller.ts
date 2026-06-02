@@ -45,4 +45,44 @@ export class TopologyController {
   updateLink(@CurrentUser() user: CurrentUserType, @Param('id') id: string, @Body() dto: any) {
     return this.service.updateLink(user, id, dto);
   }
+
+  @Post('layout')
+  saveLayout(@CurrentUser() user: CurrentUserType, @Body() dto: any) {
+    return this.service.saveLayout(user, dto);
+  }
+
+  @Post('layout/reset')
+  resetLayout(@CurrentUser() user: CurrentUserType, @Body() dto: any) {
+    return this.service.resetLayout(user, dto);
+  }
+
+  @Patch('settings')
+  updateSettings(@CurrentUser() user: CurrentUserType, @Body() dto: any) {
+    return this.service.updateSettings(user, dto);
+  }
+
+  @Post('shares')
+  createShare(@CurrentUser() user: CurrentUserType, @Body() dto: any) {
+    return this.service.createShare(user, dto);
+  }
+
+  @Post('assets/:assetId/actions')
+  queueAction(@CurrentUser() user: CurrentUserType, @Param('assetId') assetId: string, @Body() dto: any) {
+    return this.service.queueAction(user, assetId, dto);
+  }
+
+  @Post('changes/detect')
+  detectChanges(@CurrentUser() user: CurrentUserType) {
+    return this.service.detectChanges(user);
+  }
+}
+
+@Controller('public/topology')
+export class PublicTopologyController {
+  constructor(private service: TopologyService) {}
+
+  @Get('shares/:token')
+  publicShare(@Param('token') token: string) {
+    return this.service.publicShare(token);
+  }
 }

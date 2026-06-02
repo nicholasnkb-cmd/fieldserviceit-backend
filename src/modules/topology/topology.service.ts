@@ -6,6 +6,10 @@ import { DatabaseService } from '../../database/database.service';
 const LINK_TYPES = ['UPLINK', 'DOWNLINK', 'PEER', 'WAN', 'WIRELESS', 'DEPENDENCY'];
 const LINK_STATUSES = ['ACTIVE', 'DEGRADED', 'DOWN', 'PLANNED'];
 const SITE_TYPES = ['COMPANY', 'SITE', 'RACK', 'CLOSET', 'ROOM', 'ZONE'];
+const DEVICE_ACTIONS = ['RESTART', 'DISABLE_PORT', 'ENABLE_PORT', 'BOUNCE_POE', 'BACKUP_CONFIG', 'SYNC_CONTROLLER'];
+const PORT_ACTIONS = ['DISABLE_PORT', 'ENABLE_PORT', 'BOUNCE_POE'];
+
+type Scope = { companyId: string | null };
 
 @Injectable()
 export class TopologyService {
@@ -18,7 +22,7 @@ export class TopologyService {
     const scope = this.scopeFor(user);
     const company = scope.companyId ? 'companyId = ? AND ' : '';
     const values = scope.companyId ? [scope.companyId] : [];
-    const [nodes, sites, links, latest, alerts, orphaned, discovery] = await Promise.all([
+    const [nodes, sites, links, latest, alerts, orphaned, discovery, openChanges, shares, settings] = await Promise.all([
       this.count(`SELECT COUNT(*) as count FROM Asset WHERE ${company}deletedAt IS NULL AND assetType = 'NETWORK_DEVICE'`, values),
       this.optionalCount(`SELECT COUNT(*) as count FROM NetworkSite WHERE ${company}1=1`, values),
       this.count(`SELECT COUNT(*) as count FROM NetworkTopologyLink WHERE ${company}status <> 'DOWN'`, values),
@@ -40,6 +44,9 @@ export class TopologyService {
         values,
       ),
       this.optionalCount(`SELECT COUNT(*) as count FROM NetworkDiscoveryResult WHERE ${company}assetId IS NULL`, values),
+      this.optionalCount(`SELECT COUNT(*) as count FROM NetworkTopologyChange WHERE ${company}status = 'OPEN'`, values),
+      this.optionalCount(`SELECT COUNT(*) as count FROM NetworkTopologyShare WHERE ${company}active = 1`, values),
+      this.getSettings(scope),
     ]);
     const byHealth = latest.reduce<Record<string, number>>((acc, row) => {
       acc[row.status || 'UNKNOWN'] = Number(row.count || 0);
@@ -55,6 +62,10 @@ export class TopologyService {
       activeAlerts: alerts,
       orphanedNodes: orphaned,
       discoveriesToMap: discovery,
+      openChanges,
+      activeShares: shares,
+      customerVisible: Boolean(settings.customerVisible),
+      defaultOverlay: settings.defaultOverlay || 'health',
     };
   }
 
@@ -84,7 +95,10 @@ export class TopologyService {
         COALESCE(alerts.activeAlerts, 0) as activeAlerts,
         COALESCE(tickets.openTickets, 0) as openTickets,
         COALESCE(ifaces.portCount, 0) as portCount,
-        COALESCE(ifaces.downPorts, 0) as downPorts
+        COALESCE(ifaces.downPorts, 0) as downPorts,
+        COALESCE(ifaces.errorPorts, 0) as errorPorts,
+        COALESCE(ifaces.poeWatts, 0) as poeWatts,
+        layout.x, layout.y
        FROM Asset a
        LEFT JOIN Company c ON c.id = a.companyId
        LEFT JOIN (
@@ -106,10 +120,14 @@ export class TopologyService {
          SELECT assetId, COUNT(*) as openTickets FROM Ticket WHERE deletedAt IS NULL AND status NOT IN ('RESOLVED', 'CLOSED') GROUP BY assetId
        ) tickets ON tickets.assetId = a.id
        LEFT JOIN (
-         SELECT assetId, COUNT(*) as portCount, SUM(CASE WHEN status NOT IN ('up', 'UP', '1') THEN 1 ELSE 0 END) as downPorts
+         SELECT assetId, COUNT(*) as portCount,
+           SUM(CASE WHEN status NOT IN ('up', 'UP', '1') THEN 1 ELSE 0 END) as downPorts,
+           SUM(CASE WHEN COALESCE(inErrors, 0) + COALESCE(outErrors, 0) > 0 THEN 1 ELSE 0 END) as errorPorts,
+           SUM(COALESCE(poeWatts, 0)) as poeWatts
          FROM NetworkInterfaceMetric
          GROUP BY assetId
        ) ifaces ON ifaces.assetId = a.id
+       LEFT JOIN NetworkTopologyLayout layout ON layout.assetId = a.id AND layout.companyId = a.companyId
        WHERE ${clauses.join(' AND ')}
        ORDER BY a.location ASC, a.name ASC
        LIMIT 250`,
@@ -123,11 +141,23 @@ export class TopologyService {
       this.listDiscoveries(scope),
     ]);
     const links = [...manualLinks, ...inferredLinks].filter((link) => nodeIds.has(link.sourceAssetId) && nodeIds.has(link.targetAssetId));
+    const [interfaces, actions, changes, settings, shares] = await Promise.all([
+      this.listInterfaces(scope, Array.from(nodeIds)),
+      this.listActions(scope, Array.from(nodeIds)),
+      this.listChanges(scope),
+      this.getSettings(scope),
+      this.listShares(scope),
+    ]);
     return {
       nodes: nodes.map((node, index) => this.mapNode(node, index)),
       links,
       sites,
       discoveries,
+      interfaces,
+      actions,
+      changes,
+      settings,
+      shares,
       generatedAt: new Date().toISOString(),
     };
   }
@@ -201,7 +231,112 @@ export class TopologyService {
     return (await this.db.query<any[]>('SELECT * FROM NetworkTopologyLink WHERE id = ? LIMIT 1', [id]))[0];
   }
 
-  private async listLinks(scope: { companyId: string | null }) {
+  async saveLayout(user: CurrentUser, dto: any) {
+    await this.ensureSchema();
+    const companyId = this.resolveWriteCompany(user, dto.companyId);
+    const positions = Array.isArray(dto.positions) ? dto.positions : [];
+    if (!positions.length) throw new BadRequestException('At least one node position is required');
+    for (const item of positions.slice(0, 300)) {
+      await this.assertAsset(companyId, item.assetId, 'layout');
+      await this.db.execute(
+        `INSERT INTO NetworkTopologyLayout (id, companyId, assetId, x, y, locked, updatedById, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE x = VALUES(x), y = VALUES(y), locked = VALUES(locked), updatedById = VALUES(updatedById), updatedAt = VALUES(updatedAt)`,
+        [randomUUID(), companyId, item.assetId, Math.max(0, Math.round(Number(item.x) || 0)), Math.max(0, Math.round(Number(item.y) || 0)), item.locked === false ? 0 : 1, user.id, new Date()],
+      );
+    }
+    return { saved: Math.min(positions.length, 300) };
+  }
+
+  async resetLayout(user: CurrentUser, dto: any) {
+    await this.ensureSchema();
+    const companyId = this.resolveWriteCompany(user, dto.companyId);
+    await this.db.execute('DELETE FROM NetworkTopologyLayout WHERE companyId = ?', [companyId]);
+    return { reset: true };
+  }
+
+  async updateSettings(user: CurrentUser, dto: any) {
+    await this.ensureSchema();
+    const companyId = this.resolveWriteCompany(user, dto.companyId);
+    const defaultOverlay = ['health', 'utilization', 'errors', 'poe', 'alerts'].includes(dto.defaultOverlay) ? dto.defaultOverlay : 'health';
+    await this.db.execute(
+      `INSERT INTO NetworkTopologySetting (id, companyId, customerVisible, shareEnabled, defaultOverlay, updatedById, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE customerVisible = VALUES(customerVisible), shareEnabled = VALUES(shareEnabled), defaultOverlay = VALUES(defaultOverlay), updatedById = VALUES(updatedById), updatedAt = VALUES(updatedAt)`,
+      [randomUUID(), companyId, dto.customerVisible ? 1 : 0, dto.shareEnabled === false ? 0 : 1, defaultOverlay, user.id, new Date()],
+    );
+    return this.getSettings({ companyId });
+  }
+
+  async createShare(user: CurrentUser, dto: any) {
+    await this.ensureSchema();
+    const companyId = this.resolveWriteCompany(user, dto.companyId);
+    const settings = await this.getSettings({ companyId });
+    if (settings.shareEnabled === false) throw new BadRequestException('Topology sharing is disabled for this company');
+    const id = randomUUID();
+    const token = randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '').slice(0, 12);
+    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
+    await this.db.execute(
+      `INSERT INTO NetworkTopologyShare (id, companyId, token, name, siteId, expiresAt, active, createdById, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+      [id, companyId, token, dto.name?.trim() || 'Customer topology share', dto.siteId || null, expiresAt, user.id, new Date()],
+    );
+    return (await this.db.query<any[]>('SELECT id, companyId, token, name, siteId, expiresAt, active, createdAt FROM NetworkTopologyShare WHERE id = ? LIMIT 1', [id]))[0];
+  }
+
+  async publicShare(token: string) {
+    await this.ensureSchema();
+    const rows = await this.db.query<any[]>(
+      'SELECT * FROM NetworkTopologyShare WHERE token = ? AND active = 1 AND (expiresAt IS NULL OR expiresAt > NOW()) LIMIT 1',
+      [token],
+    );
+    if (!rows[0]) throw new NotFoundException('Shared topology map not found');
+    const settings = await this.getSettings({ companyId: rows[0].companyId });
+    if (!settings.customerVisible) throw new NotFoundException('Shared topology map is not available');
+    const map = await this.map({ id: 'share', role: 'SUPER_ADMIN', effectiveCompanyId: rows[0].companyId } as CurrentUser, { siteId: rows[0].siteId || undefined });
+    return {
+      name: rows[0].name,
+      expiresAt: rows[0].expiresAt,
+      nodes: map.nodes.map(({ id, name, role, location, healthStatus, activeAlerts, x, y }: any) => ({ id, name, role, location, healthStatus, activeAlerts, x, y })),
+      links: map.links.map(({ id, sourceAssetId, targetAssetId, linkType, status, inferred }: any) => ({ id, sourceAssetId, targetAssetId, linkType, status, inferred })),
+      generatedAt: map.generatedAt,
+    };
+  }
+
+  async queueAction(user: CurrentUser, assetId: string, dto: any) {
+    await this.ensureSchema();
+    const companyId = this.resolveWriteCompany(user, dto.companyId);
+    await this.assertAsset(companyId, assetId, 'action');
+    const action = this.normalizeOption(dto.action, DEVICE_ACTIONS, 'device action');
+    const payload = dto.payload && typeof dto.payload === 'object' ? dto.payload : {};
+    if (PORT_ACTIONS.includes(action) && !String(payload.port || '').trim()) {
+      throw new BadRequestException('Port is required for this topology action');
+    }
+    const id = randomUUID();
+    await this.db.execute(
+      `INSERT INTO NetworkDeviceAction (id, companyId, assetId, action, payload, status, requestedById, createdAt)
+       VALUES (?, ?, ?, ?, ?, 'QUEUED', ?, ?)`,
+      [id, companyId, assetId, action, JSON.stringify({ ...payload, source: 'topology-map', safety: 'queued-for-execution' }), user.id, new Date()],
+    );
+    return (await this.db.query<any[]>('SELECT * FROM NetworkDeviceAction WHERE id = ? LIMIT 1', [id]))[0];
+  }
+
+  async detectChanges(user: CurrentUser) {
+    await this.ensureSchema();
+    const scope = this.scopeFor(user);
+    if (!scope.companyId) throw new ForbiddenException('Select a company context before detecting topology changes');
+    const [discoveries, links] = await Promise.all([this.listDiscoveries(scope), this.listLinks(scope)]);
+    let created = 0;
+    for (const item of discoveries.filter((entry) => !entry.assetId).slice(0, 100)) {
+      created += await this.insertChange(scope.companyId, 'UNMAPPED_DISCOVERY', 'NetworkDiscoveryResult', item.id, `Unmapped network discovery: ${item.hostname || item.ipAddress}`, item);
+    }
+    for (const link of links.filter((entry) => ['DOWN', 'DEGRADED'].includes(entry.status)).slice(0, 100)) {
+      created += await this.insertChange(scope.companyId, `LINK_${link.status}`, 'NetworkTopologyLink', link.id, `${link.sourceName || 'Source'} to ${link.targetName || 'Target'} is ${link.status.toLowerCase()}`, link);
+    }
+    return { created, changes: await this.listChanges(scope) };
+  }
+
+  private async listLinks(scope: Scope) {
     const where = scope.companyId ? 'WHERE l.companyId = ?' : '';
     const values = scope.companyId ? [scope.companyId] : [];
     return this.db.query<any[]>(
@@ -216,15 +351,16 @@ export class TopologyService {
     );
   }
 
-  private async inferredLinks(scope: { companyId: string | null }) {
-    const where = scope.companyId ? 'WHERE i.companyId = ?' : '';
+  private async inferredLinks(scope: Scope) {
+    const where = scope.companyId ? 'WHERE i.companyId = ?' : 'WHERE 1=1';
     const values = scope.companyId ? [scope.companyId] : [];
     const rows = await this.db.query<any[]>(
-      `SELECT i.companyId, i.assetId as sourceAssetId, peer.id as targetAssetId, i.name as sourceInterface,
-        i.connectedMac, i.vlan, i.speedMbps
+      `SELECT i.companyId, i.assetId as sourceAssetId, COALESCE(i.neighborAssetId, peer.id) as targetAssetId,
+        i.name as sourceInterface, i.connectedMac, i.vlan, i.speedMbps, i.neighborProtocol, i.neighborPort
        FROM NetworkInterfaceMetric i
-       INNER JOIN Asset peer ON peer.macAddress = i.connectedMac AND peer.deletedAt IS NULL
+       LEFT JOIN Asset peer ON peer.macAddress = i.connectedMac AND peer.deletedAt IS NULL
        ${where}
+       AND (i.neighborAssetId IS NOT NULL OR peer.id IS NOT NULL)
        ORDER BY i.createdAt DESC
        LIMIT 300`,
       values,
@@ -241,23 +377,91 @@ export class TopologyService {
       sourceAssetId: row.sourceAssetId,
       targetAssetId: row.targetAssetId,
       sourceInterface: row.sourceInterface,
-      targetInterface: null,
+      targetInterface: row.neighborPort || null,
       linkType: 'PEER',
       status: 'ACTIVE',
       bandwidthMbps: row.speedMbps,
-      discoveredBy: 'interface-mac',
-      notes: row.vlan ? `VLAN ${row.vlan}` : null,
+      discoveredBy: row.neighborProtocol || 'interface-mac',
+      notes: [row.vlan ? `VLAN ${row.vlan}` : null, row.neighborProtocol ? `via ${row.neighborProtocol}` : null].filter(Boolean).join(' | ') || null,
       inferred: true,
     }));
   }
 
-  private async listDiscoveries(scope: { companyId: string | null }) {
+  private async listDiscoveries(scope: Scope) {
     const where = scope.companyId ? 'WHERE companyId = ?' : '';
     const values = scope.companyId ? [scope.companyId] : [];
     return this.db.query<any[]>(
       `SELECT * FROM NetworkDiscoveryResult ${where} ORDER BY discoveredAt DESC LIMIT 100`,
       values,
     ).catch(() => []);
+  }
+
+  private async listInterfaces(scope: Scope, assetIds: string[]) {
+    if (!assetIds.length) return [];
+    const where = scope.companyId ? 'AND i.companyId = ?' : '';
+    const values = [...assetIds, ...(scope.companyId ? [scope.companyId] : [])];
+    return this.db.query<any[]>(
+      `SELECT i.*
+       FROM NetworkInterfaceMetric i
+       INNER JOIN (
+         SELECT assetId, ifIndex, MAX(createdAt) as createdAt
+         FROM NetworkInterfaceMetric
+         WHERE assetId IN (${assetIds.map(() => '?').join(',')})
+         GROUP BY assetId, ifIndex
+       ) latest ON latest.assetId = i.assetId AND latest.ifIndex = i.ifIndex AND latest.createdAt = i.createdAt
+       WHERE 1=1 ${where}
+       ORDER BY i.assetId, i.ifIndex
+       LIMIT 750`,
+      values,
+    ).catch(() => []);
+  }
+
+  private async listActions(scope: Scope, assetIds: string[]) {
+    if (!assetIds.length) return [];
+    const where = scope.companyId ? 'AND companyId = ?' : '';
+    const values = [...assetIds, ...(scope.companyId ? [scope.companyId] : [])];
+    return this.db.query<any[]>(
+      `SELECT * FROM NetworkDeviceAction
+       WHERE assetId IN (${assetIds.map(() => '?').join(',')}) ${where}
+       ORDER BY createdAt DESC
+       LIMIT 100`,
+      values,
+    ).catch(() => []);
+  }
+
+  private async listChanges(scope: Scope) {
+    const where = scope.companyId ? 'WHERE companyId = ?' : '';
+    const values = scope.companyId ? [scope.companyId] : [];
+    return this.db.query<any[]>(`SELECT * FROM NetworkTopologyChange ${where} ORDER BY detectedAt DESC LIMIT 100`, values).catch(() => []);
+  }
+
+  private async listShares(scope: Scope) {
+    const where = scope.companyId ? 'WHERE companyId = ?' : '';
+    const values = scope.companyId ? [scope.companyId] : [];
+    return this.db.query<any[]>(
+      `SELECT id, companyId, token, name, siteId, expiresAt, active, createdAt FROM NetworkTopologyShare ${where} ORDER BY createdAt DESC LIMIT 25`,
+      values,
+    ).catch(() => []);
+  }
+
+  private async getSettings(scope: Scope) {
+    if (!scope.companyId) return { customerVisible: false, shareEnabled: true, defaultOverlay: 'health' };
+    const rows = await this.db.query<any[]>('SELECT * FROM NetworkTopologySetting WHERE companyId = ? LIMIT 1', [scope.companyId]).catch(() => []);
+    return rows[0] || { companyId: scope.companyId, customerVisible: false, shareEnabled: true, defaultOverlay: 'health' };
+  }
+
+  private async insertChange(companyId: string, changeType: string, sourceType: string, sourceId: string, title: string, details: any) {
+    const existing = await this.db.query<any[]>(
+      'SELECT id FROM NetworkTopologyChange WHERE companyId = ? AND changeType = ? AND sourceId = ? AND status = ? LIMIT 1',
+      [companyId, changeType, sourceId, 'OPEN'],
+    );
+    if (existing[0]) return 0;
+    await this.db.execute(
+      `INSERT INTO NetworkTopologyChange (id, companyId, changeType, sourceType, sourceId, title, details, status, detectedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)`,
+      [randomUUID(), companyId, changeType, sourceType, sourceId, title, JSON.stringify(details || {}), new Date()],
+    );
+    return 1;
   }
 
   private mapNode(node: any, index: number) {
@@ -267,10 +471,10 @@ export class TopologyService {
     return {
       ...node,
       role,
-      x: 120 + col * 220,
-      y: 90 + row * 160,
+      x: Number.isFinite(Number(node.x)) ? Number(node.x) : 120 + col * 220,
+      y: Number.isFinite(Number(node.y)) ? Number(node.y) : 90 + row * 160,
       healthStatus: node.healthStatus || (node.status === 'active' ? 'ONLINE' : 'UNKNOWN'),
-      impactScore: Number(node.activeAlerts || 0) * 5 + Number(node.openTickets || 0) * 2 + Number(node.downPorts || 0),
+      impactScore: Number(node.activeAlerts || 0) * 5 + Number(node.openTickets || 0) * 2 + Number(node.downPorts || 0) + Number(node.errorPorts || 0),
     };
   }
 
@@ -284,7 +488,7 @@ export class TopologyService {
     return 'device';
   }
 
-  private scopeFor(user: CurrentUser) {
+  private scopeFor(user: CurrentUser): Scope {
     if (user.companyId) return { companyId: user.companyId };
     if (user.role === 'SUPER_ADMIN') return { companyId: user.effectiveCompanyId || null };
     throw new ForbiddenException('Select a company context to view topology');
@@ -348,5 +552,77 @@ export class TopologyService {
         INDEX(linkType)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
     `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS NetworkTopologyLayout (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        assetId VARCHAR(191) NOT NULL,
+        x INT NOT NULL DEFAULT 0,
+        y INT NOT NULL DEFAULT 0,
+        locked TINYINT(1) DEFAULT 1,
+        updatedById VARCHAR(191),
+        updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE KEY NetworkTopologyLayout_company_asset_key (companyId, assetId),
+        INDEX(companyId),
+        INDEX(assetId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS NetworkTopologySetting (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL UNIQUE,
+        customerVisible TINYINT(1) DEFAULT 0,
+        shareEnabled TINYINT(1) DEFAULT 1,
+        defaultOverlay VARCHAR(32) DEFAULT 'health',
+        updatedById VARCHAR(191),
+        updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(companyId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS NetworkTopologyShare (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        token VARCHAR(128) NOT NULL UNIQUE,
+        name VARCHAR(191) NOT NULL,
+        siteId VARCHAR(191),
+        expiresAt DATETIME(3),
+        active TINYINT(1) DEFAULT 1,
+        createdById VARCHAR(191),
+        createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX(companyId, active),
+        INDEX(siteId),
+        INDEX(expiresAt)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    await this.db.query(`
+      CREATE TABLE IF NOT EXISTS NetworkTopologyChange (
+        id VARCHAR(191) PRIMARY KEY,
+        companyId VARCHAR(191) NOT NULL,
+        changeType VARCHAR(64) NOT NULL,
+        sourceType VARCHAR(64),
+        sourceId VARCHAR(191),
+        title VARCHAR(191) NOT NULL,
+        details TEXT,
+        status VARCHAR(32) DEFAULT 'OPEN',
+        detectedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        resolvedAt DATETIME(3),
+        INDEX(companyId, status),
+        INDEX(changeType),
+        INDEX(sourceId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    `);
+    await this.ensureColumn('NetworkInterfaceMetric', 'neighborProtocol', 'VARCHAR(32)');
+    await this.ensureColumn('NetworkInterfaceMetric', 'neighborSystemName', 'VARCHAR(191)');
+    await this.ensureColumn('NetworkInterfaceMetric', 'neighborPort', 'VARCHAR(191)');
+    await this.ensureColumn('NetworkInterfaceMetric', 'neighborAssetId', 'VARCHAR(191)');
+  }
+
+  private async ensureColumn(table: string, column: string, definition: string) {
+    const rows = await this.db.query<any[]>(
+      'SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1',
+      [table, column],
+    ).catch(() => []);
+    if (!rows[0]) await this.db.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 }
