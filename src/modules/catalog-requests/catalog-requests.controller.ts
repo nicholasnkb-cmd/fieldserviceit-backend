@@ -1,0 +1,71 @@
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { CatalogRequestsService } from './catalog-requests.service';
+import { CreateCatalogRequestDto } from './dto/create-catalog-request.dto';
+import { UpdateCatalogRequestDto } from './dto/update-catalog-request.dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { TenantGuard } from '../../common/guards/tenant.guard';
+import { BusinessOnlyGuard } from '../../common/guards/business-only.guard';
+import { FeatureAccessGuard } from '../../common/guards/feature-access.guard';
+import { BusinessOnly } from '../../common/decorators/business-only.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequireFeature } from '../../common/decorators/feature.decorator';
+
+@Controller('catalog-requests')
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
+@RequireFeature('catalogRequests')
+export class CatalogRequestsController {
+  constructor(private readonly catalogRequestsService: CatalogRequestsService) {}
+
+  @Get('items')
+  findCatalogItems(@Query() query: any, @CurrentUser() user: any) {
+    return this.catalogRequestsService.findCatalogItems(user, query);
+  }
+
+  @Get('categories')
+  findCatalogCategories(@CurrentUser() user: any) {
+    return this.catalogRequestsService.findCatalogCategories(user);
+  }
+
+  @Post()
+  create(@Body() dto: CreateCatalogRequestDto, @CurrentUser() user: any) {
+    return this.catalogRequestsService.create(dto, user.companyId, user.id);
+  }
+
+  @Get()
+  findAll(@Query() query: any, @CurrentUser() user: any) {
+    return this.catalogRequestsService.findAll(user, query);
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.catalogRequestsService.findOne(id, user);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateCatalogRequestDto, @CurrentUser() user: any) {
+    return this.catalogRequestsService.update(id, dto, user);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.catalogRequestsService.remove(id, user);
+  }
+
+  @BusinessOnly()
+  @Post(':id/approve')
+  approve(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.catalogRequestsService.approve(id, user.id, user);
+  }
+
+  @BusinessOnly()
+  @Post(':id/reject')
+  reject(@Param('id') id: string, @Body('reason') reason: string, @CurrentUser() user: any) {
+    return this.catalogRequestsService.reject(id, reason, user);
+  }
+
+  @BusinessOnly()
+  @Post(':id/fulfill')
+  fulfill(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.catalogRequestsService.fulfill(id, user);
+  }
+}

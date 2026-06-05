@@ -478,6 +478,59 @@ model TimeEntry {
   @@index([userId])
 }
 
+model CatalogRequest {
+  id              String    @id @default(uuid())
+  catalogItemId   String?
+  companyId       String?
+  createdById     String
+  requestType     String    @default("OTHER")
+  title           String
+  description     String?
+  status          String    @default("PENDING")
+  priority        String    @default("MEDIUM")
+  itemName        String?
+  quantity        Int?
+  justification   String?
+  notes           String?
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectionReason String?
+  fulfilledAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([createdById])
+  @@index([status])
+  @@index([requestType])
+  @@index([catalogItemId])
+}
+
+model CatalogItem {
+  id                   String   @id @default(uuid())
+  companyId            String?
+  requestType          String   @default("OTHER")
+  name                 String
+  shortDescription     String?
+  description          String?
+  category             String   @default("General")
+  icon                 String?
+  defaultPriority      String   @default("MEDIUM")
+  estimatedFulfillment String?
+  requiresApproval     Boolean  @default(true)
+  formSchema           String?
+  isActive             Boolean  @default(true)
+  sortOrder            Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([requestType])
+  @@index([category])
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
 model KbArticle {
   id          String   @id @default(uuid())
   companyId   String

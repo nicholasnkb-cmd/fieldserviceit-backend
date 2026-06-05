@@ -7,7 +7,7 @@ import * as crypto from 'crypto';
 const BCRYPT_ROUNDS = 12;
 const VALID_ROLES = ['SUPER_ADMIN', 'GLOBAL_TECH', 'TENANT_ADMIN', 'TECHNICIAN', 'CLIENT', 'READ_ONLY'];
 const GLOBAL_ROLES = ['SUPER_ADMIN', 'GLOBAL_TECH'];
-const FEATURE_KEYS = ['tickets', 'dispatch', 'assets', 'network', 'rmmIntegration', 'aiAgent', 'reporting', 'workflows', 'billing', 'settings', 'auditLogs'];
+const FEATURE_KEYS = ['tickets', 'dispatch', 'assets', 'network', 'rmmIntegration', 'aiAgent', 'reporting', 'workflows', 'billing', 'settings', 'auditLogs', 'catalogRequests'];
 
 @Injectable()
 export class AdminService {

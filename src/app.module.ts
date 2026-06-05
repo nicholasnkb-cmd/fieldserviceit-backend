@@ -37,6 +37,7 @@ import { CustomerPortalModule } from './modules/customer-portal/customer-portal.
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { SecurityCenterModule } from './modules/security-center/security-center.module';
 import { TopologyModule } from './modules/topology/topology.module';
+import { CatalogRequestsModule } from './modules/catalog-requests/catalog-requests.module';
 
 @Module({
   imports: [
@@ -107,6 +108,7 @@ import { TopologyModule } from './modules/topology/topology.module';
     MaintenanceModule,
     SecurityCenterModule,
     TopologyModule,
+    CatalogRequestsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },

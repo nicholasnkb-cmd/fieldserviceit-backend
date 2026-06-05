@@ -2506,6 +2506,49 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     },
   };
 
+  catalogRequest = {
+    findUnique: async ({ where }: { where: Record<string, any> }) => {
+      return this.genericFindFirst('CatalogRequest', { where });
+    },
+
+    findMany: async ({ where, orderBy, skip, take }: { where?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number }) => {
+      let sql = 'SELECT * FROM CatalogRequest';
+      const values: any[] = [];
+      if (where && Object.keys(where).length > 0) {
+        const clauses = this.buildWhereClauses('CatalogRequest', where, values);
+        sql += ` WHERE ${clauses.join(' AND ')}`;
+      }
+      if (orderBy) {
+        const orderParts = Object.entries(orderBy).map(([k, v]) => `${this.escapeColumn(k)} ${v.toUpperCase()}`);
+        sql += ` ORDER BY ${orderParts.join(', ')}`;
+      }
+      if (take !== undefined) { sql += ` LIMIT ?`; values.push(take); }
+      if (skip !== undefined) { sql += ` OFFSET ?`; values.push(skip); }
+      return this.query<RowDataPacket[]>(sql, values);
+    },
+
+    count: async ({ where }: { where?: Record<string, any> }) => {
+      return this.genericCount('CatalogRequest', { where });
+    },
+
+    create: async ({ data }: { data: Record<string, any> }) => {
+      return this.genericCreate('CatalogRequest', { data });
+    },
+
+    update: async ({ where, data }: { where: Record<string, any>; data: Record<string, any> }) => {
+      return this.genericUpdate('CatalogRequest', { where, data });
+    },
+
+    delete: async ({ where }: { where: Record<string, any> }) => {
+      await this.genericFindFirst('CatalogRequest', { where }); // ensure exists
+      const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
+      const values = Object.values(where);
+      const sql = `DELETE FROM CatalogRequest WHERE ${whereClauses.join(' AND ')}`;
+      const result = await this.execute(sql, values);
+      return { count: result.affectedRows };
+    },
+  };
+
   private escapeColumn(col: string): string {
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(col)) {
       throw new BadRequestException(`Invalid column name: ${col}`);
