@@ -10,15 +10,18 @@ export type NotificationEmailOptions = {
 
 @Injectable()
 export class EmailService {
-  private transporter: nodemailer.Transporter;
+  private transporter?: nodemailer.Transporter;
 
   constructor(private readonly logger: LoggerService) {
-    const host = process.env.SMTP_HOST || 'localhost';
-    const port = parseInt(process.env.SMTP_PORT || '1025', 10);
+    const production = process.env.NODE_ENV === 'production';
+    const host = process.env.SMTP_HOST?.trim() || (production ? '' : 'localhost');
+    const port = parseInt(process.env.SMTP_PORT || (production ? '587' : '1025'), 10);
     const user = process.env.SMTP_USER || '';
     const pass = process.env.SMTP_PASS || '';
 
-    if (host === 'localhost' && port === 1025) {
+    if (!host) {
+      this.logger.warn('[EmailService] SMTP is not configured; queued email will remain retryable');
+    } else if (host === 'localhost' && port === 1025) {
       this.transporter = nodemailer.createTransport({ host, port, ignoreTLS: true });
     } else if (user && pass) {
       this.transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
@@ -83,7 +86,7 @@ export class EmailService {
 
   getStatus() {
     return {
-      configured: !!this.transporter,
+      configured: !!this.transporter && !!process.env.SMTP_HOST?.trim(),
       host: process.env.SMTP_HOST || null,
       port: Number(process.env.SMTP_PORT || 0) || null,
       from: process.env.SMTP_FROM || 'noreply@fieldserviceit.com',
