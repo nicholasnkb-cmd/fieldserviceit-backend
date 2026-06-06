@@ -4,6 +4,7 @@ import { RmmProviderFactory } from './rmm-provider-factory.service';
 import { TicketTimelineService } from '../../tickets/services/ticket-timeline.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { TicketsGateway } from '../../tickets/events/tickets.gateway';
+import { TicketParticipantNotifierService } from '../../tickets/services/ticket-participant-notifier.service';
 
 @Injectable()
 export class RmmIntegrationService {
@@ -15,6 +16,7 @@ export class RmmIntegrationService {
     private timeline: TicketTimelineService,
     private notificationsService: NotificationsService,
     private gateway: TicketsGateway,
+    private participantNotifier: TicketParticipantNotifierService,
   ) {}
 
   async syncAsset(provider: string, assetData: any, companyId: string) {
@@ -105,6 +107,11 @@ export class RmmIntegrationService {
       'RMM_ALERT',
       `Ticket auto-created from ${provider} alert: ${title}`,
     );
+    await this.participantNotifier.notify(ticket.id, {
+      action: 'Ticket opened from RMM alert',
+      detail: `${provider}: ${title}`,
+      actorId: userId,
+    });
 
     // Notify tenant admins and technicians
     const notifyUsers = await this.prisma.user.findMany({

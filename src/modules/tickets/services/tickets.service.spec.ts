@@ -21,6 +21,7 @@ describe('TicketsService', () => {
   let mockPrisma: any;
   let mockGateway: any;
   let mockTimeline: any;
+  let mockParticipantNotifier: any;
   let mockEmail: any;
   let mockNotifications: any;
   let mockUsageService: any;
@@ -43,6 +44,9 @@ describe('TicketsService', () => {
     mockTimeline = {
       addEntry: jest.fn().mockResolvedValue(undefined),
     };
+    mockParticipantNotifier = {
+      notify: jest.fn().mockResolvedValue(undefined),
+    };
     mockEmail = {};
     mockNotifications = {};
     mockUsageService = {
@@ -54,6 +58,7 @@ describe('TicketsService', () => {
       mockPrisma as any,
       mockGateway as any,
       mockTimeline as any,
+      mockParticipantNotifier as any,
       mockEmail as any,
       mockNotifications as any,
       mockUsageService as any,
@@ -107,6 +112,10 @@ describe('TicketsService', () => {
       expect(mockPrisma.ticket.create).toHaveBeenCalled();
       expect(mockUsageService.incrementUsage).toHaveBeenCalledWith('c1', 'tickets');
       expect(mockGateway.notifyTicketUpdate).toHaveBeenCalledWith('c1', 'ticket:created', mockTicket);
+      expect(mockParticipantNotifier.notify).toHaveBeenCalledWith('ticket-1', expect.objectContaining({
+        action: 'Ticket opened',
+        actorId: 'u1',
+      }));
       expect(result.ticketNumber).toBe('TKT-C1-00001');
     });
 

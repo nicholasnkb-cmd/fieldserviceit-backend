@@ -17,6 +17,7 @@ import { PrismaService } from '../../../database/prisma.service';
 import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 import { Public } from '../../../common/decorators/public.decorator';
+import { TicketParticipantNotifierService } from '../services/ticket-participant-notifier.service';
 
 @Controller('tickets')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
@@ -25,6 +26,7 @@ export class TicketsController {
   constructor(
     private ticketsService: TicketsService,
     private timelineService: TicketTimelineService,
+    private participantNotifier: TicketParticipantNotifierService,
     private exportService: TicketExportService,
     private prisma: PrismaService,
   ) {}
@@ -136,7 +138,15 @@ export class TicketsController {
   @Post(':id/comments')
   async addComment(@Param('id') id: string, @Body() dto: CreateCommentDto, @CurrentUser() user: CurrentUserType) {
     await this.assertTicketAccess(id, user);
-    return this.timelineService.addEntry(id, user.id, 'COMMENT', dto.comment, undefined, undefined, dto.isInternal);
+    const entry = await this.timelineService.addEntry(id, user.id, 'COMMENT', dto.comment, undefined, undefined, dto.isInternal);
+    if (!dto.isInternal) {
+      await this.participantNotifier.notify(id, {
+        action: 'Comment added',
+        detail: dto.comment,
+        actorId: user.id,
+      });
+    }
+    return entry;
   }
 
   @Get(':id/timeline')
@@ -154,6 +164,11 @@ export class TicketsController {
       include: { uploadedBy: { select: { id: true, firstName: true, lastName: true } } },
     });
     await this.timelineService.addEntry(id, user.id, 'ATTACHMENT', `File attached: ${body.fileName}`);
+    await this.participantNotifier.notify(id, {
+      action: 'Attachment added',
+      detail: body.fileName,
+      actorId: user.id,
+    });
     return attachment;
   }
 
@@ -165,6 +180,11 @@ export class TicketsController {
     if (!rows[0]) throw new NotFoundException('Attachment not found');
     await this.prisma.ticketAttachment.delete({ where: { id: attachmentId } });
     await this.timelineService.addEntry(id, user.id, 'ATTACHMENT_REMOVED', `File removed: ${rows[0].fileName || attachmentId}`);
+    await this.participantNotifier.notify(id, {
+      action: 'Attachment removed',
+      detail: rows[0].fileName || attachmentId,
+      actorId: user.id,
+    });
     return { success: true };
   }
 
@@ -249,6 +269,11 @@ export class TicketsController {
       },
     });
     await this.timelineService.addEntry(id, user.id, 'TIME', `Logged ${body.duration}m${body.description ? ': ' + body.description : ''}`);
+    await this.participantNotifier.notify(id, {
+      action: 'Work time logged',
+      detail: `${body.duration} minutes${body.description ? `\n${body.description}` : ''}`,
+      actorId: user.id,
+    });
     return entry;
   }
 
@@ -294,6 +319,11 @@ export class TicketsController {
       },
     });
     await this.timelineService.addEntry(ticket.id, user.id, 'CREATED', 'Ticket created from email');
+    await this.participantNotifier.notify(ticket.id, {
+      action: 'Ticket opened from email',
+      detail: body.text || body.html || '',
+      actorId: user.id,
+    });
     return { ticketNumber, id: ticket.id };
   }
 }

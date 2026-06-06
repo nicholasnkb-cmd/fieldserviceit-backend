@@ -1,10 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { TicketsGateway } from '../../tickets/events/tickets.gateway';
+import { TicketParticipantNotifierService } from '../../tickets/services/ticket-participant-notifier.service';
 
 @Injectable()
 export class FieldServiceService {
-  constructor(private prisma: PrismaService, private gateway: TicketsGateway) {}
+  constructor(
+    private prisma: PrismaService,
+    private gateway: TicketsGateway,
+    private participantNotifier: TicketParticipantNotifierService,
+  ) {}
 
   async mobileSummary(companyId: string | null, user?: { id?: string; role?: string }) {
     const board = await this.getDispatchBoard(companyId);
@@ -25,13 +30,18 @@ export class FieldServiceService {
     };
   }
 
-  async dispatch(ticketId: string, technicianId: string, companyId: string) {
+  async dispatch(ticketId: string, technicianId: string, companyId: string, actorUserId?: string) {
     const ticket = await this.prisma.ticket.findFirst({ where: { id: ticketId, companyId } });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
     const result = await this.prisma.dispatch.create({
       data: { ticketId, technicianId, companyId, status: 'DISPATCHED' },
       include: { ticket: true, technician: { select: { id: true, firstName: true, lastName: true } } },
+    });
+    await this.participantNotifier.notify(ticketId, {
+      action: 'Technician dispatched',
+      detail: `Technician: ${[result.technician?.firstName, result.technician?.lastName].filter(Boolean).join(' ') || technicianId}`,
+      actorId: actorUserId,
     });
     this.gateway.notifyTicketUpdate(companyId, 'dispatch:created', result);
     return result;
@@ -48,7 +58,7 @@ export class FieldServiceService {
     });
   }
 
-  async updateStatus(id: string, status: string, companyId: string) {
+  async updateStatus(id: string, status: string, companyId: string, actorUserId?: string) {
     const dispatch = await this.prisma.dispatch.findFirst({ where: { id, companyId } });
     if (!dispatch) throw new NotFoundException('Dispatch not found');
     const normalized = String(status || '').toUpperCase();
@@ -61,29 +71,44 @@ export class FieldServiceService {
     if (normalized === 'COMPLETED') updateData.completedAt = new Date();
 
     const result = await this.prisma.dispatch.update({ where: { id }, data: updateData });
+    await this.participantNotifier.notify(dispatch.ticketId, {
+      action: `Field visit status changed to ${normalized.replaceAll('_', ' ')}`,
+      detail: `Previous status: ${dispatch.status}\nNew status: ${normalized}`,
+      actorId: actorUserId,
+    });
     this.gateway.notifyTicketUpdate(companyId, 'dispatch:updated', result);
     return result;
   }
 
-  async addNotes(id: string, notes: string, companyId: string) {
+  async addNotes(id: string, notes: string, companyId: string, actorUserId?: string) {
     const dispatch = await this.prisma.dispatch.findFirst({ where: { id, companyId } });
     if (!dispatch) throw new NotFoundException('Dispatch not found');
 
     const result = await this.prisma.dispatch.update({ where: { id }, data: { notes } });
+    await this.participantNotifier.notify(dispatch.ticketId, {
+      action: 'Field service notes updated',
+      detail: notes,
+      actorId: actorUserId,
+    });
     this.gateway.notifyTicketUpdate(companyId, 'dispatch:updated', result);
     return result;
   }
 
-  async addSignature(id: string, signature: string, companyId: string) {
+  async addSignature(id: string, signature: string, companyId: string, actorUserId?: string) {
     const dispatch = await this.prisma.dispatch.findFirst({ where: { id, companyId } });
     if (!dispatch) throw new NotFoundException('Dispatch not found');
 
     const result = await this.prisma.dispatch.update({ where: { id }, data: { customerSignature: signature, status: 'COMPLETED', completedAt: new Date() } });
+    await this.participantNotifier.notify(dispatch.ticketId, {
+      action: 'Customer signature captured',
+      detail: 'The field visit was marked completed.',
+      actorId: actorUserId,
+    });
     this.gateway.notifyTicketUpdate(companyId, 'dispatch:completed', result);
     return result;
   }
 
-  async addPhotos(id: string, photoUrls: string[], companyId: string) {
+  async addPhotos(id: string, photoUrls: string[], companyId: string, actorUserId?: string) {
     const dispatch = await this.prisma.dispatch.findFirst({ where: { id, companyId } });
     if (!dispatch) throw new NotFoundException('Dispatch not found');
 
@@ -91,6 +116,11 @@ export class FieldServiceService {
     const updated = [...existing, ...photoUrls];
 
     const result = await this.prisma.dispatch.update({ where: { id }, data: { photoUrls: JSON.stringify(updated) } });
+    await this.participantNotifier.notify(dispatch.ticketId, {
+      action: 'Field service photos added',
+      detail: `${photoUrls.length} photo${photoUrls.length === 1 ? '' : 's'} added.`,
+      actorId: actorUserId,
+    });
     this.gateway.notifyTicketUpdate(companyId, 'dispatch:updated', result);
     return result;
   }

@@ -1,8 +1,7 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { CreateTicketDto } from '../dto/create-ticket.dto';
 import { UpdateTicketDto } from '../dto/update-ticket.dto';
-import { CreateCommentDto } from '../dto/create-comment.dto';
 import { TicketsGateway } from '../events/tickets.gateway';
 import { TicketTimelineService } from './ticket-timeline.service';
 import { EmailService } from '../../notifications/services/email.service';
@@ -10,6 +9,7 @@ import { NotificationsService } from '../../notifications/services/notifications
 import { UsageService } from '../../billing/services/usage.service';
 import { LoggerService } from '../../../common/logger/logger.service';
 import { sanitizeHtml } from '../../../common/utils/xss.helper';
+import { TicketParticipantNotifierService } from './ticket-participant-notifier.service';
 import * as crypto from 'crypto';
 
 const validTransitions: Record<string, string[]> = {
@@ -27,6 +27,7 @@ export class TicketsService {
     private prisma: PrismaService,
     private gateway: TicketsGateway,
     private timeline: TicketTimelineService,
+    private participantNotifier: TicketParticipantNotifierService,
     private emailService: EmailService,
     private notificationsService: NotificationsService,
     private usageService: UsageService,
@@ -114,6 +115,11 @@ export class TicketsService {
     });
 
     await this.timeline.addEntry(ticket.id, userId, 'CREATED', `Ticket created with status ${dto.priority || 'MEDIUM'} priority`);
+    await this.participantNotifier.notify(ticket.id, {
+      action: 'Ticket opened',
+      detail: `Priority: ${dto.priority || 'MEDIUM'}\nStatus: OPEN`,
+      actorId: userId,
+    });
 
     if (companyIdForTicket) {
       this.usageService.incrementUsage(companyIdForTicket, 'tickets').catch((e) => {
@@ -300,9 +306,6 @@ export class TicketsService {
         await this.timeline.addEntry(id, userId!, 'RESOLVED', dto.resolution || 'Ticket resolved', ticket.status, 'RESOLVED');
         if (ticket.createdById && companyId) {
           await this.notificationsService.create({ userId: ticket.createdById, companyId, title: `Ticket ${ticket.ticketNumber} resolved`, body: dto.resolution || 'Ticket has been resolved', type: 'success', link: `/tickets/${id}` });
-          if ((ticket as any).contactEmail) {
-            this.emailService.sendNotificationEmail((ticket as any).contactEmail, `Ticket ${ticket.ticketNumber} resolved`, `<p>Your ticket <strong>${ticket.ticketNumber}</strong> has been resolved.</p><p>Resolution: ${sanitizeHtml(dto.resolution || 'N/A')}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
-          }
         }
       }
     }
@@ -318,6 +321,15 @@ export class TicketsService {
       }
     }
 
+    const participantUpdate = this.describeTicketUpdate(ticket, updated, dto);
+    if (participantUpdate) {
+      await this.participantNotifier.notify(id, {
+        action: participantUpdate.action,
+        detail: participantUpdate.detail,
+        actorId: userId,
+      });
+    }
+
     if (companyId) this.gateway.notifyTicketUpdate(companyId, 'ticket:updated', updated);
     return updated;
   }
@@ -327,6 +339,11 @@ export class TicketsService {
     const deleted = await this.prisma.ticket.update({
       where: { id },
       data: { deletedAt: new Date() },
+    });
+    await this.participantNotifier.notify(id, {
+      action: 'Ticket deleted',
+      detail: 'The ticket was removed from the active ticket list.',
+      actorId: user?.id,
     });
     if (ticket.companyId) this.gateway.notifyTicketUpdate(ticket.companyId, 'ticket:deleted', { id });
     return deleted;
@@ -351,6 +368,13 @@ export class TicketsService {
         this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} assigned to you`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been assigned to you.</p><p>Title: ${sanitizeHtml(ticket.title)}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
       }
     }
+    await this.participantNotifier.notify(id, {
+      action: 'Ticket assigned',
+      detail: assignedUser
+        ? `Assigned to: ${[assignedUser.firstName, assignedUser.lastName].filter(Boolean).join(' ') || assignedUser.email}`
+        : 'The ticket assignment changed.',
+      actorId: actorUserId,
+    });
     if (companyId) this.gateway.notifyTicketUpdate(companyId, 'ticket:assigned', updated);
     return updated;
   }
@@ -369,11 +393,55 @@ export class TicketsService {
     await this.timeline.addEntry(id, userId!, 'RESOLVED', resolution || 'Ticket resolved', ticket.status, 'RESOLVED');
     if (ticket.createdById && companyId) {
       await this.notificationsService.create({ userId: ticket.createdById, companyId, title: `Ticket ${ticket.ticketNumber} resolved`, body: resolution || 'Ticket has been resolved', type: 'success', link: `/tickets/${id}` });
-      if ((ticket as any).contactEmail) {
-        this.emailService.sendNotificationEmail((ticket as any).contactEmail, `Ticket ${ticket.ticketNumber} resolved`, `<p>Your ticket <strong>${ticket.ticketNumber}</strong> has been resolved.</p><p>Resolution: ${sanitizeHtml(resolution || 'N/A')}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
-      }
     }
+    await this.participantNotifier.notify(id, {
+      action: 'Ticket resolved',
+      detail: resolution || 'The ticket has been resolved.',
+      actorId: userId,
+    });
     if (companyId) this.gateway.notifyTicketUpdate(companyId, 'ticket:resolved', updated);
     return updated;
+  }
+
+  private describeTicketUpdate(ticket: any, updated: any, dto: UpdateTicketDto) {
+    const changes: string[] = [];
+    const addChange = (label: string, oldValue: any, newValue: any) => {
+      if (newValue !== undefined && String(oldValue ?? '') !== String(newValue ?? '')) {
+        changes.push(`${label}: ${oldValue || 'None'} -> ${newValue || 'None'}`);
+      }
+    };
+
+    addChange('Status', ticket.status, updated.status);
+    addChange('Priority', ticket.priority, updated.priority);
+    addChange('Title', ticket.title, updated.title);
+    addChange('Description', ticket.description, updated.description);
+    addChange('Category', ticket.category, updated.category);
+    addChange('Subcategory', ticket.subcategory, updated.subcategory);
+    addChange('Location', ticket.location, updated.location);
+    addChange('Affected user', ticket.contactName, updated.contactName);
+    addChange('Affected user email', ticket.contactEmail, updated.contactEmail);
+    addChange('Affected user phone', ticket.contactPhone, updated.contactPhone);
+
+    if (dto.assignedToId !== undefined && dto.assignedToId !== ticket.assignedToId) {
+      const assignee = updated.assignedTo
+        ? [updated.assignedTo.firstName, updated.assignedTo.lastName].filter(Boolean).join(' ')
+        : null;
+      changes.push(`Assignment: ${assignee || 'Unassigned'}`);
+    }
+    if (dto.onHoldReason && dto.onHoldReason !== ticket.onHoldReason) {
+      changes.push(`Hold reason: ${dto.onHoldReason}`);
+    }
+    if (dto.resolution && dto.resolution !== ticket.resolution) {
+      changes.push(`Resolution: ${dto.resolution}`);
+    }
+    if (!changes.length) return null;
+
+    let action = 'Ticket details updated';
+    if (updated.status === 'RESOLVED' && ticket.status !== 'RESOLVED') action = 'Ticket resolved';
+    else if (updated.status === 'ON_HOLD' && ticket.status !== 'ON_HOLD') action = 'Ticket placed on hold';
+    else if (updated.status !== ticket.status) action = `Status changed to ${String(updated.status).replaceAll('_', ' ')}`;
+    else if (dto.assignedToId !== undefined && dto.assignedToId !== ticket.assignedToId) action = 'Ticket assignment changed';
+
+    return { action, detail: changes.join('\n') };
   }
 }

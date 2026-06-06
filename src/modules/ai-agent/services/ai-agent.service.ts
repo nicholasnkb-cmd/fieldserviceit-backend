@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../../database/prisma.service';
+import { TicketParticipantNotifierService } from '../../tickets/services/ticket-participant-notifier.service';
 
 type AgentStep = {
   id: string;
@@ -43,7 +44,10 @@ const tools: AgentTool[] = [
 
 @Injectable()
 export class AiAgentService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private participantNotifier: TicketParticipantNotifierService,
+  ) {}
 
   listTools() {
     return { data: tools };
@@ -432,6 +436,11 @@ export class AiAgentService {
         companyId: user.companyId,
         createdById: user.id,
       },
+    });
+    await this.participantNotifier.notify(ticket.id, {
+      action: 'Ticket opened by AI Agent',
+      detail: this.goalTitle(goal),
+      actorId: user.id,
     });
     return { tool: 'create_ticket', status: 'completed', data: { id: ticket.id, ticketNumber, title: ticket.title, link: `/tickets/${ticket.id}` } };
   }

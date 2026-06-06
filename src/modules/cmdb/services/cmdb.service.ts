@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../../database/prisma.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { EmailService } from '../../notifications/services/email.service';
+import { TicketParticipantNotifierService } from '../../tickets/services/ticket-participant-notifier.service';
 import * as crypto from 'crypto';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -36,6 +37,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
     private emailService: EmailService,
+    private participantNotifier: TicketParticipantNotifierService,
   ) {}
 
   onModuleInit() {
@@ -1243,6 +1245,11 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
         new Date(),
       ],
     );
+    await this.participantNotifier.notify(ticketId, {
+      action: 'Ticket opened by network monitoring',
+      detail: details,
+      actorId: creator[0].id,
+    });
     return ticketId;
   }
 

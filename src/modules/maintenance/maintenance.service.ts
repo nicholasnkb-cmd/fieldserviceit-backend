@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { CurrentUser } from '../../common/types';
 import { DatabaseService } from '../../database/database.service';
 import { TicketsService } from '../tickets/services/tickets.service';
+import { TicketParticipantNotifierService } from '../tickets/services/ticket-participant-notifier.service';
 
 const FREQUENCIES = ['WEEKLY', 'MONTHLY', 'QUARTERLY', 'SEMI_ANNUAL', 'ANNUAL', 'CUSTOM'];
 const PLAN_STATUSES = ['ACTIVE', 'PAUSED', 'ARCHIVED'];
@@ -14,6 +15,7 @@ export class MaintenanceService {
   constructor(
     private db: DatabaseService,
     private tickets: TicketsService,
+    private participantNotifier: TicketParticipantNotifierService,
   ) {}
 
   async summary(user: CurrentUser) {
@@ -173,6 +175,11 @@ export class MaintenanceService {
          VALUES (?, ?, 'ASSIGNED', ?, ?, 1, ?)`,
         [randomUUID(), ticket.id, user.id, `Assigned from recurring maintenance plan ${plan.name}`, new Date()],
       );
+      await this.participantNotifier.notify(ticket.id, {
+        action: 'Ticket assigned from maintenance plan',
+        detail: `Maintenance plan: ${plan.name}`,
+        actorId: user.id,
+      });
     }
     const runId = randomUUID();
     await this.db.execute(

@@ -2,12 +2,16 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
 import { CurrentUser } from '../../common/types';
+import { TicketParticipantNotifierService } from '../tickets/services/ticket-participant-notifier.service';
 
 @Injectable()
 export class CustomerPortalService {
   private schemaReady?: Promise<void>;
 
-  constructor(private db: DatabaseService) {}
+  constructor(
+    private db: DatabaseService,
+    private participantNotifier: TicketParticipantNotifierService,
+  ) {}
 
   async summary(user: CurrentUser) {
     await this.ensureSchema();
@@ -74,6 +78,11 @@ export class CustomerPortalService {
        VALUES (?, ?, 'COMMENT', ?, ?, 0, ?)`,
       [id, ticket.id, user.id, comment, new Date()],
     );
+    await this.participantNotifier.notify(ticket.id, {
+      action: 'Customer message added',
+      detail: comment,
+      actorId: user.id,
+    });
     return { id, ticketId: ticket.id, comment };
   }
 
@@ -95,7 +104,13 @@ export class CustomerPortalService {
          WHERE id = ?`,
         [rating, signOffName, comment, approved, new Date(), existing[0].id],
       );
-      return (await this.db.query<any[]>('SELECT * FROM TicketCustomerFeedback WHERE id = ? LIMIT 1', [existing[0].id]))[0];
+      const updated = (await this.db.query<any[]>('SELECT * FROM TicketCustomerFeedback WHERE id = ? LIMIT 1', [existing[0].id]))[0];
+      await this.participantNotifier.notify(ticket.id, {
+        action: 'Customer feedback updated',
+        detail: `Rating: ${rating}/5\nApproved: ${approved ? 'Yes' : 'No'}${comment ? `\nComment: ${comment}` : ''}`,
+        actorId: user.id,
+      });
+      return updated;
     }
     const id = randomUUID();
     await this.db.execute(
@@ -109,6 +124,11 @@ export class CustomerPortalService {
        VALUES (?, ?, 'CUSTOMER_SIGNOFF', ?, ?, 0, ?)`,
       [randomUUID(), ticket.id, user.id, `Customer sign-off captured by ${signOffName} with ${rating}/5 rating.`, new Date()],
     );
+    await this.participantNotifier.notify(ticket.id, {
+      action: 'Customer sign-off recorded',
+      detail: `Rating: ${rating}/5\nApproved: ${approved ? 'Yes' : 'No'}${comment ? `\nComment: ${comment}` : ''}`,
+      actorId: user.id,
+    });
     return (await this.db.query<any[]>('SELECT * FROM TicketCustomerFeedback WHERE id = ? LIMIT 1', [id]))[0];
   }
 
