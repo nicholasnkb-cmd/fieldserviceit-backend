@@ -18,6 +18,7 @@ import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 import { Public } from '../../../common/decorators/public.decorator';
 import { TicketParticipantNotifierService } from '../services/ticket-participant-notifier.service';
+import { EmailDeliveryService } from '../../notifications/services/email-delivery.service';
 
 @Controller('tickets')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
@@ -27,6 +28,7 @@ export class TicketsController {
     private ticketsService: TicketsService,
     private timelineService: TicketTimelineService,
     private participantNotifier: TicketParticipantNotifierService,
+    private emailDeliveryService: EmailDeliveryService,
     private exportService: TicketExportService,
     private prisma: PrismaService,
   ) {}
@@ -155,6 +157,13 @@ export class TicketsController {
     return this.timelineService.getTimeline(id);
   }
 
+  @Get(':id/email-deliveries')
+  async getEmailDeliveries(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    await this.assertTicketAccess(id, user);
+    if (user.userType === 'PUBLIC') throw new NotFoundException('Ticket not found');
+    return this.emailDeliveryService.ticketHistory(id);
+  }
+
   @BusinessOnly()
   @Post(':id/attachments')
   async addAttachment(@Param('id') id: string, @Body() body: { fileUrl: string; fileName: string; fileSize: number; mimeType: string }, @CurrentUser() user: CurrentUserType) {
@@ -271,8 +280,9 @@ export class TicketsController {
     await this.timelineService.addEntry(id, user.id, 'TIME', `Logged ${body.duration}m${body.description ? ': ' + body.description : ''}`);
     await this.participantNotifier.notify(id, {
       action: 'Work time logged',
-      detail: `${body.duration} minutes${body.description ? `\n${body.description}` : ''}`,
+      detail: `${body.duration} minutes of work were logged.`,
       actorId: user.id,
+      eventCategory: 'ticket_time',
     });
     return entry;
   }
@@ -289,41 +299,140 @@ export class TicketsController {
   }
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Public()
   @Post('inbound-email')
   async inboundEmail(
-    @Body() body: { from: string; subject: string; text: string; html?: string },
+    @Body() body: { from: string; subject: string; text?: string; html?: string; messageId?: string; inReplyTo?: string },
     @Headers('x-api-key') apiKey?: string,
   ) {
     const expectedKey = process.env.INBOUND_EMAIL_API_KEY;
     if (!expectedKey || apiKey !== expectedKey) {
       throw new UnauthorizedException('Invalid API key');
     }
-    const user = await this.prisma.user.findFirst({ where: { email: body.from, userType: 'PUBLIC' } });
+    const senderEmail = this.extractEmail(body.from);
+    if (!senderEmail) throw new NotFoundException('No sender email was provided');
+    const message = this.emailText(body.text, body.html);
+    const ticketNumber = `${body.subject || ''} ${message}`.match(/\bTKT-[A-Z0-9-]+\b/i)?.[0]?.toUpperCase();
+    const providerMessageId = String(body.messageId || '').trim();
+
+    if (providerMessageId) {
+      const existing = await this.prisma.query<any[]>(
+        `SELECT id, ticketId FROM EmailInboundMessage WHERE providerMessageId = ? LIMIT 1`,
+        [providerMessageId],
+      );
+      if (existing[0]) return { duplicate: true, id: existing[0].ticketId };
+    }
+
+    let tickets: any[] = [];
+    if (ticketNumber) {
+      tickets = await this.prisma.query<any[]>(
+        `SELECT t.id, t.ticketNumber, t.contactEmail, t.createdById, u.email creatorEmail
+         FROM Ticket t LEFT JOIN User u ON u.id = t.createdById
+         WHERE UPPER(t.ticketNumber) = ? AND t.deletedAt IS NULL LIMIT 1`,
+        [ticketNumber],
+      );
+    } else if (body.inReplyTo) {
+      tickets = await this.prisma.query<any[]>(
+        `SELECT t.id, t.ticketNumber, t.contactEmail, t.createdById, u.email creatorEmail
+         FROM EmailDelivery d
+         INNER JOIN Ticket t ON t.id = d.ticketId
+         LEFT JOIN User u ON u.id = t.createdById
+         WHERE d.providerMessageId = ? AND t.deletedAt IS NULL LIMIT 1`,
+        [String(body.inReplyTo).trim()],
+      );
+    }
+    if (tickets[0]) {
+      const ticket = tickets[0];
+      const allowedEmails = [ticket.contactEmail, ticket.creatorEmail]
+        .filter(Boolean)
+        .map((value: string) => value.trim().toLowerCase());
+      if (!allowedEmails.includes(senderEmail)) throw new UnauthorizedException('Sender is not a participant on this ticket');
+      const sender = await this.prisma.user.findFirst({ where: { email: senderEmail, deletedAt: null } });
+      const actorId = sender?.id || ticket.createdById;
+      const entry = await this.timelineService.addEntry(
+        ticket.id,
+        actorId,
+        'COMMENT',
+        message || 'Reply received by email',
+        undefined,
+        undefined,
+        false,
+      );
+      if (providerMessageId) {
+        await this.prisma.execute(
+          `INSERT IGNORE INTO EmailInboundMessage (
+            id, providerMessageId, senderEmail, ticketId, subject, status, createdAt
+          ) VALUES (UUID(), ?, ?, ?, ?, 'PROCESSED', NOW(3))`,
+          [providerMessageId, senderEmail, ticket.id, String(body.subject || '').slice(0, 255)],
+        );
+      }
+      await this.participantNotifier.notify(ticket.id, {
+        action: 'Reply received by email',
+        detail: message,
+        actorId,
+        eventCategory: 'ticket_comments',
+        excludeEmails: [senderEmail],
+      });
+      return { ticketNumber: ticket.ticketNumber, id: ticket.id, replied: true, timelineId: entry.id };
+    }
+
+    const user = await this.prisma.user.findFirst({ where: { email: senderEmail, userType: 'PUBLIC' } });
     if (!user) throw new NotFoundException('No public user found for this email');
 
     const count = await this.prisma.ticket.count({ where: { createdById: user.id } });
-    const ticketNumber = `TKT-EMAIL-${(count + 1).toString().padStart(5, '0')}`;
+    const newTicketNumber = `TKT-EMAIL-${(count + 1).toString().padStart(5, '0')}`;
     const trackingToken = require('crypto').randomBytes(16).toString('hex');
 
     const ticket = await this.prisma.ticket.create({
       data: {
         title: body.subject || 'Email submission',
-        description: body.text || body.html || '',
+        description: message,
         contactName: user.firstName || user.email,
         contactEmail: user.email,
         contactPhone: '',
-        ticketNumber,
+        ticketNumber: newTicketNumber,
         createdById: user.id,
         trackingToken,
         status: 'OPEN',
       },
     });
+    if (providerMessageId) {
+      await this.prisma.execute(
+        `INSERT IGNORE INTO EmailInboundMessage (
+          id, providerMessageId, senderEmail, ticketId, subject, status, createdAt
+        ) VALUES (UUID(), ?, ?, ?, ?, 'PROCESSED', NOW(3))`,
+        [providerMessageId, senderEmail, ticket.id, String(body.subject || '').slice(0, 255)],
+      );
+    }
     await this.timelineService.addEntry(ticket.id, user.id, 'CREATED', 'Ticket created from email');
     await this.participantNotifier.notify(ticket.id, {
       action: 'Ticket opened from email',
-      detail: body.text || body.html || '',
+      detail: message,
       actorId: user.id,
+      eventCategory: 'ticket_created',
     });
-    return { ticketNumber, id: ticket.id };
+    return { ticketNumber: newTicketNumber, id: ticket.id };
+  }
+
+  private extractEmail(value: string) {
+    const match = String(value || '').match(/<([^>]+)>/);
+    const email = (match?.[1] || value || '').trim().toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '';
+  }
+
+  private emailText(text?: string, html?: string) {
+    const plain = String(text || '').trim();
+    if (plain) return plain.slice(0, 20000);
+    return String(html || '')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 20000);
   }
 }

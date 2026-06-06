@@ -87,8 +87,9 @@ export class FieldServiceService {
     const result = await this.prisma.dispatch.update({ where: { id }, data: { notes } });
     await this.participantNotifier.notify(dispatch.ticketId, {
       action: 'Field service notes updated',
-      detail: notes,
+      detail: 'The technician updated the field visit notes.',
       actorId: actorUserId,
+      eventCategory: 'dispatch',
     });
     this.gateway.notifyTicketUpdate(companyId, 'dispatch:updated', result);
     return result;

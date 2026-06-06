@@ -1,24 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { LoggerService } from '../../../common/logger/logger.service';
 import { PrismaService } from '../../../database/prisma.service';
-import { EmailService } from '../../notifications/services/email.service';
+import { EmailDeliveryService } from '../../notifications/services/email-delivery.service';
 
 export type TicketParticipantNotification = {
   action: string;
   detail?: string;
   actorId?: string;
+  eventCategory?: string;
+  eventType?: string;
+  excludeEmails?: string[];
 };
 
 type Recipient = {
   email: string;
   name?: string | null;
+  userId?: string | null;
 };
 
 @Injectable()
 export class TicketParticipantNotifierService {
   constructor(
     private prisma: PrismaService,
-    private emailService: EmailService,
+    private emailDeliveryService: EmailDeliveryService,
     private readonly logger: LoggerService,
   ) {}
 
@@ -52,35 +56,31 @@ export class TicketParticipantNotifierService {
         ? [actor.firstName, actor.lastName].filter(Boolean).join(' ') || actor.email
         : null;
       const recipients = this.uniqueRecipients([
-        { email: ticket.contactEmail || '', name: ticket.contactName },
+        { email: ticket.contactEmail || '', name: ticket.contactName, userId: null },
         {
           email: ticket.createdBy?.email || '',
           name: ticket.createdBy
             ? [ticket.createdBy.firstName, ticket.createdBy.lastName].filter(Boolean).join(' ')
             : null,
+          userId: ticket.createdBy?.id || null,
         },
-      ]);
+      ]).filter((recipient) => !notification.excludeEmails?.some(
+        (email) => email.trim().toLowerCase() === recipient.email,
+      ));
       if (!recipients.length) {
         this.logger.warn(`[TicketParticipantNotifier] No email recipients for ticket ${ticket.ticketNumber}`);
         return;
       }
 
-      const subject = `Ticket ${ticket.ticketNumber}: ${notification.action}`;
       const ticketUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${ticket.id}`;
       const results = await Promise.allSettled(recipients.map((recipient) => (
-        this.emailService.sendNotificationEmail(
-          recipient.email,
-          subject,
-          this.emailBody({
-            recipient,
-            ticketNumber: ticket.ticketNumber,
-            ticketTitle: ticket.title,
-            action: notification.action,
-            detail: notification.detail,
-            actorName,
-            ticketUrl,
-          }),
-        )
+        this.queueRecipient({
+          ticket,
+          recipient,
+          notification,
+          actorName,
+          ticketUrl,
+        })
       )));
 
       results.forEach((result, index) => {
@@ -97,6 +97,47 @@ export class TicketParticipantNotifierService {
     }
   }
 
+  private async queueRecipient(input: {
+    ticket: any;
+    recipient: Recipient;
+    notification: TicketParticipantNotification;
+    actorName?: string | null;
+    ticketUrl: string;
+  }) {
+    let userId = input.recipient.userId || null;
+    if (!userId) {
+      const matches = await this.prisma.query<any[]>(
+        `SELECT id FROM User WHERE LOWER(email) = ? AND deletedAt IS NULL LIMIT 1`,
+        [input.recipient.email],
+      );
+      userId = matches[0]?.id || null;
+    }
+    const eventType = input.notification.eventType || 'TICKET_PARTICIPANT';
+    const eventCategory = input.notification.eventCategory || this.inferCategory(input.notification.action);
+    const prepared = await this.emailDeliveryService.prepareTicketEmail({
+      companyId: input.ticket.companyId,
+      recipientEmail: input.recipient.email,
+      recipientName: input.recipient.name,
+      ticketNumber: input.ticket.ticketNumber,
+      ticketTitle: input.ticket.title,
+      action: input.notification.action,
+      detail: input.notification.detail,
+      actorName: input.actorName,
+      ticketUrl: input.ticketUrl,
+      eventType,
+    });
+    return this.emailDeliveryService.enqueue({
+      companyId: input.ticket.companyId,
+      ticketId: input.ticket.id,
+      userId,
+      recipientEmail: input.recipient.email,
+      recipientName: input.recipient.name,
+      eventType,
+      eventCategory,
+      ...prepared,
+    });
+  }
+
   private uniqueRecipients(recipients: Recipient[]) {
     const unique = new Map<string, Recipient>();
     for (const recipient of recipients) {
@@ -106,46 +147,16 @@ export class TicketParticipantNotifierService {
     return [...unique.values()];
   }
 
-  private emailBody(input: {
-    recipient: Recipient;
-    ticketNumber: string;
-    ticketTitle: string;
-    action: string;
-    detail?: string;
-    actorName?: string | null;
-    ticketUrl: string;
-  }) {
-    const greeting = input.recipient.name?.trim()
-      ? `Hello ${this.escapeHtml(input.recipient.name.trim())},`
-      : 'Hello,';
-    const detail = input.detail?.trim()
-      ? `<p><strong>Details:</strong><br>${this.escapeHtml(input.detail.trim()).replace(/\n/g, '<br>')}</p>`
-      : '';
-    const actor = input.actorName
-      ? `<p><strong>Updated by:</strong> ${this.escapeHtml(input.actorName)}</p>`
-      : '';
-
-    return `
-      <p>${greeting}</p>
-      <p>An action was taken on a ticket you opened or are listed as the affected contact.</p>
-      <p>
-        <strong>Ticket:</strong> ${this.escapeHtml(input.ticketNumber)}<br>
-        <strong>Title:</strong> ${this.escapeHtml(input.ticketTitle)}<br>
-        <strong>Action:</strong> ${this.escapeHtml(input.action)}
-      </p>
-      ${detail}
-      ${actor}
-      <p><a href="${this.escapeHtml(input.ticketUrl)}">View ticket</a></p>
-      <p>This is an automated FieldserviceIT notification.</p>
-    `;
-  }
-
-  private escapeHtml(value: string) {
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+  private inferCategory(action: string) {
+    const value = action.toLowerCase();
+    if (value.includes('resolved') || value.includes('closed')) return 'ticket_resolution';
+    if (value.includes('status') || value.includes('reopened')) return 'ticket_status';
+    if (value.includes('comment') || value.includes('message') || value.includes('reply')) return 'ticket_comments';
+    if (value.includes('assign') || value.includes('technician')) return 'ticket_assignment';
+    if (value.includes('attachment') || value.includes('file')) return 'ticket_attachments';
+    if (value.includes('time') || value.includes('work log')) return 'ticket_time';
+    if (value.includes('dispatch') || value.includes('visit') || value.includes('arrival')) return 'dispatch';
+    if (value.includes('opened') || value.includes('created')) return 'ticket_created';
+    return 'automated';
   }
 }

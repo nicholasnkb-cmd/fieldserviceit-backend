@@ -2,6 +2,12 @@ import { Injectable } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { LoggerService } from '../../../common/logger/logger.service';
 
+export type NotificationEmailOptions = {
+  text?: string;
+  replyTo?: string;
+  fromName?: string;
+};
+
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter;
@@ -54,16 +60,38 @@ export class EmailService {
     }
   }
 
-  async sendNotificationEmail(to: string, subject: string, html: string): Promise<void> {
+  async sendNotificationEmail(
+    to: string,
+    subject: string,
+    html: string,
+    options: NotificationEmailOptions = {},
+  ): Promise<{ messageId?: string }> {
     if (!this.transporter) {
-      this.logger.log(`[EmailService] SMTP not configured, skipping email to ${to}: ${subject}`);
-      return;
+      throw new Error('SMTP is not configured');
     }
-    await this.transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@fieldserviceit.com',
+    const fromAddress = process.env.SMTP_FROM || 'noreply@fieldserviceit.com';
+    const info = await this.transporter.sendMail({
+      from: options.fromName ? `"${this.escapeHeader(options.fromName)}" <${fromAddress}>` : fromAddress,
       to,
       subject,
       html,
+      text: options.text,
+      replyTo: options.replyTo || process.env.SMTP_REPLY_TO || undefined,
     });
+    return { messageId: info.messageId };
+  }
+
+  getStatus() {
+    return {
+      configured: !!this.transporter,
+      host: process.env.SMTP_HOST || null,
+      port: Number(process.env.SMTP_PORT || 0) || null,
+      from: process.env.SMTP_FROM || 'noreply@fieldserviceit.com',
+      replyTo: process.env.SMTP_REPLY_TO || null,
+    };
+  }
+
+  private escapeHeader(value: string) {
+    return value.replace(/[\r\n"]/g, '').trim();
   }
 }

@@ -4,11 +4,10 @@ import { CreateTicketDto } from '../dto/create-ticket.dto';
 import { UpdateTicketDto } from '../dto/update-ticket.dto';
 import { TicketsGateway } from '../events/tickets.gateway';
 import { TicketTimelineService } from './ticket-timeline.service';
-import { EmailService } from '../../notifications/services/email.service';
+import { EmailDeliveryService } from '../../notifications/services/email-delivery.service';
 import { NotificationsService } from '../../notifications/services/notifications.service';
 import { UsageService } from '../../billing/services/usage.service';
 import { LoggerService } from '../../../common/logger/logger.service';
-import { sanitizeHtml } from '../../../common/utils/xss.helper';
 import { TicketParticipantNotifierService } from './ticket-participant-notifier.service';
 import * as crypto from 'crypto';
 
@@ -28,7 +27,7 @@ export class TicketsService {
     private gateway: TicketsGateway,
     private timeline: TicketTimelineService,
     private participantNotifier: TicketParticipantNotifierService,
-    private emailService: EmailService,
+    private emailDeliveryService: EmailDeliveryService,
     private notificationsService: NotificationsService,
     private usageService: UsageService,
     private readonly logger: LoggerService,
@@ -297,7 +296,7 @@ export class TicketsService {
           if (assignedUser && companyId) {
             await this.notificationsService.create({ userId: assignedUser.id, companyId, title: `Ticket ${ticket.ticketNumber} on hold`, body: dto.onHoldReason, type: 'info', link: `/tickets/${id}` });
             if (assignedUser.email) {
-              this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} on hold`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been placed on hold.</p><p>Reason: ${sanitizeHtml(dto.onHoldReason || '')}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
+              this.queueAssigneeEmail(ticket, assignedUser, 'Ticket placed on hold', 'Review the ticket for the current hold status.').catch(() => {});
             }
           }
         }
@@ -316,7 +315,7 @@ export class TicketsService {
       if (assignedUser && companyId) {
         await this.notificationsService.create({ userId: assignedUser.id, companyId, title: `Ticket ${ticket.ticketNumber} assigned to you`, body: ticket.title, type: 'info', link: `/tickets/${id}` });
         if (assignedUser.email) {
-          this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} assigned to you`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been assigned to you.</p><p>Title: ${sanitizeHtml(ticket.title)}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
+          this.queueAssigneeEmail(ticket, assignedUser, 'Ticket assigned to you').catch(() => {});
         }
       }
     }
@@ -365,7 +364,7 @@ export class TicketsService {
     if (assignedUser && companyId) {
       await this.notificationsService.create({ userId: assignedUser.id, companyId, title: `Ticket ${ticket.ticketNumber} assigned to you`, body: ticket.title, type: 'info', link: `/tickets/${id}` });
       if (assignedUser.email) {
-        this.emailService.sendNotificationEmail(assignedUser.email, `Ticket ${ticket.ticketNumber} assigned to you`, `<p>Ticket <strong>${ticket.ticketNumber}</strong> has been assigned to you.</p><p>Title: ${sanitizeHtml(ticket.title)}</p><p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${id}">View Ticket</a></p>`).catch(() => {});
+        this.queueAssigneeEmail(ticket, assignedUser, 'Ticket assigned to you').catch(() => {});
       }
     }
     await this.participantNotifier.notify(id, {
@@ -401,6 +400,31 @@ export class TicketsService {
     });
     if (companyId) this.gateway.notifyTicketUpdate(companyId, 'ticket:resolved', updated);
     return updated;
+  }
+
+  private async queueAssigneeEmail(ticket: any, assignedUser: any, action: string, detail?: string) {
+    if (!assignedUser?.email) return;
+    const prepared = await this.emailDeliveryService.prepareTicketEmail({
+      companyId: ticket.companyId,
+      recipientEmail: assignedUser.email,
+      recipientName: [assignedUser.firstName, assignedUser.lastName].filter(Boolean).join(' '),
+      ticketNumber: ticket.ticketNumber,
+      ticketTitle: ticket.title,
+      action,
+      detail,
+      ticketUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/${ticket.id}`,
+      eventType: 'TICKET_PARTICIPANT',
+    });
+    await this.emailDeliveryService.enqueue({
+      companyId: ticket.companyId,
+      ticketId: ticket.id,
+      userId: assignedUser.id,
+      recipientEmail: assignedUser.email,
+      recipientName: [assignedUser.firstName, assignedUser.lastName].filter(Boolean).join(' '),
+      eventType: 'TICKET_ASSIGNEE',
+      eventCategory: 'ticket_assignment',
+      ...prepared,
+    });
   }
 
   private describeTicketUpdate(ticket: any, updated: any, dto: UpdateTicketDto) {
