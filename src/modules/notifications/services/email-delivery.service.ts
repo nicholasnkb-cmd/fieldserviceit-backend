@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { LoggerService } from '../../../common/logger/logger.service';
 import { CurrentUser } from '../../../common/types';
 import { PrismaService } from '../../../database/prisma.service';
@@ -20,7 +20,10 @@ const DEFAULT_EVENTS: Record<string, boolean> = {
 };
 
 const CRITICAL_CATEGORIES = new Set(['ticket_status', 'ticket_resolution', 'sla', 'security']);
-const DELIVERY_STATUSES = new Set(['QUEUED', 'DIGEST_PENDING', 'SENDING', 'SENT', 'FAILED', 'BOUNCED', 'SUPPRESSED']);
+const DELIVERY_STATUSES = new Set([
+  'QUEUED', 'DIGEST_PENDING', 'SENDING', 'SENT', 'DELIVERED', 'FAILED',
+  'BOUNCED', 'COMPLAINED', 'SUPPRESSED', 'CANCELLED',
+]);
 
 type DeliveryInput = {
   companyId?: string | null;
@@ -50,6 +53,7 @@ type TicketEmailInput = {
   actorName?: string | null;
   ticketUrl: string;
   eventType: string;
+  templateOverride?: Record<string, any>;
 };
 
 type PreferenceRow = {
@@ -151,7 +155,7 @@ export class EmailDeliveryService {
         )
       : [];
     const company = companyRows[0] || {};
-    const template = templateRows[0] || {};
+    const template = input.templateOverride || templateRows[0] || {};
     const branding = this.safeJson<Record<string, any>>(company.branding, {});
     const accentColor = this.safeColor(template.accentColor || branding.primaryColor || '#2563eb');
     const companyName = template.headerText || branding.companyName || company.name || 'FieldserviceIT';
@@ -286,6 +290,97 @@ export class EmailDeliveryService {
     return this.getPreferences(userId);
   }
 
+  async getQueueState(user: CurrentUser) {
+    this.assertOperationsRole(user);
+    const rows = await this.prisma.query<any[]>(
+      `SELECT paused, reason, pausedAt, pausedById, updatedAt
+       FROM EmailQueueControl WHERE id = 'global-email-queue' LIMIT 1`,
+    );
+    const row = rows[0] || {};
+    return {
+      paused: this.asBoolean(row.paused),
+      reason: row.reason || null,
+      pausedAt: row.pausedAt || null,
+      pausedById: row.pausedById || null,
+      updatedAt: row.updatedAt || null,
+    };
+  }
+
+  async pauseQueue(user: CurrentUser, reason?: string) {
+    this.assertOperationsRole(user);
+    await this.prisma.execute(
+      `INSERT INTO EmailQueueControl (id, paused, reason, pausedAt, pausedById, updatedAt)
+       VALUES ('global-email-queue', 1, ?, NOW(3), ?, NOW(3))
+       ON DUPLICATE KEY UPDATE paused = 1, reason = VALUES(reason), pausedAt = NOW(3),
+         pausedById = VALUES(pausedById), updatedAt = NOW(3)`,
+      [String(reason || '').trim().slice(0, 500) || null, user.id],
+    );
+    return this.getQueueState(user);
+  }
+
+  async resumeQueue(user: CurrentUser) {
+    this.assertOperationsRole(user);
+    await this.prisma.execute(
+      `INSERT INTO EmailQueueControl (id, paused, reason, pausedAt, pausedById, updatedAt)
+       VALUES ('global-email-queue', 0, NULL, NULL, NULL, NOW(3))
+       ON DUPLICATE KEY UPDATE paused = 0, reason = NULL, pausedAt = NULL,
+         pausedById = NULL, updatedAt = NOW(3)`,
+    );
+    return this.getQueueState(user);
+  }
+
+  async retryAll(user: CurrentUser) {
+    this.assertOperationsRole(user);
+    const companyId = this.companyScope(user);
+    const where = companyId ? 'AND companyId = ?' : '';
+    const result = await this.prisma.execute(
+      `UPDATE EmailDelivery
+       SET status = 'QUEUED', attempts = 0, nextAttemptAt = NOW(3),
+           errorMessage = NULL, bouncedAt = NULL, complainedAt = NULL,
+           failureNotifiedAt = NULL, updatedAt = NOW(3)
+       WHERE status = 'FAILED' ${where}`,
+      companyId ? [companyId] : [],
+    );
+    return { queued: result.affectedRows };
+  }
+
+  async cancel(id: string, user: CurrentUser) {
+    this.assertOperationsRole(user);
+    const delivery = await this.scopedDelivery(id, user);
+    if (!['QUEUED', 'DIGEST_PENDING', 'FAILED'].includes(delivery.status)) {
+      throw new BadRequestException('Only queued, digest-pending, or failed email can be cancelled');
+    }
+    await this.prisma.execute(
+      `UPDATE EmailDelivery SET status = 'CANCELLED', cancelledAt = NOW(3),
+       cancelledById = ?, updatedAt = NOW(3) WHERE id = ?`,
+      [user.id, id],
+    );
+    return { success: true };
+  }
+
+  async resend(id: string, user: CurrentUser) {
+    this.assertOperationsRole(user);
+    const delivery = await this.scopedDelivery(id, user);
+    if (['QUEUED', 'DIGEST_PENDING', 'SENDING'].includes(delivery.status)) {
+      throw new BadRequestException('This email is already pending delivery');
+    }
+    const newId = randomUUID();
+    await this.prisma.execute(
+      `INSERT INTO EmailDelivery (
+         id, companyId, ticketId, userId, recipientEmail, recipientName, eventType, eventCategory,
+         subject, htmlBody, textBody, status, priority, attempts, maxAttempts, nextAttemptAt,
+         metadata, resentFromId, createdAt, updatedAt
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, 0, ?, NOW(3), ?, ?, NOW(3), NOW(3))`,
+      [
+        newId, delivery.companyId || null, delivery.ticketId || null, delivery.userId || null,
+        delivery.recipientEmail, delivery.recipientName || null, delivery.eventType,
+        delivery.eventCategory, delivery.subject, delivery.htmlBody, delivery.textBody || null,
+        delivery.priority, delivery.maxAttempts, delivery.metadata || null, id,
+      ],
+    );
+    return { id: newId, status: 'QUEUED' };
+  }
+
   async listDeliveries(user: CurrentUser, query: any) {
     this.assertOperationsRole(user);
     const page = Math.max(1, Number(query.page) || 1);
@@ -315,7 +410,8 @@ export class EmailDeliveryService {
     const rows = await this.prisma.query<any[]>(
       `SELECT id, companyId, ticketId, userId, recipientEmail, recipientName, eventType, eventCategory,
               subject, status, priority, attempts, maxAttempts, nextAttemptAt, providerMessageId,
-              errorMessage, createdAt, updatedAt, sentAt, bouncedAt
+              errorMessage, createdAt, updatedAt, sentAt, deliveredAt, openedAt, firstClickedAt,
+              complainedAt, bouncedAt, cancelledAt, openCount, clickCount, resentFromId
        FROM EmailDelivery ${where}
        ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
       [...values, limit, (page - 1) * limit],
@@ -338,24 +434,46 @@ export class EmailDeliveryService {
     const last24Where = companyId ? 'WHERE companyId = ? AND createdAt >= DATE_SUB(NOW(), INTERVAL 24 HOUR)' : 'WHERE createdAt >= DATE_SUB(NOW(), INTERVAL 24 HOUR)';
     const recent = await this.prisma.query<any[]>(
       `SELECT COUNT(*) total,
-              SUM(status = 'SENT') sent,
-              SUM(status IN ('FAILED', 'BOUNCED')) failed,
+              SUM(status IN ('SENT', 'DELIVERED')) sent,
+              SUM(status = 'DELIVERED') delivered,
+              SUM(openedAt IS NOT NULL) opened,
+              SUM(firstClickedAt IS NOT NULL) clicked,
+              SUM(status IN ('FAILED', 'BOUNCED', 'COMPLAINED')) failed,
+              SUM(status = 'BOUNCED') bounced,
+              SUM(status = 'COMPLAINED') complained,
               MIN(CASE WHEN status IN ('QUEUED', 'FAILED') THEN createdAt END) oldestQueuedAt
        FROM EmailDelivery ${last24Where}`,
       values,
     );
+    const sent = Number(recent[0]?.sent || 0);
+    const total = Number(recent[0]?.total || 0);
+    const opened = Number(recent[0]?.opened || 0);
+    const clicked = Number(recent[0]?.clicked || 0);
+    const bounced = Number(recent[0]?.bounced || 0);
+    const queue = await this.getQueueState(user);
+    const smtp = await this.emailService.getStatus();
     return {
-      smtp: await this.emailService.getStatus(),
+      smtp,
       webhooks: {
-        inboundEmailConfigured: !!process.env.INBOUND_EMAIL_API_KEY,
-        bounceWebhookConfigured: !!process.env.EMAIL_WEBHOOK_API_KEY,
+        inboundEmailConfigured: Boolean(smtp.webhookSecretConfigured || process.env.INBOUND_EMAIL_API_KEY),
+        bounceWebhookConfigured: Boolean(smtp.webhookSecretConfigured || process.env.EMAIL_WEBHOOK_API_KEY),
       },
+      queue,
       counts: Object.fromEntries(counts.map((row) => [row.status, Number(row.count)])),
       last24Hours: {
-        total: Number(recent[0]?.total || 0),
-        sent: Number(recent[0]?.sent || 0),
+        total,
+        sent,
+        delivered: Number(recent[0]?.delivered || 0),
+        opened,
+        clicked,
         failed: Number(recent[0]?.failed || 0),
+        bounced,
+        complained: Number(recent[0]?.complained || 0),
         oldestQueuedAt: recent[0]?.oldestQueuedAt || null,
+        deliveryRate: total ? Math.round((sent / total) * 1000) / 10 : 0,
+        openRate: sent ? Math.round((opened / sent) * 1000) / 10 : 0,
+        clickRate: sent ? Math.round((clicked / sent) * 1000) / 10 : 0,
+        bounceRate: sent ? Math.round((bounced / sent) * 1000) / 10 : 0,
       },
     };
   }
@@ -382,7 +500,8 @@ export class EmailDeliveryService {
   async ticketHistory(ticketId: string) {
     return this.prisma.query<any[]>(
       `SELECT id, recipientEmail, recipientName, eventType, eventCategory, subject, status,
-              attempts, maxAttempts, errorMessage, createdAt, sentAt, bouncedAt
+              attempts, maxAttempts, errorMessage, createdAt, sentAt, deliveredAt, openedAt,
+              firstClickedAt, openCount, clickCount, complainedAt, bouncedAt, cancelledAt
        FROM EmailDelivery WHERE ticketId = ? ORDER BY createdAt DESC LIMIT 100`,
       [ticketId],
     );
@@ -440,32 +559,125 @@ export class EmailDeliveryService {
     return this.getTemplate(user, type);
   }
 
+  async previewTemplate(user: CurrentUser, eventType: string, input: any) {
+    this.assertTemplateRole(user);
+    const companyId = this.requiredCompanyScope(user);
+    return this.prepareTicketEmail({
+      companyId,
+      recipientEmail: user.email,
+      recipientName: 'Jordan Taylor',
+      ticketNumber: 'TKT-PREVIEW-1042',
+      ticketTitle: 'Unable to connect to the office VPN',
+      action: 'Technician added a public reply',
+      detail: 'We reviewed the connection logs and updated the VPN profile. Please reconnect and confirm access.',
+      actorName: 'Alex Morgan',
+      ticketUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/tickets/preview`,
+      eventType: this.cleanEventType(eventType),
+      templateOverride: {
+        ...input,
+        accentColor: this.safeColor(input.accentColor || '#2563eb'),
+      },
+    });
+  }
+
   async recordBounce(input: { messageId?: string; email?: string; reason?: string; details?: string }) {
+    return this.recordProviderEvent({ ...input, event: 'BOUNCE' });
+  }
+
+  async recordProviderEvent(input: {
+    event?: string;
+    deliveryId?: string;
+    messageId?: string;
+    email?: string;
+    reason?: string;
+    details?: string;
+  }) {
+    const event = String(input.event || '').trim().toUpperCase();
+    if (!['DELIVERED', 'BOUNCE', 'COMPLAINT'].includes(event)) {
+      throw new BadRequestException('Unsupported email event');
+    }
     const email = this.normalizeEmail(input.email || '');
-    if (!input.messageId && !email) throw new BadRequestException('messageId or email is required');
-    if (input.messageId) {
-      await this.prisma.execute(
-        `UPDATE EmailDelivery SET status = 'BOUNCED', bouncedAt = NOW(3), updatedAt = NOW(3),
-         errorMessage = ? WHERE providerMessageId = ?`,
-        [input.details || input.reason || 'Message bounced', input.messageId],
-      );
+    if (!input.deliveryId && !input.messageId && !email) {
+      throw new BadRequestException('deliveryId, messageId, or email is required');
     }
-    const rows = email
-      ? [{ recipientEmail: email }]
-      : await this.prisma.query<any[]>(
-          `SELECT recipientEmail FROM EmailDelivery WHERE providerMessageId = ? LIMIT 1`,
-          [input.messageId],
+    const clauses: string[] = [];
+    const values: any[] = [];
+    if (input.deliveryId) {
+      clauses.push('id = ?');
+      values.push(input.deliveryId);
+    } else if (input.messageId) {
+      clauses.push('providerMessageId = ?');
+      values.push(input.messageId);
+    } else {
+      clauses.push('recipientEmail = ?');
+      values.push(email);
+    }
+    const rows = await this.prisma.query<any[]>(
+      `SELECT id, recipientEmail FROM EmailDelivery WHERE ${clauses.join(' AND ')}
+       ORDER BY createdAt DESC LIMIT ${input.deliveryId || input.messageId ? 100 : 1}`,
+      values,
+    );
+    if (!rows.length) return { success: true, matched: 0 };
+    const ids = rows.map((row) => row.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const detail = String(input.details || input.reason || `Provider reported ${event.toLowerCase()}`).slice(0, 2000);
+    if (event === 'DELIVERED') {
+      await this.prisma.execute(
+        `UPDATE EmailDelivery SET status = 'DELIVERED', deliveredAt = COALESCE(deliveredAt, NOW(3)),
+         updatedAt = NOW(3) WHERE id IN (${placeholders}) AND status IN ('SENT', 'DELIVERED')`,
+        ids,
+      );
+    } else {
+      const status = event === 'COMPLAINT' ? 'COMPLAINED' : 'BOUNCED';
+      const timestampField = event === 'COMPLAINT' ? 'complainedAt' : 'bouncedAt';
+      await this.prisma.execute(
+        `UPDATE EmailDelivery SET status = ?, ${timestampField} = NOW(3), updatedAt = NOW(3),
+         errorMessage = ? WHERE id IN (${placeholders})`,
+        [status, detail, ...ids],
+      );
+      for (const recipientEmail of new Set(rows.map((row) => row.recipientEmail).filter(Boolean))) {
+        await this.prisma.execute(
+          `INSERT INTO EmailSuppression (id, recipientEmail, reason, source, details, createdAt, updatedAt)
+           VALUES (?, ?, ?, 'PROVIDER_WEBHOOK', ?, NOW(3), NOW(3))
+           ON DUPLICATE KEY UPDATE reason = VALUES(reason), source = 'PROVIDER_WEBHOOK',
+             details = VALUES(details), updatedAt = NOW(3)`,
+          [randomUUID(), recipientEmail, event, detail],
         );
-    const recipientEmail = rows[0]?.recipientEmail;
-    if (recipientEmail) {
-      await this.prisma.execute(
-        `INSERT INTO EmailSuppression (id, recipientEmail, reason, source, details, createdAt, updatedAt)
-         VALUES (?, ?, 'BOUNCE', 'SMTP_WEBHOOK', ?, NOW(3), NOW(3))
-         ON DUPLICATE KEY UPDATE reason = 'BOUNCE', source = 'SMTP_WEBHOOK', details = VALUES(details), updatedAt = NOW(3)`,
-        [randomUUID(), recipientEmail, input.details || input.reason || 'Message bounced'],
-      );
+      }
     }
-    return { success: true };
+    return { success: true, matched: rows.length, event };
+  }
+
+  async recordOpen(deliveryId: string, signature: string, ip?: string, userAgent?: string) {
+    if (!this.verifyTrackingSignature(deliveryId, 'OPEN', '', signature)) return false;
+    const result = await this.prisma.execute(
+      `UPDATE EmailDelivery SET openedAt = COALESCE(openedAt, NOW(3)),
+       openCount = openCount + 1, updatedAt = NOW(3) WHERE id = ?`,
+      [deliveryId],
+    );
+    if (!result.affectedRows) return false;
+    await this.recordTrackingEvent(deliveryId, 'OPEN', null, ip, userAgent);
+    return true;
+  }
+
+  async recordClick(deliveryId: string, encodedUrl: string, signature: string, ip?: string, userAgent?: string) {
+    if (!this.verifyTrackingSignature(deliveryId, 'CLICK', encodedUrl, signature)) return null;
+    let targetUrl = '';
+    try {
+      targetUrl = Buffer.from(encodedUrl, 'base64url').toString('utf8');
+      const parsed = new URL(targetUrl);
+      if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    } catch {
+      return null;
+    }
+    const result = await this.prisma.execute(
+      `UPDATE EmailDelivery SET firstClickedAt = COALESCE(firstClickedAt, NOW(3)),
+       clickCount = clickCount + 1, updatedAt = NOW(3) WHERE id = ?`,
+      [deliveryId],
+    );
+    if (!result.affectedRows) return null;
+    await this.recordTrackingEvent(deliveryId, 'CLICK', targetUrl, ip, userAgent);
+    return targetUrl;
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -473,6 +685,10 @@ export class EmailDeliveryService {
     if (this.processingQueue) return;
     this.processingQueue = true;
     try {
+      const controls = await this.prisma.query<any[]>(
+        `SELECT paused FROM EmailQueueControl WHERE id = 'global-email-queue' LIMIT 1`,
+      );
+      if (this.asBoolean(controls[0]?.paused)) return;
       const rows = await this.prisma.query<any[]>(
         `SELECT * FROM EmailDelivery
          WHERE status IN ('QUEUED', 'FAILED') AND attempts < maxAttempts
@@ -567,7 +783,7 @@ export class EmailDeliveryService {
       const result = await this.emailService.sendNotificationEmail(
         row.recipientEmail,
         row.subject,
-        row.htmlBody,
+        this.instrumentHtml(row.id, row.htmlBody),
         {
           text: row.textBody || undefined,
           fromName: metadata.senderName || undefined,
@@ -587,6 +803,9 @@ export class EmailDeliveryService {
          nextAttemptAt = DATE_ADD(NOW(3), INTERVAL ? MINUTE), updatedAt = NOW(3) WHERE id = ?`,
         [String(error?.message || error).slice(0, 2000), delayMinutes, row.id],
       );
+      if (attempts >= Number(row.maxAttempts || 5)) {
+        await this.alertPermanentFailure(row, String(error?.message || error));
+      }
     }
   }
 
@@ -608,7 +827,7 @@ export class EmailDeliveryService {
       const result = await this.emailService.sendNotificationEmail(
         rows[0].recipientEmail,
         `${rows.length} ticket update${rows.length === 1 ? '' : 's'} from FieldserviceIT`,
-        html,
+        rows.reduce((trackedHtml, row) => this.instrumentHtml(row.id, trackedHtml, false), html),
         { text, fromName: metadata.senderName, replyTo: metadata.replyTo },
       );
       await this.prisma.execute(
@@ -623,6 +842,107 @@ export class EmailDeliveryService {
          errorMessage = ?, updatedAt = NOW(3)
          WHERE id IN (${placeholders})`,
         [String(error?.message || error).slice(0, 2000), ...ids],
+      );
+    }
+  }
+
+  private async scopedDelivery(id: string, user: CurrentUser) {
+    const companyId = this.companyScope(user);
+    const rows = await this.prisma.query<any[]>(
+      `SELECT * FROM EmailDelivery WHERE id = ? ${companyId ? 'AND companyId = ?' : ''} LIMIT 1`,
+      companyId ? [id, companyId] : [id],
+    );
+    if (!rows[0]) throw new NotFoundException('Email delivery not found');
+    return rows[0];
+  }
+
+  private instrumentHtml(deliveryId: string, html: string, rewriteLinks = true) {
+    const apiBase = (process.env.API_URL || (process.env.NODE_ENV === 'production'
+      ? 'https://api.fieldserviceit.com'
+      : 'http://localhost:4000')).replace(/\/+$/, '');
+    let tracked = String(html || '');
+    if (rewriteLinks) {
+      tracked = tracked.replace(
+        /<a\s+([^>]*?)href=(["'])(https?:\/\/[^"']+)\2([^>]*)>/gi,
+        (_match, before, quote, url, after) => {
+          if (String(url).startsWith(`${apiBase}/v1/notifications/email/track/`)) return _match;
+          const encoded = Buffer.from(String(url)).toString('base64url');
+          const signature = this.trackingSignature(deliveryId, 'CLICK', encoded);
+          const trackingUrl = `${apiBase}/v1/notifications/email/track/click/${deliveryId}?url=${encodeURIComponent(encoded)}&sig=${encodeURIComponent(signature)}`;
+          return `<a ${before}href=${quote}${trackingUrl}${quote}${after}>`;
+        },
+      );
+    }
+    const signature = this.trackingSignature(deliveryId, 'OPEN', '');
+    const pixelUrl = `${apiBase}/v1/notifications/email/track/open/${deliveryId}?sig=${encodeURIComponent(signature)}`;
+    const pixel = `<img src="${pixelUrl}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0" />`;
+    return tracked.includes('</body>') ? tracked.replace('</body>', `${pixel}</body>`) : `${tracked}${pixel}`;
+  }
+
+  private trackingSignature(deliveryId: string, event: string, payload: string) {
+    return createHmac('sha256', process.env.JWT_SECRET || 'fieldserviceit')
+      .update(`${deliveryId}|${event}|${payload}`)
+      .digest('base64url');
+  }
+
+  private verifyTrackingSignature(deliveryId: string, event: string, payload: string, signature: string) {
+    const expected = this.trackingSignature(deliveryId, event, payload);
+    const actualBuffer = Buffer.from(String(signature || ''));
+    const expectedBuffer = Buffer.from(expected);
+    return actualBuffer.length === expectedBuffer.length
+      && timingSafeEqual(actualBuffer, expectedBuffer);
+  }
+
+  private async recordTrackingEvent(
+    deliveryId: string,
+    eventType: string,
+    targetUrl?: string | null,
+    ip?: string,
+    userAgent?: string,
+  ) {
+    const ipHash = ip
+      ? createHash('sha256').update(`${process.env.JWT_SECRET || 'fieldserviceit'}:${ip}`).digest('hex')
+      : null;
+    await this.prisma.execute(
+      `INSERT INTO EmailTrackingEvent (
+         id, deliveryId, eventType, targetUrl, ipHash, userAgent, createdAt
+       ) VALUES (?, ?, ?, ?, ?, ?, NOW(3))`,
+      [
+        randomUUID(),
+        deliveryId,
+        eventType,
+        targetUrl || null,
+        ipHash,
+        String(userAgent || '').slice(0, 500) || null,
+      ],
+    );
+  }
+
+  private async alertPermanentFailure(row: any, error: string) {
+    const claimed = await this.prisma.execute(
+      `UPDATE EmailDelivery SET failureNotifiedAt = NOW(3)
+       WHERE id = ? AND failureNotifiedAt IS NULL`,
+      [row.id],
+    );
+    if (!claimed.affectedRows) return;
+    const users = await this.prisma.query<any[]>(
+      `SELECT id, companyId FROM User
+       WHERE isActive = 1 AND deletedAt IS NULL
+         AND (role = 'SUPER_ADMIN' OR (? IS NOT NULL AND role = 'TENANT_ADMIN' AND companyId = ?))`,
+      [row.companyId || null, row.companyId || null],
+    );
+    for (const user of users) {
+      await this.prisma.execute(
+        `INSERT INTO Notification (
+           id, userId, companyId, title, body, type, isRead, link, createdAt
+         ) VALUES (?, ?, ?, ?, ?, 'error', 0, '/admin/email-operations', NOW(3))`,
+        [
+          randomUUID(),
+          user.id,
+          user.companyId || row.companyId || null,
+          'Email delivery permanently failed',
+          `${row.subject || 'Email'} to ${row.recipientEmail || 'recipient'} failed after ${row.maxAttempts || 5} attempts: ${String(error).slice(0, 500)}`,
+        ],
       );
     }
   }

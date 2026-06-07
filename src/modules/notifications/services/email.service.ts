@@ -31,6 +31,8 @@ type StoredSmtpRow = {
   lastTestStatus?: string | null;
   lastTestAt?: Date | string | null;
   lastTestError?: string | null;
+  encryptedWebhookSecret?: string | null;
+  webhookSecretUpdatedAt?: Date | string | null;
 };
 
 type SmtpRuntime = {
@@ -45,6 +47,8 @@ type SmtpRuntime = {
   lastTestStatus?: string | null;
   lastTestAt?: Date | string | null;
   lastTestError?: string | null;
+  webhookSecretConfigured?: boolean;
+  webhookSecretUpdatedAt?: Date | string | null;
 };
 
 const CONFIG_ID = 'global-smtp';
@@ -157,6 +161,8 @@ export class EmailService {
       lastTestStatus: 'PASS',
       lastTestAt: new Date(),
       lastTestError: null,
+      webhookSecretConfigured: Boolean(current?.encryptedWebhookSecret),
+      webhookSecretUpdatedAt: current?.webhookSecretUpdatedAt || null,
     };
     this.databaseLoadedAt = Date.now();
     return this.statusFromRuntime(this.databaseRuntime);
@@ -187,6 +193,43 @@ export class EmailService {
     return this.statusFromRuntime(await this.getRuntime());
   }
 
+  async rotateWebhookSecret(updatedById: string) {
+    const row = await this.getStoredRow();
+    if (!row) throw new BadRequestException('Configure SMTP before creating an email webhook secret');
+    const secret = crypto.randomBytes(32).toString('base64url');
+    await this.prisma.execute(
+      `UPDATE EmailProviderConfig
+       SET encryptedWebhookSecret = ?, webhookSecretUpdatedAt = NOW(3),
+           updatedById = ?, updatedAt = NOW(3)
+       WHERE id = ?`,
+      [this.encryptSecret(secret), updatedById, CONFIG_ID],
+    );
+    if (this.databaseRuntime) {
+      this.databaseRuntime.webhookSecretConfigured = true;
+      this.databaseRuntime.webhookSecretUpdatedAt = new Date();
+    }
+    return {
+      secret,
+      updatedAt: new Date(),
+      inboundUrl: `${this.apiBaseUrl()}/v1/tickets/inbound-email`,
+      eventUrl: `${this.apiBaseUrl()}/v1/notifications/email/events`,
+    };
+  }
+
+  async isWebhookSecretValid(value?: string | null) {
+    const supplied = String(value || '');
+    if (!supplied) return false;
+    const row = await this.getStoredRow();
+    const stored = this.decryptSecret(row?.encryptedWebhookSecret);
+    const fallback = process.env.EMAIL_WEBHOOK_API_KEY || process.env.INBOUND_EMAIL_API_KEY || '';
+    const expected = stored || fallback;
+    if (!expected) return false;
+    const suppliedBuffer = Buffer.from(supplied);
+    const expectedBuffer = Buffer.from(expected);
+    return suppliedBuffer.length === expectedBuffer.length
+      && crypto.timingSafeEqual(suppliedBuffer, expectedBuffer);
+  }
+
   private async getRuntime(forceReload = false): Promise<SmtpRuntime | null> {
     const cacheExpired = Date.now() - this.databaseLoadedAt >= CONFIG_CACHE_MS;
     if (forceReload || !this.databaseLoadedAt || cacheExpired) {
@@ -205,7 +248,8 @@ export class EmailService {
   private async getStoredRow(): Promise<StoredSmtpRow | null> {
     const rows = await this.prisma.query<StoredSmtpRow[]>(
       `SELECT host, port, secure, username, encryptedPassword, fromAddress, replyTo,
-              lastTestStatus, lastTestAt, lastTestError
+              lastTestStatus, lastTestAt, lastTestError,
+              encryptedWebhookSecret, webhookSecretUpdatedAt
        FROM EmailProviderConfig
        WHERE id = ? AND isActive = 1
        LIMIT 1`,
@@ -234,6 +278,8 @@ export class EmailService {
       lastTestStatus: row.lastTestStatus,
       lastTestAt: row.lastTestAt,
       lastTestError: row.lastTestError,
+      webhookSecretConfigured: Boolean(row.encryptedWebhookSecret),
+      webhookSecretUpdatedAt: row.webhookSecretUpdatedAt,
     };
   }
 
@@ -335,6 +381,10 @@ export class EmailService {
       lastTestStatus: runtime?.lastTestStatus || null,
       lastTestAt: runtime?.lastTestAt || null,
       lastTestError: runtime?.lastTestError || null,
+      webhookSecretConfigured: runtime?.webhookSecretConfigured || false,
+      webhookSecretUpdatedAt: runtime?.webhookSecretUpdatedAt || null,
+      inboundUrl: `${this.apiBaseUrl()}/v1/tickets/inbound-email`,
+      eventUrl: `${this.apiBaseUrl()}/v1/notifications/email/events`,
     };
   }
 
@@ -386,5 +436,11 @@ export class EmailService {
 
   private escapeHeader(value: string) {
     return value.replace(/[\r\n"]/g, '').trim();
+  }
+
+  private apiBaseUrl() {
+    return (process.env.API_URL || (process.env.NODE_ENV === 'production'
+      ? 'https://api.fieldserviceit.com'
+      : 'http://localhost:4000')).replace(/\/+$/, '');
   }
 }

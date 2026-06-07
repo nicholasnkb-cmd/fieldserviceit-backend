@@ -102,4 +102,30 @@ describe('EmailService', () => {
       subject: 'Ticket updated',
     }));
   });
+
+  it('rotates and validates a database-backed webhook secret', async () => {
+    const service = new EmailService(logger, prisma);
+    prisma.query.mockResolvedValueOnce([{
+      host: 'smtp.example.com',
+      port: 465,
+      secure: 1,
+      username: 'support@example.com',
+      encryptedPassword: 'stored-password',
+      fromAddress: 'support@example.com',
+    }]);
+
+    const rotated = await service.rotateWebhookSecret('admin-1');
+    const encrypted = prisma.execute.mock.calls[0][1][0];
+    expect(rotated.secret).toHaveLength(43);
+    expect(encrypted).toMatch(/^ENC:/);
+
+    prisma.query.mockResolvedValueOnce([{
+      encryptedWebhookSecret: encrypted,
+    }]);
+    await expect(service.isWebhookSecretValid(rotated.secret)).resolves.toBe(true);
+    expect(rotated).toMatchObject({
+      inboundUrl: expect.stringContaining('/v1/tickets/inbound-email'),
+      eventUrl: expect.stringContaining('/v1/notifications/email/events'),
+    });
+  });
 });

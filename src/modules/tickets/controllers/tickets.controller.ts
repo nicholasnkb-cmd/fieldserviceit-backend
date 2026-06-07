@@ -19,6 +19,7 @@ import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard'
 import { Public } from '../../../common/decorators/public.decorator';
 import { TicketParticipantNotifierService } from '../services/ticket-participant-notifier.service';
 import { EmailDeliveryService } from '../../notifications/services/email-delivery.service';
+import { EmailService } from '../../notifications/services/email.service';
 
 @Controller('tickets')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
@@ -29,6 +30,7 @@ export class TicketsController {
     private timelineService: TicketTimelineService,
     private participantNotifier: TicketParticipantNotifierService,
     private emailDeliveryService: EmailDeliveryService,
+    private emailService: EmailService,
     private exportService: TicketExportService,
     private prisma: PrismaService,
   ) {}
@@ -305,8 +307,7 @@ export class TicketsController {
     @Body() body: { from: string; subject: string; text?: string; html?: string; messageId?: string; inReplyTo?: string },
     @Headers('x-api-key') apiKey?: string,
   ) {
-    const expectedKey = process.env.INBOUND_EMAIL_API_KEY;
-    if (!expectedKey || apiKey !== expectedKey) {
+    if (!(await this.emailService.isWebhookSecretValid(apiKey))) {
       throw new UnauthorizedException('Invalid API key');
     }
     const senderEmail = this.extractEmail(body.from);
