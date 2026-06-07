@@ -161,4 +161,26 @@ describe('EmailDeliveryService', () => {
       ['delivery-1'],
     );
   });
+
+  it('adds signed open and click tracking to outgoing HTML', async () => {
+    prisma.query
+      .mockResolvedValueOnce([{ paused: 0 }])
+      .mockResolvedValueOnce([{
+        id: 'delivery-1',
+        recipientEmail: 'user@example.com',
+        subject: 'Ticket updated',
+        htmlBody: '<p><a href="https://fieldserviceit.com/tickets/1">View ticket</a></p>',
+        textBody: 'View ticket',
+        metadata: '{}',
+        attempts: 0,
+        maxAttempts: 5,
+      }]);
+
+    await service.processQueue();
+
+    const html = emailService.sendNotificationEmail.mock.calls[0][2];
+    expect(html).toContain('/v1/notifications/email/track/click/delivery-1');
+    expect(html).toContain('/v1/notifications/email/track/open/delivery-1');
+    expect(html).not.toContain('href="https://fieldserviceit.com/tickets/1"');
+  });
 });
