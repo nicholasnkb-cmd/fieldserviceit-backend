@@ -38,6 +38,7 @@ import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { SecurityCenterModule } from './modules/security-center/security-center.module';
 import { TopologyModule } from './modules/topology/topology.module';
 import { CatalogRequestsModule } from './modules/catalog-requests/catalog-requests.module';
+import { PlatformSecurityModule } from './modules/platform-security/platform-security.module';
 
 @Module({
   imports: [
@@ -71,6 +72,11 @@ import { CatalogRequestsModule } from './modules/catalog-requests/catalog-reques
         NETWORK_SYSLOG_ENABLED: Joi.boolean().optional().default(true),
         NETWORK_SYSLOG_PORT: Joi.number().port().optional().default(5514),
         CREDENTIAL_ENCRYPTION_KEY: Joi.string().optional(),
+        BACKUP_DIR: Joi.string().optional(),
+        CLAMAV_HOST: Joi.string().optional(),
+        CLAMAV_PORT: Joi.number().port().optional().default(3310),
+        CLAMAV_REQUIRED: Joi.boolean().optional().default(false),
+        OIDC_ALLOW_PRIVATE_ISSUERS: Joi.boolean().optional().default(false),
       }),
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),
@@ -113,6 +119,7 @@ import { CatalogRequestsModule } from './modules/catalog-requests/catalog-reques
     SecurityCenterModule,
     TopologyModule,
     CatalogRequestsModule,
+    PlatformSecurityModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },

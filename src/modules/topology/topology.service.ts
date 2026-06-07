@@ -312,11 +312,23 @@ export class TopologyService {
     if (PORT_ACTIONS.includes(action) && !String(payload.port || '').trim()) {
       throw new BadRequestException('Port is required for this topology action');
     }
+    const policyRows = await this.db.query<any[]>(
+      `SELECT requireNetworkApproval FROM PlatformSecurityPolicy WHERE id = 'global-security-policy' LIMIT 1`,
+    ).catch(() => []);
+    const approvalRequired = Boolean(policyRows[0]?.requireNetworkApproval)
+      && ['RESTART', 'DISABLE_PORT', 'BOUNCE_POE'].includes(action);
+    const status = approvalRequired ? 'PENDING_APPROVAL' : 'QUEUED';
+    const approvalStatus = approvalRequired ? 'PENDING' : 'NOT_REQUIRED';
     const id = randomUUID();
     await this.db.execute(
-      `INSERT INTO NetworkDeviceAction (id, companyId, assetId, action, payload, status, requestedById, createdAt)
-       VALUES (?, ?, ?, ?, ?, 'QUEUED', ?, ?)`,
-      [id, companyId, assetId, action, JSON.stringify({ ...payload, source: 'topology-map', safety: 'queued-for-execution' }), user.id, new Date()],
+      `INSERT INTO NetworkDeviceAction
+       (id, companyId, assetId, action, payload, status, approvalStatus, requestedById, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id, companyId, assetId, action,
+        JSON.stringify({ ...payload, source: 'topology-map', safety: approvalRequired ? 'pending-independent-approval' : 'queued-for-execution' }),
+        status, approvalStatus, user.id, new Date(),
+      ],
     );
     return (await this.db.query<any[]>('SELECT * FROM NetworkDeviceAction WHERE id = ? LIMIT 1', [id]))[0];
   }

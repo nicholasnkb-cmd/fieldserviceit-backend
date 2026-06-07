@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
 import { getS3Client, getS3Bucket } from '../../config/s3.config';
+import { MalwareScannerService } from './malware-scanner.service';
 
 const ALLOWED_EXTENSIONS = new Set([
   '.jpg', '.jpeg', '.png', '.gif', '.webp',
@@ -66,7 +67,10 @@ export class UploadsService {
   private s3Client: S3Client | null = null;
   private s3Bucket: string = '';
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private readonly malwareScanner: MalwareScannerService,
+  ) {
     this.uploadDir = this.config.get('UPLOAD_DIR', path.join(process.cwd(), 'uploads'));
     this.storageType = this.config.get('STORAGE_TYPE', 'local');
     if (this.storageType === 's3') {
@@ -83,6 +87,7 @@ export class UploadsService {
     const ext = path.extname(sanitized) || '.bin';
     validateMagicBytes(file.buffer, ext);
     scanForKnownMalwareMarkers(file.buffer);
+    await this.malwareScanner.scan(file);
     const filename = `${randomUUID()}${ext}`;
 
     if (this.storageType === 's3' && this.s3Client) {

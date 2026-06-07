@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { UploadsService } from './uploads.service';
+import { MalwareScannerService } from './malware-scanner.service';
 
 jest.mock('crypto', () => ({
   ...jest.requireActual('crypto'),
@@ -39,6 +40,7 @@ describe('UploadsService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           UploadsService,
+          { provide: MalwareScannerService, useValue: { scan: jest.fn().mockResolvedValue({ status: 'PASS' }) } },
           {
             provide: ConfigService,
             useValue: {
@@ -84,6 +86,7 @@ describe('UploadsService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           UploadsService,
+          { provide: MalwareScannerService, useValue: { scan: jest.fn().mockResolvedValue({ status: 'PASS' }) } },
           {
             provide: ConfigService,
             useValue: {

@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../database/prisma.service';
 import { EmailService } from '../../notifications/services/email.service';
 import { LoggerService } from '../../../common/logger/logger.service';
+import { MfaService } from './mfa.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 
@@ -33,6 +34,11 @@ type BusinessRegistrationProfile = RegistrationProfile & {
   domain?: string;
 };
 
+type SessionContext = {
+  ipAddress?: string | null;
+  userAgent?: string | null;
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -41,9 +47,10 @@ export class AuthService {
     private config: ConfigService,
     private emailService: EmailService,
     private readonly logger: LoggerService,
+    private readonly mfaService: MfaService,
   ) {}
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, mfaCode?: string, context: SessionContext = {}) {
     const normalizedEmail = email.toLowerCase().trim();
     await this.enforceLoginBackoff(normalizedEmail);
 
@@ -63,8 +70,26 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    const mfaRequiredByPolicy = await this.mfaService.isRequired(user.role);
+    if (user.mfaEnabled) {
+      if (!mfaCode) {
+        return {
+          mfaRequired: true,
+          challengeToken: this.createMfaChallenge(user.id, 'login'),
+          user: this.responseUser(user),
+        };
+      }
+      await this.mfaService.verifyUserCode(user.id, mfaCode);
+    } else if (mfaRequiredByPolicy) {
+      return {
+        mfaEnrollmentRequired: true,
+        challengeToken: this.createMfaChallenge(user.id, 'enroll'),
+        user: this.responseUser(user),
+      };
+    }
+
     loginFailures.delete(normalizedEmail);
-    const tokens = await this.generateTokens(user);
+    const tokens = await this.generateTokens(user, context);
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
@@ -340,42 +365,154 @@ export class AuthService {
       include: { user: true },
     });
 
-    if (!session || session.expiresAt < new Date()) {
+    if (!session || session.expiresAt < new Date() || session.revokedAt) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    await this.prisma.session.deleteMany({ where: { id: session.id } });
-
-    return this.generateTokens(session.user);
+    return this.generateTokens(session.user, {}, session.id);
   }
 
   async logout(refreshToken: string) {
     if (!refreshToken) return;
-    await this.prisma.session.deleteMany({ where: { refreshToken } }).catch(() => {});
+    await this.prisma.execute(
+      `UPDATE Session SET revokedAt = NOW(3), revokeReason = 'logout' WHERE refreshToken = ?`,
+      [refreshToken],
+    ).catch(() => {});
   }
 
-  private async generateTokens(user: any) {
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-      userType: user.userType,
-      companyId: user.companyId,
-    };
+  async beginChallengeEnrollment(challengeToken: string) {
+    const payload = this.verifyMfaChallenge(challengeToken, 'enroll');
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user || !user.isActive) throw new UnauthorizedException('MFA challenge is invalid');
+    return this.mfaService.beginSetup(user.id, user.email);
+  }
 
-    const accessToken = this.jwtService.sign(payload);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  async confirmChallengeEnrollment(challengeToken: string, code: string, context: SessionContext = {}) {
+    const payload = this.verifyMfaChallenge(challengeToken, 'enroll');
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user || !user.isActive) throw new UnauthorizedException('MFA challenge is invalid');
+    const setup = await this.mfaService.confirmSetup(user.id, code);
+    const tokens = await this.generateTokens(user, context);
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    return { user: this.responseUser(user), ...tokens, ...setup };
+  }
+
+  async beginMfaSetup(user: any) {
+    return this.mfaService.beginSetup(user.id, user.email);
+  }
+
+  async confirmMfaSetup(user: any, code: string) {
+    return this.mfaService.confirmSetup(user.id, code);
+  }
+
+  async mfaStatus(userId: string) {
+    return this.mfaService.status(userId);
+  }
+
+  async disableMfa(userId: string, code: string, password: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.passwordHash || !password || !(await bcrypt.compare(password, user.passwordHash))) {
+      throw new UnauthorizedException('Password confirmation is invalid');
+    }
+    return this.mfaService.disable(userId, code);
+  }
+
+  async listSessions(userId: string, currentSessionId?: string) {
+    const rows = await this.prisma.query<any[]>(
+      `SELECT id, deviceInfo, ipAddress, userAgent, createdAt, lastSeenAt, expiresAt, revokedAt, revokeReason
+       FROM Session WHERE userId = ? ORDER BY COALESCE(lastSeenAt, createdAt) DESC`,
+      [userId],
+    );
+    return rows.map((row) => ({
+      ...row,
+      current: row.id === currentSessionId,
+      active: !row.revokedAt && new Date(row.expiresAt) > new Date(),
+    }));
+  }
+
+  async revokeSession(userId: string, sessionId: string, actorId: string) {
+    const result = await this.prisma.execute(
+      `UPDATE Session SET revokedAt = NOW(3), revokedById = ?, revokeReason = 'user-revoked'
+       WHERE id = ? AND userId = ? AND revokedAt IS NULL`,
+      [actorId, sessionId, userId],
+    );
+    if (!result.affectedRows) throw new BadRequestException('Session is not active');
+    return { revoked: true };
+  }
+
+  async revokeOtherSessions(userId: string, currentSessionId?: string) {
+    await this.prisma.execute(
+      `UPDATE Session SET revokedAt = NOW(3), revokedById = ?, revokeReason = 'user-revoked-others'
+       WHERE userId = ? AND revokedAt IS NULL ${currentSessionId ? 'AND id <> ?' : ''}`,
+      currentSessionId ? [userId, userId, currentSessionId] : [userId, userId],
+    );
+    return { revoked: true };
+  }
+
+  async completeSsoLogin(userId: string, context: SessionContext = {}, trustedMfa = false) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive) throw new UnauthorizedException('SSO account is not available');
+    const mfaRequiredByPolicy = await this.mfaService.isRequired(user.role);
+    if (mfaRequiredByPolicy && !trustedMfa && !user.mfaEnabled) {
+      return {
+        mfaEnrollmentRequired: true,
+        challengeToken: this.createMfaChallenge(user.id, 'enroll'),
+        user: this.responseUser(user),
+      };
+    }
+    const tokens = await this.generateTokens(user, context);
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    return { user: this.responseUser(user), ...tokens };
+  }
+
+  private async generateTokens(user: any, context: SessionContext = {}, existingSessionId?: string) {
+    const policyRows = await this.prisma.query<any[]>(
+      `SELECT sessionLifetimeDays, maxActiveSessions FROM PlatformSecurityPolicy WHERE id = 'global-security-policy' LIMIT 1`,
+    ).catch(() => []);
+    const sessionLifetimeDays = Math.min(Math.max(Number(policyRows[0]?.sessionLifetimeDays || 7), 1), 30);
+    const maxActiveSessions = Math.min(Math.max(Number(policyRows[0]?.maxActiveSessions || 10), 1), 50);
+    const expiresAt = new Date(Date.now() + sessionLifetimeDays * 24 * 60 * 60 * 1000);
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const refreshToken = crypto.randomBytes(32).toString('hex');
       try {
-        await this.prisma.session.create({
-          data: {
-            userId: user.id,
-            refreshToken,
-            expiresAt,
-          },
-        });
+        let session: any;
+        if (existingSessionId) {
+          session = await this.prisma.session.update({
+            where: { id: existingSessionId },
+            data: {
+              refreshToken,
+              expiresAt,
+              lastSeenAt: new Date(),
+              revokedAt: null,
+              revokedById: null,
+              revokeReason: null,
+            },
+          });
+        } else {
+          session = await this.prisma.session.create({
+            data: {
+              userId: user.id,
+              refreshToken,
+              deviceInfo: this.deviceLabel(context.userAgent),
+              userAgent: context.userAgent?.slice(0, 500) || null,
+              ipAddress: context.ipAddress?.slice(0, 191) || null,
+              lastSeenAt: new Date(),
+              expiresAt,
+            },
+          });
+        }
+
+        const payload = {
+          sub: user.id,
+          sid: session.id,
+          email: user.email,
+          role: user.role,
+          userType: user.userType,
+          companyId: user.companyId,
+        };
+        const accessToken = this.jwtService.sign(payload);
+        await this.trimSessions(user.id, maxActiveSessions, session.id);
 
         return { accessToken, refreshToken, expiresIn: 900 };
       } catch (err: any) {
@@ -385,6 +522,46 @@ export class AuthService {
     }
 
     throw new UnauthorizedException('Unable to create session');
+  }
+
+  private createMfaChallenge(userId: string, purpose: 'login' | 'enroll') {
+    return this.jwtService.sign(
+      { sub: userId, purpose, nonce: crypto.randomBytes(12).toString('hex') },
+      { expiresIn: '5m' },
+    );
+  }
+
+  private verifyMfaChallenge(token: string, purpose: 'login' | 'enroll') {
+    try {
+      const payload = this.jwtService.verify(token);
+      if (payload?.purpose !== purpose || !payload?.sub) throw new Error('Invalid purpose');
+      return payload;
+    } catch {
+      throw new UnauthorizedException('MFA challenge is invalid or expired');
+    }
+  }
+
+  private async trimSessions(userId: string, maxActiveSessions: number, keepSessionId: string) {
+    const rows = await this.prisma.query<any[]>(
+      `SELECT id FROM Session
+       WHERE userId = ? AND revokedAt IS NULL AND expiresAt > NOW(3)
+       ORDER BY COALESCE(lastSeenAt, createdAt) DESC`,
+      [userId],
+    );
+    const stale = rows.slice(maxActiveSessions).filter((row) => row.id !== keepSessionId);
+    if (!stale.length) return;
+    await this.prisma.execute(
+      `UPDATE Session SET revokedAt = NOW(3), revokeReason = 'session-limit'
+       WHERE id IN (${stale.map(() => '?').join(', ')})`,
+      stale.map((row) => row.id),
+    );
+  }
+
+  private deviceLabel(userAgent?: string | null) {
+    const value = String(userAgent || '');
+    const browser = value.includes('Edg/') ? 'Edge' : value.includes('Chrome/') ? 'Chrome' : value.includes('Firefox/') ? 'Firefox' : value.includes('Safari/') ? 'Safari' : 'Browser';
+    const os = value.includes('Windows') ? 'Windows' : value.includes('Mac OS') ? 'macOS' : value.includes('Android') ? 'Android' : value.includes('iPhone') || value.includes('iPad') ? 'iOS' : value.includes('Linux') ? 'Linux' : 'Unknown device';
+    return `${browser} on ${os}`.slice(0, 191);
   }
 
   private async enforceLoginBackoff(email: string) {

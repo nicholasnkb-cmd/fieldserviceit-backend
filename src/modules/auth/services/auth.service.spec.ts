@@ -53,17 +53,29 @@ describe('AuthService', () => {
       },
       session: {
         create: jest.fn().mockResolvedValue({ id: 'session-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'session-1' }),
         deleteMany: jest.fn(),
       },
+      query: jest.fn().mockResolvedValue([]),
+      execute: jest.fn().mockResolvedValue({ affectedRows: 1 }),
     };
 
     const mockLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const mockMfa = {
+      isRequired: jest.fn().mockResolvedValue(false),
+      verifyUserCode: jest.fn().mockResolvedValue(true),
+      beginSetup: jest.fn(),
+      confirmSetup: jest.fn(),
+      status: jest.fn(),
+      disable: jest.fn(),
+    };
     service = new AuthService(
       mockPrisma as any,
       mockJwt as any,
       mockConfig as any,
       mockEmail as any,
       mockLogger as any,
+      mockMfa as any,
     );
   });
 

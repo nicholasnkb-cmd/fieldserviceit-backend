@@ -56,6 +56,11 @@ model User {
   resetTokenExpiresAt DateTime?
   emailVerificationToken String?
   emailVerificationExpiresAt DateTime?
+  mfaEnabled         Boolean                 @default(false)
+  mfaSecretEncrypted String?
+  mfaPendingSecretEncrypted String?
+  mfaRecoveryCodes   String?
+  mfaEnabledAt       DateTime?
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
   deletedAt          DateTime?
@@ -418,6 +423,11 @@ model Session {
   refreshToken String   @unique
   deviceInfo   String?
   ipAddress    String?
+  userAgent    String?
+  lastSeenAt   DateTime?
+  revokedAt    DateTime?
+  revokedById  String?
+  revokeReason String?
   expiresAt    DateTime
   createdAt    DateTime @default(now())
   user         User     @relation(fields: [userId], references: [id])

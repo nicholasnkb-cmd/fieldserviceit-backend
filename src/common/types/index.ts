@@ -6,5 +6,6 @@ export interface CurrentUser {
   companyId: string | null;
   effectiveCompanyId?: string | null;
   isImpersonatingCompany?: boolean;
+  sessionId?: string;
   isActive: boolean;
 }

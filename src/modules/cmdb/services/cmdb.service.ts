@@ -896,11 +896,19 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     const action = String(dto.action || '').toUpperCase();
     const allowed = ['RESTART', 'DISABLE_PORT', 'ENABLE_PORT', 'BOUNCE_POE', 'BACKUP_CONFIG', 'SYNC_CONTROLLER'];
     if (!allowed.includes(action)) throw new BadRequestException('Device action is not supported');
+    const policyRows = await this.prisma.query<any[]>(
+      `SELECT requireNetworkApproval FROM PlatformSecurityPolicy WHERE id = 'global-security-policy' LIMIT 1`,
+    ).catch(() => []);
+    const approvalRequired = Boolean(policyRows[0]?.requireNetworkApproval)
+      && ['RESTART', 'DISABLE_PORT', 'BOUNCE_POE'].includes(action);
+    const status = approvalRequired ? 'PENDING_APPROVAL' : 'QUEUED';
+    const approvalStatus = approvalRequired ? 'PENDING' : 'NOT_REQUIRED';
     const id = crypto.randomUUID();
     await this.prisma.execute(
-      `INSERT INTO NetworkDeviceAction (id, companyId, assetId, action, payload, status, requestedById, createdAt)
-       VALUES (?, ?, ?, ?, ?, 'QUEUED', ?, ?)`,
-      [id, companyId, assetId, action, JSON.stringify(dto.payload || {}), requestedById || null, new Date()],
+      `INSERT INTO NetworkDeviceAction
+       (id, companyId, assetId, action, payload, status, approvalStatus, requestedById, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, companyId, assetId, action, JSON.stringify(dto.payload || {}), status, approvalStatus, requestedById || null, new Date()],
     );
     const rows = await this.prisma.query<any[]>(`SELECT * FROM NetworkDeviceAction WHERE id = ? LIMIT 1`, [id]);
     await this.auditNetworkChange(companyId, requestedById, 'network.action.queue', 'NetworkDeviceAction', id, { action });
@@ -920,6 +928,15 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     const rows = await this.prisma.query<any[]>(`SELECT * FROM NetworkDeviceAction WHERE id = ? AND assetId = ? AND companyId = ? LIMIT 1`, [actionId, assetId, companyId]);
     if (!rows[0]) throw new NotFoundException('Device action not found');
     const action = this.parseJsonFields(rows[0], ['payload', 'result']);
+    if (action.approvalStatus === 'PENDING' || action.status === 'PENDING_APPROVAL') {
+      throw new BadRequestException('This disruptive action requires approval from another administrator');
+    }
+    if (action.approvalStatus === 'REJECTED' || action.status === 'REJECTED') {
+      throw new BadRequestException('This action was rejected');
+    }
+    if (action.status !== 'QUEUED') {
+      throw new BadRequestException('Only queued actions can be executed');
+    }
     const config = await this.getMonitoringConfigForPoll(assetId, companyId);
     const vendorKey = String(config?.vendor || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const mapping = this.vendorMappings()[vendorKey];
