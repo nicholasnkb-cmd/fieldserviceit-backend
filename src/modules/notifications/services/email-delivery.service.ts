@@ -345,7 +345,7 @@ export class EmailDeliveryService {
       values,
     );
     return {
-      smtp: this.emailService.getStatus(),
+      smtp: await this.emailService.getStatus(),
       webhooks: {
         inboundEmailConfigured: !!process.env.INBOUND_EMAIL_API_KEY,
         bounceWebhookConfigured: !!process.env.EMAIL_WEBHOOK_API_KEY,

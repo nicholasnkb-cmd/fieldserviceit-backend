@@ -982,6 +982,31 @@ export class MigrationsService {
             (UUID(), 'Manage email operations', 'email-operations.manage', 'Notifications', 'Retry email deliveries and manage notification templates', NOW(3));
         `),
       },
+      {
+        name: '020_email_provider_config',
+        sql: stripComments(`
+          CREATE TABLE IF NOT EXISTS EmailProviderConfig (
+            id VARCHAR(191) PRIMARY KEY,
+            provider VARCHAR(64) NOT NULL DEFAULT 'SMTP',
+            host VARCHAR(255) NOT NULL,
+            port INT NOT NULL,
+            secure TINYINT(1) NOT NULL DEFAULT 1,
+            username VARCHAR(320) NOT NULL,
+            encryptedPassword TEXT NOT NULL,
+            fromAddress VARCHAR(320) NOT NULL,
+            replyTo VARCHAR(320),
+            isActive TINYINT(1) NOT NULL DEFAULT 1,
+            lastTestStatus VARCHAR(32),
+            lastTestAt DATETIME(3),
+            lastTestError TEXT,
+            updatedById VARCHAR(191),
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(provider),
+            INDEX(isActive)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        `),
+      },
     ];
   }
 }

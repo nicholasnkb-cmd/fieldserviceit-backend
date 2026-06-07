@@ -1,6 +1,7 @@
 import { Controller, Get, Patch, Post, Put, Param, Query, Body, UseGuards, Headers, UnauthorizedException } from '@nestjs/common';
 import { NotificationsService } from '../services/notifications.service';
 import { EmailDeliveryService } from '../services/email-delivery.service';
+import { EmailService, SmtpConfigurationInput } from '../services/email.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
@@ -16,6 +17,7 @@ export class NotificationsController {
   constructor(
     private notificationsService: NotificationsService,
     private emailDeliveryService: EmailDeliveryService,
+    private emailService: EmailService,
   ) {}
 
   @Get()
@@ -64,6 +66,30 @@ export class NotificationsController {
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
   emailSummary(@CurrentUser() user: CurrentUserType) {
     return this.emailDeliveryService.summary(user);
+  }
+
+  @Get('email/config')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN')
+  emailConfig() {
+    return this.emailService.getStatus();
+  }
+
+  @Put('email/config')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN')
+  updateEmailConfig(
+    @Body() body: SmtpConfigurationInput,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.emailService.configure(body, user.id);
+  }
+
+  @Post('email/config/test')
+  @UseGuards(RolesGuard)
+  @Roles('SUPER_ADMIN')
+  testEmailConfig() {
+    return this.emailService.testConfiguration();
   }
 
   @Get('email/deliveries')
