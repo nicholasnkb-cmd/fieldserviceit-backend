@@ -503,21 +503,16 @@ export class AuthService {
       try {
         let session: any;
         if (existingSessionId) {
-          if (previousRefreshToken) {
-            await this.sessions.recordRotation(existingSessionId, user.id, previousRefreshToken, expiresAt);
-          }
-          session = await this.prisma.session.update({
-            where: { id: existingSessionId },
-            data: {
-              refreshToken: refreshTokenHash,
-              expiresAt,
-              lastSeenAt: new Date(),
-              revokedAt: null,
-              revokedById: null,
-              revokeReason: null,
-              mfaVerifiedAt: context.mfaVerifiedAt || undefined,
-            },
-          });
+          if (!previousRefreshToken) throw new UnauthorizedException('Invalid refresh token');
+          session = await this.sessions.rotate(
+            existingSessionId,
+            user.id,
+            previousRefreshToken,
+            refreshTokenHash,
+            expiresAt,
+            context.mfaVerifiedAt,
+          );
+          if (!session) throw new UnauthorizedException('Refresh token has already been rotated');
         } else {
           session = await this.prisma.session.create({
             data: {

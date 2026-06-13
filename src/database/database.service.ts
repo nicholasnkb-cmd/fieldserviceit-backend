@@ -11,6 +11,7 @@ interface QueryOptions {
 export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplicationShutdown {
   private readonly logger = new Logger(DatabaseService.name);
   private pool: Pool;
+  private poolClosed = false;
 
   constructor(
     @Optional() private readonly migrationsService?: MigrationsService,
@@ -796,15 +797,19 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   }
 
   async onModuleDestroy() {
-    await this.pool.end();
+    await this.closePool();
   }
 
   async onApplicationShutdown(signal?: string): Promise<void> {
     this.logger.log(`Shutting down (signal: ${signal}) — closing database pool...`);
-    if (this.pool) {
-      await this.pool.end();
-      this.logger.log('Database pool closed');
-    }
+    await this.closePool();
+  }
+
+  private async closePool() {
+    if (this.poolClosed) return;
+    this.poolClosed = true;
+    await this.pool.end();
+    this.logger.log('Database pool closed');
   }
 
   private parseDatabaseUrl(url: string) {
@@ -2788,7 +2793,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
   private async genericCreate(table: string, { data }: { data: Record<string, any> }) {
     const now = new Date();
-    const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...data };
+    const cleanData = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
+    const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...cleanData };
     const cols = Object.keys(insertData);
     const values = Object.values(insertData);
     const placeholders = cols.map(() => '?').join(', ');
@@ -2798,9 +2804,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   }
 
   private async genericUpdate(table: string, { where, data }: { where: Record<string, any>; data: Record<string, any> }) {
-    const setClauses = Object.keys(data).map(k => `${this.escapeColumn(k)} = ?`);
+    const cleanData = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
+    const setClauses = Object.keys(cleanData).map(k => `${this.escapeColumn(k)} = ?`);
     const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
-    const values = [...Object.values(data), ...Object.values(where)];
+    const values = [...Object.values(cleanData), ...Object.values(where)];
+    if (!setClauses.length) {
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
+      return rows[0];
+    }
     await this.execute(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
     const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
     return rows[0];

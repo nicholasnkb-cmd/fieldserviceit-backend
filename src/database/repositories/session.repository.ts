@@ -45,11 +45,43 @@ export class SessionRepository {
 
   async recordRotation(sessionId: string, userId: string, previousRefreshToken: string, expiresAt: Date) {
     return this.prisma.execute(
-      `INSERT INTO SessionRefreshHistory
+      `INSERT IGNORE INTO SessionRefreshHistory
        (id, sessionId, userId, tokenHash, expiresAt, rotatedAt)
        VALUES (UUID(), ?, ?, ?, ?, NOW(3))`,
       [sessionId, userId, hashCredential(previousRefreshToken), expiresAt],
     );
+  }
+
+  async rotate(
+    sessionId: string,
+    userId: string,
+    previousRefreshToken: string,
+    refreshTokenHash: string,
+    expiresAt: Date,
+    mfaVerifiedAt?: Date | null,
+  ) {
+    const [hashed, legacy] = credentialLookupValues(previousRefreshToken);
+    const mfaClause = mfaVerifiedAt ? ', mfaVerifiedAt = ?' : '';
+    const values = [
+      refreshTokenHash,
+      expiresAt,
+      ...(mfaVerifiedAt ? [mfaVerifiedAt] : []),
+      sessionId,
+      userId,
+      hashed,
+      legacy,
+    ];
+    const result = await this.prisma.execute(
+      `UPDATE Session
+       SET refreshToken = ?, expiresAt = ?, lastSeenAt = NOW(3),
+           revokedAt = NULL, revokedById = NULL, revokeReason = NULL${mfaClause}
+       WHERE id = ? AND userId = ? AND refreshToken IN (?, ?)
+         AND revokedAt IS NULL AND expiresAt > NOW(3)`,
+      values,
+    );
+    if (!result.affectedRows) return null;
+    await this.recordRotation(sessionId, userId, previousRefreshToken, expiresAt);
+    return { id: sessionId };
   }
 
   async findReusedToken(refreshToken: string) {

@@ -25,8 +25,29 @@ describe('SessionRepository', () => {
     await repository.recordRotation('session-1', 'user-1', 'old-token', new Date('2026-06-20T00:00:00Z'));
 
     expect(prisma.execute).toHaveBeenCalledWith(
-      expect.stringContaining('SessionRefreshHistory'),
+      expect.stringContaining('INSERT IGNORE INTO SessionRefreshHistory'),
       expect.arrayContaining(['session-1', 'user-1', hashCredential('old-token')]),
     );
+  });
+
+  it('atomically rotates only the currently matching refresh token', async () => {
+    const prisma = {
+      execute: jest.fn()
+        .mockResolvedValueOnce({ affectedRows: 1 })
+        .mockResolvedValueOnce({ affectedRows: 1 }),
+    };
+    const repository = new SessionRepository(prisma as any);
+
+    const result = await repository.rotate(
+      'session-1',
+      'user-1',
+      'old-token',
+      'sha256:new-token',
+      new Date('2026-06-20T00:00:00Z'),
+    );
+
+    expect(prisma.execute.mock.calls[0][0]).toContain('refreshToken IN (?, ?)');
+    expect(prisma.execute.mock.calls[0][1]).not.toContain(undefined);
+    expect(result).toEqual({ id: 'session-1' });
   });
 });

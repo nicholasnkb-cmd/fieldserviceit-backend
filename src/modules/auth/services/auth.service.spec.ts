@@ -77,6 +77,7 @@ describe('AuthService', () => {
       revokeActiveFamily: jest.fn(),
       revokeByRefreshToken: jest.fn(),
       recordRotation: jest.fn(),
+      rotate: jest.fn().mockResolvedValue({ id: 'session-1' }),
     };
     service = new AuthService(
       mockPrisma as any,
@@ -105,6 +106,52 @@ describe('AuthService', () => {
         expect.stringContaining('INSERT INTO SecurityAlert'),
         expect.arrayContaining(['company-1', 'REFRESH_TOKEN_REUSE', 'critical', 'user-1']),
       );
+    });
+  });
+
+  describe('refresh token rotation', () => {
+    const sessionUser = {
+      id: 'user-1',
+      email: 'user@example.com',
+      role: 'CLIENT',
+      userType: 'BUSINESS',
+      companyId: 'company-1',
+      authVersion: 0,
+    };
+
+    it('atomically rotates the matching session token', async () => {
+      mockSessions.findByRefreshToken.mockResolvedValue({
+        id: 'session-1',
+        userId: 'user-1',
+        expiresAt: new Date(Date.now() + 60_000),
+        revokedAt: null,
+        user: sessionUser,
+      });
+
+      const result = await service.refresh('old-refresh-token');
+
+      expect(mockSessions.rotate).toHaveBeenCalledWith(
+        'session-1',
+        'user-1',
+        'old-refresh-token',
+        expect.stringMatching(/^sha256:/),
+        expect.any(Date),
+        undefined,
+      );
+      expect(result.refreshToken).toEqual(expect.any(String));
+    });
+
+    it('rejects a concurrent refresh after another request claims the token', async () => {
+      mockSessions.findByRefreshToken.mockResolvedValue({
+        id: 'session-1',
+        userId: 'user-1',
+        expiresAt: new Date(Date.now() + 60_000),
+        revokedAt: null,
+        user: sessionUser,
+      });
+      mockSessions.rotate.mockResolvedValue(null);
+
+      await expect(service.refresh('old-refresh-token')).rejects.toThrow(UnauthorizedException);
     });
   });
 
