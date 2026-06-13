@@ -122,4 +122,45 @@ export class SettingsService {
     });
     return { ...updated, branding: safeJson(updated.branding, {}), settings: safeJson(updated.settings, {}) };
   }
+
+  async configureUploadedImage(companyId: string, field: string, url: string) {
+    if (!companyId) throw new ForbiddenException('No company context available');
+    const allowedFields = new Set(['logoUrl', 'faviconUrl', 'loginBackgroundUrl', 'sidebarImageUrl', 'bannerImageUrl']);
+    if (!allowedFields.has(field)) throw new ForbiddenException('Unsupported tenant image field');
+
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) throw new NotFoundException('Company not found');
+
+    const branding = safeJson<Record<string, any>>(company.branding, {});
+    const settings = safeJson<Record<string, any>>(company.settings, {});
+    settings.customization ||= {};
+    settings.customization.banner ||= {};
+    settings.customization.reporting ||= {};
+
+    if (field === 'bannerImageUrl') {
+      settings.customization.banner.imageUrl = url;
+    } else {
+      branding[field] = url;
+      if (field === 'logoUrl') {
+        settings.customization.reporting.logoUrl = url;
+        settings.customization.reporting.showCompanyLogo = true;
+      }
+    }
+
+    const updated = await this.prisma.company.update({
+      where: { id: companyId },
+      data: {
+        branding: JSON.stringify(branding),
+        settings: JSON.stringify(settings),
+        ...(field === 'logoUrl' ? { logo: url } : {}),
+      },
+      select: { id: true, name: true, logo: true, branding: true, settings: true },
+    });
+
+    return {
+      ...updated,
+      branding: safeJson(updated.branding, {}),
+      settings: safeJson(updated.settings, {}),
+    };
+  }
 }

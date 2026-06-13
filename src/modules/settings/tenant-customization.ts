@@ -17,6 +17,7 @@ export interface TenantBranding {
 
 export interface TenantBanner {
   enabled?: boolean;
+  imageUrl?: string;
   text?: string;
   linkUrl?: string;
   linkLabel?: string;
@@ -120,6 +121,7 @@ export function sanitizeCustomization(input: TenantCustomization): TenantCustomi
   return {
     banner: {
       enabled: banner.enabled === undefined ? undefined : Boolean(banner.enabled),
+      imageUrl: optionalUrl(banner.imageUrl, 'banner.imageUrl', true),
       text: optionalString(banner.text, 300),
       linkUrl: optionalUrl(banner.linkUrl, 'banner.linkUrl'),
       linkLabel: optionalString(banner.linkLabel, 60),

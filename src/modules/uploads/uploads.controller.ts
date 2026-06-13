@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Res, UseGuards, UseInterceptors, UploadedFile, UploadedFiles, UnprocessableEntityException } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Res, UseGuards, UseInterceptors, UploadedFile, UploadedFiles, UnprocessableEntityException } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { UploadsService } from './uploads.service';
@@ -10,6 +10,7 @@ import { CurrentUser as CurrentUserType } from '../../common/types';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { AuthorizationExempt } from '../../common/decorators/authorization-exempt.decorator';
+import { SettingsService } from '../settings/services/settings.service';
 
 const PHOTO_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 const SIGNATURE_MIMES = ['image/png', 'image/jpeg'];
@@ -29,7 +30,10 @@ function mimeFilter(allowed: string[]) {
 @Controller('uploads')
 @UseGuards(JwtAuthGuard, TenantGuard, PermissionsGuard)
 export class UploadsController {
-  constructor(private uploadsService: UploadsService) {}
+  constructor(
+    private uploadsService: UploadsService,
+    private settingsService: SettingsService,
+  ) {}
 
   @AuthorizationExempt('Upload service constrains files to the authenticated user and tenant', 'platform-operations', '2026-09-30')
   @Post('photo')
@@ -71,9 +75,16 @@ export class UploadsController {
     limits: { fileSize: MAX_BRANDING_SIZE },
     fileFilter: mimeFilter(['image/jpeg', 'image/png', 'image/webp']),
   }))
-  async uploadBrandingImage(@UploadedFile() file: Express.Multer.File, @CurrentUser() user: CurrentUserType) {
-    const companyDir = user.companyId || 'platform';
-    return { url: await this.uploadsService.saveFile(file, `branding/${companyDir}`) };
+  async uploadBrandingImage(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('field') field: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    const companyId = user.effectiveCompanyId || user.companyId;
+    const companyDir = companyId || 'platform';
+    const url = await this.uploadsService.saveFile(file, `branding/${companyDir}`);
+    const company = await this.settingsService.configureUploadedImage(companyId, field, url);
+    return { url, field, company };
   }
 
   @Post('ticket')
