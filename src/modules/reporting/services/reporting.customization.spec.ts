@@ -49,4 +49,44 @@ describe('ReportingService tenant preferences', () => {
     });
     expect(query).toHaveBeenCalledTimes(4);
   });
+
+  it('builds a tenant-scoped custom report with selected fields and filters', async () => {
+    const findMany = jest.fn().mockResolvedValue([{
+      ticketNumber: 'TKT-100',
+      title: 'Printer offline',
+      status: 'OPEN',
+      priority: 'HIGH',
+      type: 'INCIDENT',
+      category: 'Hardware',
+      location: 'Main office',
+      createdAt: new Date('2026-06-12T10:00:00Z'),
+      resolvedAt: null,
+      assignedTo: { firstName: 'Alex', lastName: 'Smith' },
+    }]);
+    const service = new ReportingService({ ticket: { findMany } } as any);
+
+    const result = await service.createCustomReport('company-1', {
+      name: 'Open ticket report',
+      fields: ['ticketNumber', 'title', 'assignedTo'],
+      statuses: ['OPEN'],
+      priorities: ['HIGH'],
+      from: '2026-06-01',
+      to: '2026-06-12',
+    });
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        companyId: 'company-1',
+        deletedAt: null,
+        status: { in: ['OPEN'] },
+        priority: { in: ['HIGH'] },
+      }),
+      take: 500,
+    }));
+    expect(result).toMatchObject({
+      name: 'Open ticket report',
+      total: 1,
+      rows: [{ ticketNumber: 'TKT-100', title: 'Printer offline', assignedTo: 'Alex Smith' }],
+    });
+  });
 });

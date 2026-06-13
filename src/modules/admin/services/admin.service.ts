@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { CurrentUser } from '../../../common/types';
 import { CRITICAL_PERMISSION_SLUGS, PERMISSION_DEPENDENCIES, PERMISSION_PRESETS, PERMISSION_RISK_RULES, PERMISSION_SCOPE_TYPES } from '../permissions.config';
+import { assertTenantRoleChange, tenantAssignableRoles } from './tenant-role-governance';
 
 const BCRYPT_ROUNDS = 12;
 const VALID_ROLES = ['SUPER_ADMIN', 'GLOBAL_TECH', 'TENANT_ADMIN', 'TECHNICIAN', 'CLIENT', 'READ_ONLY'];
@@ -1494,13 +1495,9 @@ export class AdminService {
   }
 
   async updateCompanyUserRole(userId: string, role: string, companyId: string, actor?: CurrentUser) {
-    const tenantRoles = ['TENANT_ADMIN', 'TECHNICIAN', 'CLIENT', 'READ_ONLY'];
-    if (!tenantRoles.includes(role)) {
-      throw new BadRequestException('Invalid role for tenant admin');
-    }
-
     const user = await this.prisma.user.findFirst({ where: { id: userId, companyId } });
     if (!user) throw new NotFoundException('User not found in your company');
+    assertTenantRoleChange({ id: String(user.id), role: String(user.role) }, role, actor);
 
     const updated = await this.prisma.user.update({
       where: { id: userId },
@@ -1617,11 +1614,19 @@ export class AdminService {
     return key.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase());
   }
 
-  async createCompanyUser(dto: { email: string; password: string; firstName: string; lastName: string; role?: string }, companyId: string) {
+  async createCompanyUser(
+    dto: { email: string; password: string; firstName: string; lastName: string; role?: string },
+    companyId: string,
+    actor?: CurrentUser,
+  ) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('Email already in use');
 
-    const role = dto.role && ['CLIENT', 'TECHNICIAN', 'TENANT_ADMIN', 'READ_ONLY'].includes(dto.role) ? dto.role : 'CLIENT';
+    const assignableRoles = tenantAssignableRoles(actor);
+    if (dto.role && !assignableRoles.includes(dto.role)) {
+      throw new ForbiddenException('Only a super admin can create a tenant admin');
+    }
+    const role = dto.role || 'CLIENT';
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     return this.prisma.user.create({

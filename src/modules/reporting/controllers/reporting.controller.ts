@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { ReportingService } from '../services/reporting.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
@@ -10,6 +10,7 @@ import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { CustomReportDto } from '../dto/custom-report.dto';
 
 @Controller('reports')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
@@ -47,5 +48,10 @@ export class ReportingController {
   @Get('activity')
   getActivityFeed(@CurrentUser() user: CurrentUserType) {
     return this.reportingService.getActivityFeed(user.companyId);
+  }
+
+  @Post('custom')
+  createCustomReport(@Body() dto: CustomReportDto, @CurrentUser() user: CurrentUserType) {
+    return this.reportingService.createCustomReport(user.companyId, dto);
   }
 }

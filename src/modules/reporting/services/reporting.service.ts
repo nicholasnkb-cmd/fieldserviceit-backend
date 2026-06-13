@@ -1,6 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { safeJson, TenantCustomization } from '../../settings/tenant-customization';
+import { CustomReportDto, CUSTOM_REPORT_FIELDS } from '../dto/custom-report.dto';
+
+const CUSTOM_REPORT_LABELS: Record<string, string> = {
+  ticketNumber: 'Ticket Number',
+  title: 'Title',
+  status: 'Status',
+  priority: 'Priority',
+  type: 'Type',
+  category: 'Category',
+  location: 'Location',
+  createdAt: 'Created',
+  resolvedAt: 'Resolved',
+  assignedTo: 'Assigned To',
+  resolutionDurationMinutes: 'Resolution Time (min)',
+};
 
 @Injectable()
 export class ReportingService {
@@ -158,6 +173,64 @@ export class ReportingService {
         ticket: { select: { id: true, ticketNumber: true, title: true, status: true } },
       },
     });
+  }
+
+  async createCustomReport(companyId: string, dto: CustomReportDto) {
+    const where: any = { companyId, deletedAt: null };
+    if (dto.statuses?.length) where.status = { in: dto.statuses };
+    if (dto.priorities?.length) where.priority = { in: dto.priorities };
+    if (dto.from || dto.to) {
+      where.createdAt = {};
+      if (dto.from) where.createdAt.gte = new Date(dto.from);
+      if (dto.to) {
+        const to = new Date(dto.to);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dto.to)) to.setHours(23, 59, 59, 999);
+        where.createdAt.lte = to;
+      }
+    }
+
+    const fields = CUSTOM_REPORT_FIELDS.filter((field) => dto.fields.includes(field));
+    const tickets = await this.prisma.ticket.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+      include: {
+        assignedTo: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+
+    const rows = tickets.map((ticket: any) => {
+      const values: Record<string, string | number> = {
+        ticketNumber: ticket.ticketNumber,
+        title: ticket.title,
+        status: ticket.status,
+        priority: ticket.priority,
+        type: ticket.type,
+        category: ticket.category || '',
+        location: ticket.location || '',
+        createdAt: ticket.createdAt?.toISOString?.() || ticket.createdAt || '',
+        resolvedAt: ticket.resolvedAt?.toISOString?.() || ticket.resolvedAt || '',
+        assignedTo: ticket.assignedTo
+          ? [ticket.assignedTo.firstName, ticket.assignedTo.lastName].filter(Boolean).join(' ')
+          : 'Unassigned',
+        resolutionDurationMinutes: ticket.resolvedAt
+          ? Math.max(0, Math.round((new Date(ticket.resolvedAt).getTime() - new Date(ticket.createdAt).getTime()) / 60000))
+          : '',
+      };
+      return fields.reduce((row, field) => {
+        row[field] = values[field];
+        return row;
+      }, {} as Record<string, string | number>);
+    });
+
+    return {
+      name: dto.name?.trim() || 'Custom Ticket Report',
+      columns: fields.map((key) => ({ key, label: CUSTOM_REPORT_LABELS[key] })),
+      rows,
+      total: rows.length,
+      truncated: rows.length === 500,
+      generatedAt: new Date().toISOString(),
+    };
   }
 
   private calculateAvgResolution(tickets: any[]): number {

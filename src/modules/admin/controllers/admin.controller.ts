@@ -762,7 +762,7 @@ export class AdminController {
   @Post('company/users')
   @Roles('TENANT_ADMIN')
   createCompanyUser(@Body() dto: { email: string; password: string; firstName: string; lastName: string; role?: string }, @CurrentUser() user: CurrentUserType) {
-    return this.adminService.createCompanyUser(dto, user.companyId);
+    return this.adminService.createCompanyUser(dto, user.companyId, user);
   }
 
   @RequirePermissions('users.view')
