@@ -75,7 +75,7 @@ export class NotificationsController {
   @Get('email/summary')
   @UseGuards(RolesGuard, PermissionsGuard)
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
-  @RequirePermissions('platform-security.view')
+  @RequirePermissions('email-operations.view')
   emailSummary(@CurrentUser() user: CurrentUserType) {
     return this.emailDeliveryService.summary(user);
   }
@@ -115,7 +115,7 @@ export class NotificationsController {
     return this.emailService.rotateWebhookSecret(user.id);
   }
 
-  @RequirePermissions('platform-security.view')
+  @RequirePermissions('email-operations.view')
   @Get('email/queue')
   @UseGuards(RolesGuard)
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
@@ -147,7 +147,7 @@ export class NotificationsController {
     return this.emailDeliveryService.retryAll(user);
   }
 
-  @RequirePermissions('platform-security.view')
+  @RequirePermissions('email-operations.view')
   @Get('email/deliveries')
   @UseGuards(RolesGuard)
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
@@ -179,7 +179,7 @@ export class NotificationsController {
     return this.emailDeliveryService.resend(id, user);
   }
 
-  @RequirePermissions('platform-security.view')
+  @RequirePermissions('email-operations.view')
   @Get('email/templates/:eventType')
   @UseGuards(RolesGuard)
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')

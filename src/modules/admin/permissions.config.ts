@@ -121,6 +121,7 @@ export const PERMISSION_DEPENDENCIES: Record<string, string[]> = {
   'settings.manage': ['settings.view'],
   'companies.manage': ['companies.view'],
   'reports.export': ['reports.view'],
+  'email-operations.manage': ['email-operations.view'],
   'platform-security.manage': ['platform-security.view'],
   'permissions.governance.manage': ['permissions.governance.view', 'roles.view'],
   'backups.manage': ['platform-security.view'],
