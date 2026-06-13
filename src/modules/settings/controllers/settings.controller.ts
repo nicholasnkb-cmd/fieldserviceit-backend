@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Put, Body, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Patch, Put, Body, UseGuards } from '@nestjs/common';
 import { SettingsService } from '../services/settings.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
@@ -59,5 +59,13 @@ export class SettingsController {
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
   updateCustomization(@Body() customization: TenantCustomization, @CurrentUser() user: CurrentUserType) {
     return this.settingsService.updateCustomization(user.companyId, customization);
+  }
+
+  @RequirePermissions('settings.manage')
+  @Delete('customization')
+  @UseGuards(RolesGuard)
+  @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
+  resetCustomization(@CurrentUser() user: CurrentUserType) {
+    return this.settingsService.resetCustomization(user.companyId);
   }
 }

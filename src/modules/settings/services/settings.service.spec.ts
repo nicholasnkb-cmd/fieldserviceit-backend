@@ -68,4 +68,38 @@ describe('SettingsService tenant customization', () => {
       showCompanyLogo: true,
     });
   });
+
+  it('resets tenant customization while preserving unrelated settings', async () => {
+    const prisma = {
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'company-1',
+          name: 'Acme',
+          logo: '/uploads/branding/company-1/logo.webp',
+          branding: JSON.stringify({ primaryColor: '#123456' }),
+          settings: JSON.stringify({
+            timezone: 'America/New_York',
+            featureOverrides: { reporting: true },
+            customization: { banner: { enabled: true } },
+          }),
+        }),
+        update: jest.fn().mockImplementation(({ data }) => Promise.resolve({
+          id: 'company-1',
+          name: 'Acme',
+          logo: data.logo,
+          branding: data.branding,
+          settings: data.settings,
+        })),
+      },
+    };
+    const service = new SettingsService(prisma as any);
+
+    const result: any = await service.resetCustomization('company-1');
+
+    expect(result.logo).toBeNull();
+    expect(result.branding).toEqual({});
+    expect(result.settings.customization).toBeUndefined();
+    expect(result.settings.timezone).toBe('America/New_York');
+    expect(result.settings.featureOverrides).toEqual({ reporting: true });
+  });
 });

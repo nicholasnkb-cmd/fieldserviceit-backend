@@ -123,6 +123,26 @@ export class SettingsService {
     return { ...updated, branding: safeJson(updated.branding, {}), settings: safeJson(updated.settings, {}) };
   }
 
+  async resetCustomization(companyId: string) {
+    if (!companyId) throw new ForbiddenException('No company context available');
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) throw new NotFoundException('Company not found');
+
+    const settings = safeJson<Record<string, any>>(company.settings, {});
+    delete settings.customization;
+
+    const updated = await this.prisma.company.update({
+      where: { id: companyId },
+      data: {
+        logo: null,
+        branding: JSON.stringify({}),
+        settings: JSON.stringify(settings),
+      },
+      select: { id: true, name: true, logo: true, branding: true, settings: true },
+    });
+    return { ...updated, branding: safeJson(updated.branding, {}), settings: safeJson(updated.settings, {}) };
+  }
+
   async configureUploadedImage(companyId: string, field: string, url: string) {
     if (!companyId) throw new ForbiddenException('No company context available');
     const allowedFields = new Set(['logoUrl', 'faviconUrl', 'loginBackgroundUrl', 'sidebarImageUrl', 'bannerImageUrl']);
