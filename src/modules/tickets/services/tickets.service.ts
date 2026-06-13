@@ -332,6 +332,7 @@ export class TicketsService {
     };
     Object.keys(data).forEach((key) => data[key] === undefined && delete data[key]);
     if (dto.assignedToId) {
+      await this.assertAssignableUser(companyId, dto.assignedToId);
       if (!newStatus && ticket.status === 'OPEN') {
         data.status = 'ASSIGNED';
       }
@@ -425,6 +426,7 @@ export class TicketsService {
   async assign(id: string, targetUserId: string, user: any, actorUserId?: string) {
     const ticket = await this.findOne(id, user, false);
     const companyId = ticket.companyId;
+    await this.assertAssignableUser(companyId, targetUserId);
     this.validateTransition(ticket.status, 'ASSIGNED');
     const updated = await this.prisma.ticket.update({
       where: { id },
@@ -450,6 +452,22 @@ export class TicketsService {
     });
     if (companyId) this.gateway.notifyTicketUpdate(companyId, 'ticket:assigned', updated);
     return updated;
+  }
+
+  private async assertAssignableUser(companyId: string | null, userId: string) {
+    if (!companyId) throw new BadRequestException('Ticket has no company context');
+    const target = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        companyId,
+        deletedAt: null,
+        isActive: true,
+      },
+      select: { id: true, role: true },
+    });
+    if (!target || !['TECHNICIAN', 'TENANT_ADMIN'].includes(String(target.role))) {
+      throw new BadRequestException('Assignee must be an active user in the current tenant');
+    }
   }
 
   async resolve(id: string, resolution: string, user: any, userId?: string) {

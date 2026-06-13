@@ -33,6 +33,18 @@ export class FieldServiceService {
   async dispatch(ticketId: string, technicianId: string, companyId: string, actorUserId?: string) {
     const ticket = await this.prisma.ticket.findFirst({ where: { id: ticketId, companyId } });
     if (!ticket) throw new NotFoundException('Ticket not found');
+    const technician = await this.prisma.user.findFirst({
+      where: {
+        id: technicianId,
+        companyId,
+        deletedAt: null,
+        isActive: true,
+      },
+      select: { id: true, role: true },
+    });
+    if (!technician || !['TECHNICIAN', 'TENANT_ADMIN'].includes(String(technician.role))) {
+      throw new BadRequestException('Technician must be an active user in the current tenant');
+    }
 
     const result = await this.prisma.dispatch.create({
       data: { ticketId, technicianId, companyId, status: 'DISPATCHED' },

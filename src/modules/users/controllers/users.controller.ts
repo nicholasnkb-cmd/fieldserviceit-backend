@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, ForbiddenException } from '@nestjs/common';
 import { UsersService } from '../services/users.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
@@ -68,6 +68,14 @@ export class UsersController {
   @Get()
   findAll(@Query() query: PaginationQueryDto, @CurrentUser() user: CurrentUserType) {
     return this.usersService.findAll(user.companyId, query, user);
+  }
+
+  @RequirePermissions('users.view')
+  @Get('options')
+  listOptions(@Query('roles') roles: string, @CurrentUser() user: CurrentUserType) {
+    const companyId = user.effectiveCompanyId || user.companyId;
+    if (!companyId) throw new ForbiddenException('Select a company context to list users');
+    return this.usersService.listOptions(companyId, roles);
   }
 
   @RequirePermissions('users.view')

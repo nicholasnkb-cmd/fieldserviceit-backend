@@ -56,6 +56,22 @@ export class UsersService {
     return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
+  async listOptions(companyId: string, roles?: string) {
+    const allowedRoles = new Set([UserRole.TENANT_ADMIN, UserRole.TECHNICIAN, UserRole.CLIENT, UserRole.READ_ONLY]);
+    const requestedRoles = String(roles || '')
+      .split(',')
+      .map((role) => role.trim().toUpperCase())
+      .filter((role) => allowedRoles.has(role as UserRole));
+    const where: any = { companyId, deletedAt: null, isActive: true };
+    if (requestedRoles.length) where.role = { in: requestedRoles };
+
+    return this.prisma.user.findMany({
+      where,
+      orderBy: { firstName: 'asc', lastName: 'asc', email: 'asc' },
+      select: { id: true, email: true, firstName: true, lastName: true, role: true },
+    });
+  }
+
   async findById(id: string) {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
