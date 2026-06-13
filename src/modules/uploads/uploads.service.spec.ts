@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import sharp = require('sharp');
 import { UploadsService } from './uploads.service';
 import { MalwareScannerService } from './malware-scanner.service';
 
@@ -58,7 +59,7 @@ describe('UploadsService', () => {
     });
 
     afterEach(() => {
-      if (uploadDir) fs.rmSync(uploadDir, { recursive: true, force: true });
+      if (uploadDir) fs.rmSync(uploadDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     });
 
     it('should be defined', () => {
@@ -78,6 +79,33 @@ describe('UploadsService', () => {
       const results = await service.saveFiles([mockFile, mockFile], 'photos/test');
       expect(results).toHaveLength(2);
       results.forEach((r) => expect(r).toMatch(/^\/uploads\/photos\/test\/.+\.jpg$/));
+    });
+
+    it('should automatically format company logos as bounded WebP images', async () => {
+      const logoBuffer = await sharp({
+        create: {
+          width: 1200,
+          height: 300,
+          channels: 4,
+          background: { r: 37, g: 99, b: 235, alpha: 1 },
+        },
+      }).png().toBuffer();
+      const logo = {
+        ...mockFile,
+        originalname: 'large-logo.png',
+        mimetype: 'image/png',
+        buffer: logoBuffer,
+        size: logoBuffer.length,
+      };
+
+      const result = await service.saveBrandingImage(logo, 'branding/company-1', 'logoUrl');
+      const savedPath = path.join(uploadDir, result.replace('/uploads/', ''));
+      const metadata = await sharp(fs.readFileSync(savedPath)).metadata();
+
+      expect(result).toBe('/uploads/branding/company-1/mocked-uuid.webp');
+      expect(metadata.format).toBe('webp');
+      expect(metadata.width).toBeLessThanOrEqual(512);
+      expect(metadata.height).toBeLessThanOrEqual(160);
     });
   });
 

@@ -4,6 +4,7 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
+import sharp = require('sharp');
 import { getS3Client, getS3Bucket } from '../../config/s3.config';
 import { MalwareScannerService } from './malware-scanner.service';
 
@@ -96,6 +97,40 @@ export class UploadsService {
     return this.saveToLocal(file, subfolder, filename);
   }
 
+  async saveBrandingImage(file: Express.Multer.File, subfolder: string, field: string): Promise<string> {
+    if (field !== 'logoUrl') return this.saveFile(file, subfolder);
+
+    await this.validateUpload(file);
+    let buffer: Buffer;
+    try {
+      buffer = await sharp(file.buffer, { limitInputPixels: 40_000_000 })
+        .rotate()
+        .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .resize(512, 160, {
+          fit: 'contain',
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+          withoutEnlargement: true,
+        })
+        .webp({ quality: 88, alphaQuality: 100 })
+        .toBuffer();
+    } catch {
+      throw new BadRequestException('Logo image could not be formatted. Upload a valid PNG, JPEG, or WebP image.');
+    }
+
+    const normalizedFile = {
+      ...file,
+      originalname: 'company-logo.webp',
+      mimetype: 'image/webp',
+      buffer,
+      size: buffer.length,
+    };
+    const filename = `${crypto.randomUUID()}.webp`;
+    if (this.storageType === 's3' && this.s3Client) {
+      return this.saveToS3(normalizedFile, subfolder, filename);
+    }
+    return this.saveToLocal(normalizedFile, subfolder, filename);
+  }
+
   async saveFiles(files: Express.Multer.File[], subfolder: string): Promise<string[]> {
     return Promise.all(files.map((f) => this.saveFile(f, subfolder)));
   }
@@ -166,6 +201,15 @@ export class UploadsService {
       exp: Date.now() + 365 * 24 * 60 * 60 * 1000,
     });
     return `/v1/uploads/protected/${token}`;
+  }
+
+  private async validateUpload(file: Express.Multer.File): Promise<void> {
+    if (!file) throw new BadRequestException('No file provided');
+    const sanitized = sanitizeFilename(file.originalname);
+    validateExtension(sanitized);
+    validateMagicBytes(file.buffer, path.extname(sanitized).toLowerCase());
+    scanForKnownMalwareMarkers(file.buffer);
+    await this.malwareScanner.scan(file);
   }
 
   private signProtectedToken(payload: any) {
