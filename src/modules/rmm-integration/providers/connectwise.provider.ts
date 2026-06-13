@@ -57,7 +57,7 @@ export class ConnectWiseProvider implements RmmProvider {
 
       if (!res.ok) {
         this.logger.warn(`ConnectWise syncAllAssets failed: ${res.status} ${res.statusText}`);
-        return this.getMockAssets();
+        throw new Error(`ConnectWise asset sync failed with HTTP ${res.status}`);
       }
 
       const data = await res.json();
@@ -74,7 +74,7 @@ export class ConnectWiseProvider implements RmmProvider {
       }));
     } catch (err: any) {
       this.logger.warn(`ConnectWise syncAllAssets error: ${err.message}`);
-      return this.getMockAssets();
+      throw err;
     }
   }
 
@@ -138,10 +138,4 @@ export class ConnectWiseProvider implements RmmProvider {
     return type ? map[type] || 'OTHER' : 'OTHER';
   }
 
-  private getMockAssets(): AssetMapping[] {
-    return [
-      { name: 'CW-Server-01', assetType: 'SERVER', serialNumber: 'CW-SN-001', manufacturer: 'Dell', model: 'PowerEdge R740', os: 'Windows Server 2022', ipAddress: '10.0.1.10', status: 'ACTIVE' },
-      { name: 'CW-Workstation-01', assetType: 'WORKSTATION', serialNumber: 'CW-SN-002', manufacturer: 'HP', model: 'ZBook', os: 'Windows 11', ipAddress: '10.0.1.50', status: 'ACTIVE' },
-    ];
-  }
 }

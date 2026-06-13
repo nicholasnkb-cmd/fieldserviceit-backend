@@ -10,11 +10,14 @@ import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { PrismaService } from '../../../database/prisma.service';
 import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import * as crypto from 'crypto';
 
 @Controller('integrations/rmm')
-@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
 @RequireFeature('rmmIntegration')
+@RequirePermissions('assets.view')
 export class RmmIntegrationController {
   constructor(
     private rmmIntegration: RmmIntegrationService,
@@ -25,16 +28,21 @@ export class RmmIntegrationController {
 
   @Get('providers')
   listProviders() {
-    return { providers: this.providerFactory.listProviders() };
+    return {
+      providers: this.providerFactory.listProviders(),
+      definitions: this.providerFactory.listProviderDefinitions(),
+    };
   }
 
   @Post('sync-asset')
+  @RequirePermissions('assets.edit')
   syncAsset(@Body() body: { provider: string; assetData: any }, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     return this.rmmIntegration.syncAsset(body.provider, body.assetData, companyId);
   }
 
   @Post('alert')
+  @RequirePermissions('tickets.create')
   createFromAlert(@Body() body: { provider: string; alert: any }, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     return this.rmmIntegration.createTicketFromAlert(body.provider, body.alert, companyId);
@@ -57,6 +65,7 @@ export class RmmIntegrationController {
   }
 
   @Post('configs/test')
+  @RequirePermissions('assets.edit')
   async testUnsavedConfig(@Body() body: { provider: string; credentials: any }, @CurrentUser() user: CurrentUserType) {
     this.requireCompanyId(user);
     const provider = this.normalizeProvider(body.provider);
@@ -66,6 +75,7 @@ export class RmmIntegrationController {
   }
 
   @Post('configs')
+  @RequirePermissions('assets.edit')
   async saveConfig(@Body() body: { provider: string; credentials: any; syncIntervalMin?: number }, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     const provider = this.normalizeProvider(body.provider);
@@ -88,6 +98,7 @@ export class RmmIntegrationController {
   }
 
   @Delete('configs/:provider')
+  @RequirePermissions('assets.edit')
   async removeConfig(@Param('provider') provider: string, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     const normalizedProvider = this.normalizeProvider(provider);
@@ -103,6 +114,7 @@ export class RmmIntegrationController {
   }
 
   @Post('configs/:provider/test')
+  @RequirePermissions('assets.edit')
   async testSavedConfig(@Param('provider') provider: string, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     const normalizedProvider = this.normalizeProvider(provider);
@@ -123,6 +135,7 @@ export class RmmIntegrationController {
   }
 
   @Post('sync-now/:provider')
+  @RequirePermissions('assets.edit')
   syncNow(@Param('provider') provider: string, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     return this.rmmSync.syncProviderNow(companyId, this.normalizeProvider(provider));

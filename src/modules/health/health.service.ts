@@ -1,0 +1,248 @@
+import { Injectable, ServiceUnavailableException, Logger } from '@nestjs/common';
+import { PrismaService } from '../../database/prisma.service';
+import { StructuredLogger } from '../../common/logger/structured-logger.service';
+
+export interface HealthCheckResponse {
+  status: 'ok' | 'degraded' | 'error';
+  timestamp: string;
+  version: string;
+  database: {
+    status: 'ok' | 'error';
+    latency?: number;
+  };
+}
+
+export interface HealthDashboard {
+  status: 'ok' | 'degraded' | 'error';
+  timestamp: string;
+  version: string;
+  uptime: {
+    seconds: number;
+    readable: string;
+  };
+  database: {
+    status: 'ok' | 'error';
+    latency?: number;
+  };
+  requests: {
+    total: string;
+    errors: string;
+    errorRate: string;
+    averageLatency: string;
+  };
+  slowQueries: {
+    total: string;
+    threshold: string;
+  };
+  memory: {
+    heapUsed: string;
+    heapTotal: string;
+    rss: string;
+  };
+  operations: Record<string, {
+    count: number;
+    avgLatency: string;
+    slowCount: number;
+    slowPercentage: string;
+  }>;
+}
+
+/**
+ * HealthService - Provides health check implementations
+ * 
+ * Monitors:
+ * - Backend process availability
+ * - Database connectivity
+ * - Response times and latency
+ * 
+ * Used for alerting when services become unhealthy.
+ */
+@Injectable()
+export class HealthService {
+  private readonly logger = new Logger(HealthService.name);
+  private readonly version = '1.0.0';
+  private startTime = new Date();
+
+  constructor(
+    private prisma: PrismaService,
+    private structuredLogger: StructuredLogger,
+  ) {}
+
+  /**
+   * Comprehensive health check with database verification
+   */
+  async check(): Promise<HealthCheckResponse> {
+    try {
+      const startDb = Date.now();
+      // Test database connection with a simple query
+      await this.prisma.query<any>('SELECT 1 as healthy');
+      const dbLatency = Date.now() - startDb;
+
+      return {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        version: this.version,
+        database: {
+          status: 'ok',
+          latency: dbLatency,
+        },
+      };
+    } catch (error) {
+      this.logger.error('Health check failed:', error);
+      throw new ServiceUnavailableException({
+        status: 'error',
+        timestamp: new Date().toISOString(),
+        version: this.version,
+        database: {
+          status: 'error',
+        },
+        message: 'Database connection failed',
+      });
+    }
+  }
+
+  /**
+   * Readiness probe: Check if service is ready to accept traffic
+   */
+  async ready(): Promise<HealthCheckResponse> {
+    try {
+      const startDb = Date.now();
+      await this.prisma.query<any>('SELECT 1 as healthy');
+      const dbLatency = Date.now() - startDb;
+
+      // Consider service ready if database responds within reasonable time (< 5s)
+      if (dbLatency > 5000) {
+        this.logger.warn(`Database is slow: ${dbLatency}ms`);
+        return {
+          status: 'degraded',
+          timestamp: new Date().toISOString(),
+          version: this.version,
+          database: {
+            status: 'ok',
+            latency: dbLatency,
+          },
+        };
+      }
+
+      return {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        version: this.version,
+        database: {
+          status: 'ok',
+          latency: dbLatency,
+        },
+      };
+    } catch (error) {
+      this.logger.error('Readiness check failed:', error);
+      throw new ServiceUnavailableException({
+        status: 'error',
+        timestamp: new Date().toISOString(),
+        version: this.version,
+        message: 'Service not ready',
+      });
+    }
+  }
+
+  /**
+   * Liveness probe: Check if service is alive
+   * Does not check dependencies to avoid cascading failures
+   */
+  async live(): Promise<HealthCheckResponse> {
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      version: this.version,
+      database: {
+        status: 'ok',
+      },
+    };
+  }
+
+  /**
+   * Comprehensive dashboard with full metrics and monitoring data
+   * 
+   * Returns:
+   * - Overall health status
+   * - Uptime information
+   * - Database health and latency
+   * - Request metrics (total, errors, error rate, latency)
+   * - Slow query statistics
+   * - Memory usage
+   * - Per-operation performance metrics
+   * 
+   * Used for monitoring dashboards and detailed health analysis
+   */
+  async dashboard(): Promise<HealthDashboard> {
+    try {
+      const uptime = Date.now() - this.startTime.getTime();
+      const uptimeSeconds = Math.floor(uptime / 1000);
+      
+      // Calculate uptime in readable format
+      const days = Math.floor(uptimeSeconds / 86400);
+      const hours = Math.floor((uptimeSeconds % 86400) / 3600);
+      const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+      const seconds = uptimeSeconds % 60;
+      const readableUptime = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+
+      // Test database connectivity
+      const dbStart = Date.now();
+      await this.prisma.query<any>('SELECT 1 as healthy');
+      const dbLatency = Date.now() - dbStart;
+
+      // Get metrics from structured logger
+      const metrics = this.structuredLogger.getMetrics();
+
+      // Get memory usage
+      const memUsage = process.memoryUsage();
+
+      // Determine overall health status
+      let status: 'ok' | 'degraded' | 'error' = 'ok';
+      const errorRate = parseFloat(metrics.requests.errorRate.replace('%', ''));
+      if (errorRate > 5) {
+        status = 'degraded';
+      }
+      if (dbLatency > 5000 || errorRate > 10) {
+        status = 'degraded';
+      }
+
+      return {
+        status,
+        timestamp: new Date().toISOString(),
+        version: this.version,
+        uptime: {
+          seconds: uptimeSeconds,
+          readable: readableUptime,
+        },
+        database: {
+          status: 'ok',
+          latency: dbLatency,
+        },
+        requests: {
+          total: metrics.requests.total.toString(),
+          errors: metrics.requests.errors.toString(),
+          errorRate: metrics.requests.errorRate,
+          averageLatency: metrics.requests.averageLatency,
+        },
+        slowQueries: {
+          total: metrics.slowQueries.total.toString(),
+          threshold: metrics.slowQueries.threshold,
+        },
+        memory: {
+          heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)} MB`,
+          heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)} MB`,
+          rss: `${Math.round(memUsage.rss / 1024 / 1024)} MB`,
+        },
+        operations: metrics.operations,
+      };
+    } catch (error) {
+      this.logger.error('Dashboard health check failed:', error);
+      throw new ServiceUnavailableException({
+        status: 'error',
+        timestamp: new Date().toISOString(),
+        version: this.version,
+        message: 'Failed to generate health dashboard',
+      });
+    }
+  }
+}

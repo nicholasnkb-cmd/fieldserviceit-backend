@@ -9,11 +9,15 @@ describe('PermissionsGuard', () => {
   beforeEach(() => {
     reflector = new Reflector();
     mockPrisma = {
-      userRole: {
-        findMany: jest.fn(),
-      },
+      query: jest.fn().mockResolvedValue([]),
+      execute: jest.fn().mockResolvedValue({ affectedRows: 1 }),
     };
-    guard = new PermissionsGuard(reflector, mockPrisma);
+    const authorizationRepository = {
+      findUserRolePermissions: jest.fn().mockResolvedValue([]),
+      findSystemRolePermissions: jest.fn().mockResolvedValue([]),
+    };
+    guard = new PermissionsGuard(reflector, mockPrisma, authorizationRepository as any);
+    (guard as any).authorizationRepository = authorizationRepository;
   });
 
   it('should be defined', () => {
@@ -57,8 +61,6 @@ describe('PermissionsGuard', () => {
       }),
     };
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['tickets:delete']);
-    mockPrisma.userRole.findMany.mockResolvedValue([]);
-
     await expect(guard.canActivate(context)).rejects.toThrow('Insufficient permissions');
   });
 
@@ -72,17 +74,25 @@ describe('PermissionsGuard', () => {
     };
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['tickets:read', 'tickets:create']);
 
-    mockPrisma.userRole.findMany.mockResolvedValue([
-      {
-        role: {
-          permissions: [
-            { permission: { slug: 'tickets:read' } },
-            { permission: { slug: 'tickets:create' } },
-            { permission: { slug: 'assets:read' } },
-          ],
-        },
-      },
+    (guard as any).authorizationRepository.findUserRolePermissions.mockResolvedValue([
+      { roleId: 'role-1', slug: 'tickets:read' },
+      { roleId: 'role-1', slug: 'tickets:create' },
+      { roleId: 'role-1', slug: 'assets:read' },
     ]);
+
+    const result = await guard.canActivate(context);
+    expect(result).toBe(true);
+  });
+
+  it('should allow service accounts with explicit permissions', async () => {
+    const context: any = {
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      switchToHttp: () => ({
+        getRequest: () => ({ user: { role: 'SERVICE_ACCOUNT', serviceAccount: true, permissionSlugs: ['tickets.view'] } }),
+      }),
+    };
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['tickets.view']);
 
     const result = await guard.canActivate(context);
     expect(result).toBe(true);

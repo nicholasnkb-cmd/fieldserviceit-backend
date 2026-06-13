@@ -53,7 +53,7 @@ export class DattoProvider implements RmmProvider {
 
       if (!res.ok) {
         this.logger.warn(`Datto syncAllAssets failed: ${res.status}`);
-        return this.getMockAssets();
+        throw new Error(`Datto asset sync failed with HTTP ${res.status}`);
       }
 
       const data = await res.json();
@@ -71,7 +71,7 @@ export class DattoProvider implements RmmProvider {
       }));
     } catch (err: any) {
       this.logger.warn(`Datto syncAllAssets error: ${err.message}`);
-      return this.getMockAssets();
+      throw err;
     }
   }
 
@@ -102,10 +102,4 @@ export class DattoProvider implements RmmProvider {
     return type ? map[type.toLowerCase()] || 'OTHER' : 'OTHER';
   }
 
-  private getMockAssets(): AssetMapping[] {
-    return [
-      { name: 'Datto-Backup-Server', assetType: 'SERVER', serialNumber: 'D-SN-001', manufacturer: 'Datto', model: 'Siris 4', os: 'Datto Linux', ipAddress: '10.0.3.10', status: 'ACTIVE' },
-      { name: 'Datto-NAS-01', assetType: 'STORAGE', serialNumber: 'D-SN-002', manufacturer: 'Datto', model: 'Alto 3', os: 'Datto Linux', ipAddress: '10.0.3.20', status: 'ACTIVE' },
-    ];
-  }
 }

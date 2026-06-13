@@ -11,6 +11,7 @@ interface Migration {
 @Injectable()
 export class MigrationsService {
   private readonly logger = new Logger('MigrationsService');
+  private runningPromise: Promise<void> | null = null;
 
   constructor(
     @Inject(forwardRef(() => DatabaseService))
@@ -18,6 +19,16 @@ export class MigrationsService {
   ) {}
 
   async run(): Promise<void> {
+    if (this.runningPromise) return this.runningPromise;
+    this.runningPromise = this.runMigrations();
+    try {
+      await this.runningPromise;
+    } finally {
+      this.runningPromise = null;
+    }
+  }
+
+  private async runMigrations(): Promise<void> {
     await this.db.query(`
       CREATE TABLE IF NOT EXISTS _migrations (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -44,7 +55,7 @@ export class MigrationsService {
         .filter(s => s.length > 0);
 
       for (const stmt of statements) {
-        await this.db.query(stmt);
+        await this.executeStatement(stmt);
       }
 
       await this.db.query(
@@ -53,6 +64,19 @@ export class MigrationsService {
       );
 
       this.logger.log(`Migration ${migration.name} applied successfully`);
+    }
+  }
+
+  private async executeStatement(statement: string) {
+    const compatibleStatement = statement
+      .replace(/\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b/gi, 'ADD COLUMN')
+      .replace(/\bADD\s+(UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b/gi, (_match, unique) => `ADD ${unique || ''}INDEX`);
+    try {
+      await this.db.query(compatibleStatement);
+    } catch (error: any) {
+      // MySQL reports these when an idempotent ALTER has already been applied.
+      if ([1060, 1061].includes(Number(error?.errno))) return;
+      throw error;
     }
   }
 
@@ -1223,6 +1247,271 @@ export class MigrationsService {
             (UUID(), 'View platform security operations', 'platform-security.view', 'Security', 'View MFA, sessions, SSO, backups, retention, observability, scanning, and action approvals', NOW(3)),
             (UUID(), 'Manage platform security operations', 'platform-security.manage', 'Security', 'Manage platform security policy, SSO, backups, retention, scanning, and action approvals', NOW(3)),
             (UUID(), 'Approve disruptive network actions', 'network.actions.approve', 'Network', 'Approve or reject disruptive network actions before execution', NOW(3));
+        `),
+      },
+      {
+        name: '023_billing_provider_abstraction',
+        sql: stripComments(`
+          ALTER TABLE Plan ADD COLUMN IF NOT EXISTS annualPrice DECIMAL(10,2) NOT NULL DEFAULT 0;
+          ALTER TABLE Plan ADD COLUMN IF NOT EXISTS seatMonthlyPrice DECIMAL(10,2) NOT NULL DEFAULT 0;
+          ALTER TABLE Plan ADD COLUMN IF NOT EXISTS seatAnnualPrice DECIMAL(10,2) NOT NULL DEFAULT 0;
+          ALTER TABLE Plan ADD COLUMN IF NOT EXISTS trialDays INT NOT NULL DEFAULT 0;
+          ALTER TABLE CompanyPlan ADD COLUMN IF NOT EXISTS billingProvider VARCHAR(32) NOT NULL DEFAULT 'STRIPE';
+          ALTER TABLE CompanyPlan ADD COLUMN IF NOT EXISTS providerCustomerId VARCHAR(191);
+          ALTER TABLE CompanyPlan ADD COLUMN IF NOT EXISTS providerSubscriptionId VARCHAR(191);
+          ALTER TABLE CompanyPlan ADD COLUMN IF NOT EXISTS billingInterval VARCHAR(16) NOT NULL DEFAULT 'MONTH';
+          ALTER TABLE CompanyPlan ADD COLUMN IF NOT EXISTS seatQuantity INT NOT NULL DEFAULT 1;
+          ALTER TABLE CompanyPlan ADD COLUMN IF NOT EXISTS cancelAtPeriodEnd TINYINT(1) NOT NULL DEFAULT 0;
+          ALTER TABLE CompanyPlan ADD COLUMN IF NOT EXISTS gracePeriodEndsAt DATETIME(3);
+          ALTER TABLE CompanyPlan ADD INDEX IF NOT EXISTS CompanyPlan_provider_subscription_idx (billingProvider, providerSubscriptionId);
+          CREATE TABLE IF NOT EXISTS BillingPrice (
+            id VARCHAR(191) PRIMARY KEY,
+            planId VARCHAR(191) NOT NULL,
+            provider VARCHAR(32) NOT NULL,
+            billingInterval VARCHAR(16) NOT NULL,
+            component VARCHAR(16) NOT NULL DEFAULT 'BASE',
+            externalPriceId VARCHAR(255) NOT NULL,
+            isActive TINYINT(1) NOT NULL DEFAULT 1,
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            UNIQUE KEY BillingPrice_catalog_key (planId, provider, billingInterval, component),
+            INDEX BillingPrice_provider_idx (provider, isActive)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE TABLE IF NOT EXISTS BillingEvent (
+            id VARCHAR(191) PRIMARY KEY,
+            provider VARCHAR(32) NOT NULL,
+            providerEventId VARCHAR(255) NOT NULL,
+            eventType VARCHAR(191) NOT NULL,
+            companyId VARCHAR(191),
+            status VARCHAR(32) NOT NULL DEFAULT 'RECEIVED',
+            payload LONGTEXT,
+            errorMessage TEXT,
+            processedAt DATETIME(3),
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            UNIQUE KEY BillingEvent_provider_event_key (provider, providerEventId),
+            INDEX BillingEvent_company_idx (companyId, createdAt),
+            INDEX BillingEvent_status_idx (status, createdAt)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          UPDATE Plan SET annualPrice = ROUND(monthlyPrice * 10, 2) WHERE annualPrice = 0 AND monthlyPrice > 0;
+          UPDATE Plan SET trialDays = 14 WHERE LOWER(name) = 'business' AND trialDays = 0;
+          INSERT IGNORE INTO BillingPrice
+            (id, planId, provider, billingInterval, component, externalPriceId, isActive, createdAt, updatedAt)
+          SELECT UUID(), id, 'STRIPE', 'MONTH', 'BASE', stripePriceId, 1, NOW(3), NOW(3)
+          FROM Plan WHERE stripePriceId IS NOT NULL AND stripePriceId <> '';
+        `),
+      },
+      {
+        name: '024_permission_action_catalog',
+        sql: stripComments(`
+          INSERT IGNORE INTO Permission (id, name, slug, grp, description, createdAt) VALUES
+            (UUID(), 'View tickets', 'tickets.view', 'Tickets', 'View ticket records and activity.', NOW(3)),
+            (UUID(), 'Create tickets', 'tickets.create', 'Tickets', 'Create new ticket records.', NOW(3)),
+            (UUID(), 'Edit tickets', 'tickets.edit', 'Tickets', 'Update, assign, and resolve tickets.', NOW(3)),
+            (UUID(), 'Delete tickets', 'tickets.delete', 'Tickets', 'Delete ticket records.', NOW(3)),
+            (UUID(), 'Approve tickets', 'tickets.approve', 'Tickets', 'Approve ticket changes and service requests.', NOW(3)),
+            (UUID(), 'Export tickets', 'tickets.export', 'Tickets', 'Export ticket data.', NOW(3)),
+            (UUID(), 'View assets', 'assets.view', 'Assets', 'View asset and device inventory.', NOW(3)),
+            (UUID(), 'Create assets', 'assets.create', 'Assets', 'Create asset records.', NOW(3)),
+            (UUID(), 'Edit assets', 'assets.edit', 'Assets', 'Update asset records.', NOW(3)),
+            (UUID(), 'Delete assets', 'assets.delete', 'Assets', 'Delete or retire asset records.', NOW(3)),
+            (UUID(), 'Export assets', 'assets.export', 'Assets', 'Export asset inventory.', NOW(3)),
+            (UUID(), 'View users', 'users.view', 'Administration', 'View users and role assignments.', NOW(3)),
+            (UUID(), 'Create users', 'users.create', 'Administration', 'Invite and create users.', NOW(3)),
+            (UUID(), 'Manage users', 'users.manage', 'Administration', 'Edit, suspend, and assign users.', NOW(3)),
+            (UUID(), 'Delete users', 'users.delete', 'Administration', 'Remove users.', NOW(3)),
+            (UUID(), 'View roles', 'roles.view', 'Administration', 'View roles and permission assignments.', NOW(3)),
+            (UUID(), 'Manage roles', 'roles.manage', 'Administration', 'Create, clone, and edit roles.', NOW(3)),
+            (UUID(), 'View billing', 'billing.view', 'Billing', 'View subscription and billing status.', NOW(3)),
+            (UUID(), 'Create billing records', 'billing.create', 'Billing', 'Create billing and subscription records.', NOW(3)),
+            (UUID(), 'Edit billing', 'billing.edit', 'Billing', 'Change subscriptions and billing settings.', NOW(3)),
+            (UUID(), 'Manage billing', 'billing.manage', 'Billing', 'Administer payment providers and billing operations.', NOW(3)),
+            (UUID(), 'Approve billing', 'billing.approve', 'Billing', 'Approve billing adjustments and credits.', NOW(3)),
+            (UUID(), 'Export billing', 'billing.export', 'Billing', 'Export billing records.', NOW(3)),
+            (UUID(), 'View invoices', 'invoices.view', 'Billing', 'View invoices and payment status.', NOW(3)),
+            (UUID(), 'Create invoices', 'invoices.create', 'Billing', 'Create invoices.', NOW(3)),
+            (UUID(), 'Edit invoices', 'invoices.edit', 'Billing', 'Edit draft invoices.', NOW(3)),
+            (UUID(), 'Approve invoices', 'invoices.approve', 'Billing', 'Approve and issue invoices.', NOW(3)),
+            (UUID(), 'Export invoices', 'invoices.export', 'Billing', 'Export invoice data.', NOW(3)),
+            (UUID(), 'View quotes', 'quotes.view', 'Billing', 'View quotes.', NOW(3)),
+            (UUID(), 'Create quotes', 'quotes.create', 'Billing', 'Create quotes.', NOW(3)),
+            (UUID(), 'Edit quotes', 'quotes.edit', 'Billing', 'Edit quotes.', NOW(3)),
+            (UUID(), 'Approve quotes', 'quotes.approve', 'Billing', 'Approve quotes.', NOW(3)),
+            (UUID(), 'Export quotes', 'quotes.export', 'Billing', 'Export quote data.', NOW(3)),
+            (UUID(), 'View dispatch', 'dispatch.view', 'Field Service', 'View dispatches and schedules.', NOW(3)),
+            (UUID(), 'Create dispatch', 'dispatch.create', 'Field Service', 'Schedule and dispatch technicians.', NOW(3)),
+            (UUID(), 'Edit dispatch', 'dispatch.edit', 'Field Service', 'Update field-service assignments.', NOW(3)),
+            (UUID(), 'View reports', 'reports.view', 'Reporting', 'View operational reports.', NOW(3)),
+            (UUID(), 'Export reports', 'reports.export', 'Reporting', 'Export report data.', NOW(3)),
+            (UUID(), 'View inventory', 'inventory.view', 'Inventory', 'View parts and stock.', NOW(3)),
+            (UUID(), 'View knowledge base', 'knowledge-base.view', 'Knowledge', 'View internal knowledge articles.', NOW(3)),
+            (UUID(), 'View audit logs', 'audit-logs.view', 'Security', 'View audit and permission-change history.', NOW(3));
+        `),
+      },
+      {
+        name: '025_permission_governance',
+        sql: stripComments(`
+          INSERT IGNORE INTO Permission (id, name, slug, grp, description, createdAt) VALUES
+            (UUID(), 'Manage platform security', 'platform-security.manage', 'Security', 'Change platform security settings, policies, and recovery controls.', NOW(3)),
+            (UUID(), 'View platform security', 'platform-security.view', 'Security', 'View platform security status and controls.', NOW(3)),
+            (UUID(), 'Manage backups', 'backups.manage', 'Security', 'Manage backup, restore, and retention settings.', NOW(3)),
+            (UUID(), 'View permission governance', 'permissions.governance.view', 'Administration', 'View permission approvals, scopes, temporary grants, alerts, and reviews.', NOW(3)),
+            (UUID(), 'Manage permission governance', 'permissions.governance.manage', 'Administration', 'Approve access changes, grant temporary access, manage scopes, and run reviews.', NOW(3));
+          CREATE TABLE IF NOT EXISTS PermissionApproval (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191),
+            roleId VARCHAR(191) NOT NULL,
+            requestedById VARCHAR(191) NOT NULL,
+            approvedById VARCHAR(191),
+            status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+            requestedPermissions LONGTEXT NOT NULL,
+            reason TEXT,
+            reviewedAt DATETIME(3),
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX PermissionApproval_company_status_idx (companyId, status, createdAt),
+            INDEX PermissionApproval_role_idx (roleId)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE TABLE IF NOT EXISTS TemporaryPermissionGrant (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191),
+            userId VARCHAR(191) NOT NULL,
+            permissionId VARCHAR(191) NOT NULL,
+            grantedById VARCHAR(191) NOT NULL,
+            scopeType VARCHAR(32) NOT NULL DEFAULT 'ALL',
+            scopeValue LONGTEXT,
+            reason TEXT,
+            startsAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            expiresAt DATETIME(3) NOT NULL,
+            revokedAt DATETIME(3),
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX TemporaryPermissionGrant_user_active_idx (userId, startsAt, expiresAt, revokedAt),
+            INDEX TemporaryPermissionGrant_company_idx (companyId, expiresAt)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE TABLE IF NOT EXISTS PermissionScope (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191),
+            roleId VARCHAR(191),
+            userId VARCHAR(191),
+            permissionSlug VARCHAR(191) NOT NULL,
+            scopeType VARCHAR(32) NOT NULL DEFAULT 'ALL',
+            scopeValues LONGTEXT,
+            createdById VARCHAR(191) NOT NULL,
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX PermissionScope_company_idx (companyId),
+            INDEX PermissionScope_role_idx (roleId),
+            INDEX PermissionScope_user_idx (userId)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE TABLE IF NOT EXISTS AccessReviewCampaign (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191),
+            name VARCHAR(191) NOT NULL,
+            status VARCHAR(32) NOT NULL DEFAULT 'OPEN',
+            dueAt DATETIME(3),
+            createdById VARCHAR(191) NOT NULL,
+            completedAt DATETIME(3),
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX AccessReviewCampaign_company_status_idx (companyId, status, dueAt)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE TABLE IF NOT EXISTS AccessReviewItem (
+            id VARCHAR(191) PRIMARY KEY,
+            campaignId VARCHAR(191) NOT NULL,
+            userId VARCHAR(191) NOT NULL,
+            reviewerId VARCHAR(191),
+            decision VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+            notes TEXT,
+            reviewedAt DATETIME(3),
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            UNIQUE KEY AccessReviewItem_campaign_user_key (campaignId, userId),
+            INDEX AccessReviewItem_campaign_decision_idx (campaignId, decision)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          INSERT IGNORE INTO RolePermission (roleId, permissionId, createdAt)
+          SELECT r.id, p.id, NOW(3) FROM Role r JOIN Permission p WHERE r.slug = 'super-admin';
+          INSERT IGNORE INTO RolePermission (roleId, permissionId, createdAt)
+          SELECT r.id, p.id, NOW(3) FROM Role r JOIN Permission p
+          WHERE r.slug = 'global-tech'
+            AND p.slug IN ('tickets.view', 'tickets.create', 'tickets.edit', 'assets.view', 'assets.edit', 'dispatch.view', 'dispatch.edit', 'inventory.view', 'knowledge-base.view');
+          INSERT IGNORE INTO RolePermission (roleId, permissionId, createdAt)
+          SELECT r.id, p.id, NOW(3) FROM Role r JOIN Permission p
+          WHERE r.slug = 'tenant-admin'
+            AND p.slug IN (
+              'tickets.view', 'tickets.create', 'tickets.edit', 'tickets.approve', 'tickets.export',
+              'assets.view', 'assets.create', 'assets.edit', 'assets.export',
+              'users.view', 'users.create', 'users.manage', 'roles.view', 'roles.manage',
+              'billing.view', 'billing.create', 'billing.edit', 'billing.approve', 'billing.export',
+              'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.approve', 'invoices.export',
+              'quotes.view', 'quotes.create', 'quotes.edit', 'quotes.approve', 'quotes.export',
+              'dispatch.view', 'dispatch.create', 'dispatch.edit', 'reports.view', 'reports.export',
+              'inventory.view', 'knowledge-base.view', 'audit-logs.view',
+              'permissions.governance.view', 'permissions.governance.manage'
+            );
+          INSERT IGNORE INTO RolePermission (roleId, permissionId, createdAt)
+          SELECT r.id, p.id, NOW(3) FROM Role r JOIN Permission p
+          WHERE r.slug = 'technician'
+            AND p.slug IN ('tickets.view', 'tickets.create', 'tickets.edit', 'assets.view', 'dispatch.view', 'dispatch.edit', 'inventory.view', 'knowledge-base.view');
+          INSERT IGNORE INTO RolePermission (roleId, permissionId, createdAt)
+          SELECT r.id, p.id, NOW(3) FROM Role r JOIN Permission p
+          WHERE r.slug = 'read-only' AND p.slug IN ('tickets.view', 'assets.view', 'reports.view', 'audit-logs.view');
+          INSERT IGNORE INTO RolePermission (roleId, permissionId, createdAt)
+          SELECT r.id, p.id, NOW(3) FROM Role r JOIN Permission p
+          WHERE r.slug = 'client' AND p.slug IN ('tickets.view', 'tickets.create');
+        `),
+      },
+      {
+        name: '026_identity_access_hardening',
+        sql: stripComments(`
+          ALTER TABLE Session ADD COLUMN IF NOT EXISTS mfaVerifiedAt DATETIME(3);
+          ALTER TABLE User ADD COLUMN IF NOT EXISTS authVersion INT NOT NULL DEFAULT 0;
+          ALTER TABLE User ADD COLUMN IF NOT EXISTS isBreakGlass TINYINT(1) NOT NULL DEFAULT 0;
+          ALTER TABLE User ADD COLUMN IF NOT EXISTS breakGlassReason TEXT;
+          ALTER TABLE User ADD INDEX IF NOT EXISTS User_break_glass_idx (isBreakGlass, role, isActive);
+          ALTER TABLE PlatformSecurityPolicy ADD COLUMN IF NOT EXISTS requirePhishingResistantSuperAdmin TINYINT(1) NOT NULL DEFAULT 0;
+          CREATE TABLE IF NOT EXISTS SecurityPolicySnapshot (
+            id VARCHAR(191) PRIMARY KEY,
+            policyType VARCHAR(64) NOT NULL,
+            policyId VARCHAR(191) NOT NULL,
+            snapshot LONGTEXT NOT NULL,
+            createdById VARCHAR(191) NOT NULL,
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX SecurityPolicySnapshot_policy_idx (policyType, policyId, createdAt)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE TABLE IF NOT EXISTS ServiceAccount (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191),
+            name VARCHAR(191) NOT NULL,
+            tokenHash VARCHAR(191) NOT NULL UNIQUE,
+            permissionSlugs LONGTEXT NOT NULL,
+            scopeType VARCHAR(32) NOT NULL DEFAULT 'ALL',
+            scopeValues LONGTEXT,
+            expiresAt DATETIME(3),
+            lastUsedAt DATETIME(3),
+            lastUsedIp VARCHAR(191),
+            isActive TINYINT(1) NOT NULL DEFAULT 1,
+            createdById VARCHAR(191) NOT NULL,
+            revokedById VARCHAR(191),
+            revokedAt DATETIME(3),
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX ServiceAccount_company_idx (companyId, isActive),
+            INDEX ServiceAccount_expiry_idx (expiresAt, isActive)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE TABLE IF NOT EXISTS SecurityAlert (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191),
+            alertType VARCHAR(64) NOT NULL,
+            severity VARCHAR(32) NOT NULL DEFAULT 'warning',
+            subjectId VARCHAR(191),
+            summary VARCHAR(255) NOT NULL,
+            detail LONGTEXT,
+            acknowledgedAt DATETIME(3),
+            acknowledgedById VARCHAR(191),
+            createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX SecurityAlert_company_type_idx (companyId, alertType, createdAt),
+            INDEX SecurityAlert_ack_idx (acknowledgedAt)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
         `),
       },
     ];

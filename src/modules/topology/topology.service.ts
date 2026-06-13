@@ -224,9 +224,10 @@ export class TopologyService {
       updatedAt: new Date(),
     };
     const keys = Object.keys(updates).filter((key) => updates[key] !== undefined);
-    await this.db.execute(`UPDATE NetworkTopologyLink SET ${keys.map((key) => `\`${key}\` = ?`).join(', ')} WHERE id = ?`, [
+    await this.db.execute(`UPDATE NetworkTopologyLink SET ${keys.map((key) => `\`${key}\` = ?`).join(', ')} WHERE id = ? AND companyId = ?`, [
       ...keys.map((key) => updates[key]),
       id,
+      rows[0].companyId,
     ]);
     return (await this.db.query<any[]>('SELECT * FROM NetworkTopologyLink WHERE id = ? LIMIT 1', [id]))[0];
   }

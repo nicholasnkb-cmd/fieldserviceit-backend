@@ -50,6 +50,11 @@ model User {
   userType           String                  @default("BUSINESS")
   companyId          String?
   isActive           Boolean                 @default(true)
+  authVersion        Int                     @default(0)
+  isBreakGlass       Boolean                 @default(false)
+  breakGlassReason   String?
+  scimExternalId     String?
+  scimManaged        Boolean                 @default(false)
   emailVerified      Boolean                 @default(false)
   lastLoginAt        DateTime?
   resetToken         String?
@@ -83,6 +88,8 @@ model User {
   @@index([companyId])
   @@index([email])
   @@index([userType])
+  @@index([isBreakGlass, role, isActive])
+  @@unique([companyId, scimExternalId])
 }
 
 model Role {
@@ -231,6 +238,7 @@ model Asset {
   ram          String?
   storage      String?
   status       String     @default("active")
+  mdmDeviceTokenHash String?
   notes        String?
   companyId    String
   createdAt    DateTime   @default(now())
@@ -242,6 +250,7 @@ model Asset {
 
   @@index([companyId])
   @@index([assetType])
+  @@index([mdmDeviceTokenHash])
 }
 
 model Contract {
@@ -425,6 +434,7 @@ model Session {
   ipAddress    String?
   userAgent    String?
   lastSeenAt   DateTime?
+  mfaVerifiedAt DateTime?
   revokedAt    DateTime?
   revokedById  String?
   revokeReason String?
@@ -434,6 +444,18 @@ model Session {
 
   @@index([userId])
   @@index([refreshToken])
+}
+
+model SessionRefreshHistory {
+  id        String   @id @default(uuid())
+  sessionId String
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  rotatedAt DateTime @default(now())
+
+  @@index([userId, expiresAt])
+  @@index([sessionId])
 }
 
 model RmmProviderConfig {

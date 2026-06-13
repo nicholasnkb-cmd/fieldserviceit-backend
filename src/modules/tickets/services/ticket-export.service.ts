@@ -5,19 +5,7 @@ import { PrismaService } from '../../../database/prisma.service';
 export class TicketExportService {
   constructor(private prisma: PrismaService) {}
 
-  async exportCsv(companyId: string, status?: string) {
-    const where: any = { companyId, deletedAt: null };
-    if (status) where.status = status;
-
-    const tickets = await this.prisma.ticket.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        createdBy: { select: { firstName: true, lastName: true, email: true } },
-        assignedTo: { select: { firstName: true, lastName: true, email: true } },
-      },
-    });
-
+  exportCsv(tickets: any[]) {
     const header = 'TicketNumber,Title,Status,Priority,Category,ContactName,ContactEmail,ContactPhone,CreatedBy,AssignedTo,CreatedAt,ResolvedAt,Resolution\n';
     const rows = tickets.map((t) =>
       [

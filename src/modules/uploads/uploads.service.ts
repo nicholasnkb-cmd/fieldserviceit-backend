@@ -1,9 +1,9 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as path from 'path';
 import * as fs from 'fs';
-import { randomUUID } from 'crypto';
+import * as crypto from 'crypto';
 import { getS3Client, getS3Bucket } from '../../config/s3.config';
 import { MalwareScannerService } from './malware-scanner.service';
 
@@ -88,7 +88,7 @@ export class UploadsService {
     validateMagicBytes(file.buffer, ext);
     scanForKnownMalwareMarkers(file.buffer);
     await this.malwareScanner.scan(file);
-    const filename = `${randomUUID()}${ext}`;
+    const filename = `${crypto.randomUUID()}${ext}`;
 
     if (this.storageType === 's3' && this.s3Client) {
       return this.saveToS3(file, subfolder, filename);
@@ -98,6 +98,26 @@ export class UploadsService {
 
   async saveFiles(files: Express.Multer.File[], subfolder: string): Promise<string[]> {
     return Promise.all(files.map((f) => this.saveFile(f, subfolder)));
+  }
+
+  async saveProtectedFiles(files: Express.Multer.File[], subfolder: string, companyId: string | null): Promise<string[]> {
+    return Promise.all(files.map((file) => this.saveProtectedFile(file, subfolder, companyId)));
+  }
+
+  async readProtectedFile(token: string, user: any) {
+    const payload = this.verifyProtectedToken(token);
+    if (user.role !== 'SUPER_ADMIN' && payload.companyId !== user.companyId) {
+      throw new BadRequestException('Protected file is outside your tenant');
+    }
+    if (this.storageType === 's3' && this.s3Client) {
+      const result: any = await this.s3Client.send(new GetObjectCommand({ Bucket: this.s3Bucket, Key: payload.key }));
+      const bytes = result.Body?.transformToByteArray ? await result.Body.transformToByteArray() : [];
+      return { buffer: Buffer.from(bytes), mimeType: payload.mimeType, fileName: payload.fileName };
+    }
+    const protectedRoot = path.resolve(path.dirname(this.uploadDir), 'protected_uploads');
+    const fullPath = path.resolve(protectedRoot, payload.key);
+    if (!fullPath.startsWith(`${protectedRoot}${path.sep}`)) throw new BadRequestException('Invalid protected file path');
+    return { buffer: await fs.promises.readFile(fullPath), mimeType: payload.mimeType, fileName: payload.fileName };
   }
 
   private async saveToLocal(file: Express.Multer.File, subfolder: string, filename: string): Promise<string> {
@@ -119,4 +139,59 @@ export class UploadsService {
     );
     return `/uploads/${key}`;
   }
+
+  private async saveProtectedFile(file: Express.Multer.File, subfolder: string, companyId: string | null) {
+    if (!file) throw new BadRequestException('No file provided');
+    const sanitized = sanitizeFilename(file.originalname);
+    validateExtension(sanitized);
+    const ext = path.extname(sanitized) || '.bin';
+    validateMagicBytes(file.buffer, ext);
+    scanForKnownMalwareMarkers(file.buffer);
+    await this.malwareScanner.scan(file);
+    const key = `${subfolder}/${crypto.randomUUID()}${ext}`.replace(/\\/g, '/');
+    if (this.storageType === 's3' && this.s3Client) {
+      await this.s3Client.send(new PutObjectCommand({ Bucket: this.s3Bucket, Key: key, Body: file.buffer, ContentType: file.mimetype }));
+    } else {
+      const protectedRoot = path.resolve(path.dirname(this.uploadDir), 'protected_uploads');
+      const target = path.resolve(protectedRoot, key);
+      if (!target.startsWith(`${protectedRoot}${path.sep}`)) throw new BadRequestException('Invalid protected file path');
+      await fs.promises.mkdir(path.dirname(target), { recursive: true });
+      await fs.promises.writeFile(target, file.buffer);
+    }
+    const token = this.signProtectedToken({
+      key,
+      companyId,
+      mimeType: file.mimetype,
+      fileName: sanitized,
+      exp: Date.now() + 365 * 24 * 60 * 60 * 1000,
+    });
+    return `/v1/uploads/protected/${token}`;
+  }
+
+  private signProtectedToken(payload: any) {
+    const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const signature = this.protectedSignature(encoded);
+    return `${encoded}.${signature}`;
+  }
+
+  private verifyProtectedToken(token: string) {
+    const [encoded, signature] = String(token || '').split('.');
+    const expected = this.protectedSignature(encoded || '');
+    if (!signature || signature.length !== expected.length || !cryptoSafeEqual(signature, expected)) {
+      throw new BadRequestException('Protected file link is invalid');
+    }
+    let payload: any;
+    try { payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')); } catch { throw new BadRequestException('Protected file link is invalid'); }
+    if (!payload?.key || Number(payload.exp || 0) <= Date.now()) throw new BadRequestException('Protected file link expired');
+    return payload;
+  }
+
+  private protectedSignature(value: string) {
+    const secret = this.config.get('JWT_SECRET', 'fieldserviceit-dev-key');
+    return crypto.createHmac('sha256', secret).update(value).digest('base64url');
+  }
+}
+
+function cryptoSafeEqual(left: string, right: string) {
+  return crypto.timingSafeEqual(Buffer.from(left), Buffer.from(right));
 }

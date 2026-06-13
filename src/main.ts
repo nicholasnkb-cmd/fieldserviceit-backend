@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import { join } from 'path';
 import { json } from 'express';
 import { AppModule } from './app.module';
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
@@ -14,6 +15,10 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
   app.use(json({ verify: (req: any, _res, buf) => { req.rawBody = buf.toString(); } }));
+
+  // Add correlation ID middleware early in the chain for request tracing
+  app.use(CorrelationIdMiddleware.prototype.use.bind(new CorrelationIdMiddleware()));
+
   app.setGlobalPrefix('v1');
   app.enableShutdownHooks();
   app.use(helmet({

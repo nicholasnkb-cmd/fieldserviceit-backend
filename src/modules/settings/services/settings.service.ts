@@ -1,5 +1,12 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
+import {
+  safeJson,
+  sanitizeBranding,
+  sanitizeCustomization,
+  TenantBranding,
+  TenantCustomization,
+} from '../tenant-customization';
 
 @Injectable()
 export class SettingsService {
@@ -14,8 +21,8 @@ export class SettingsService {
     if (!company) throw new NotFoundException('Company not found');
     return {
       ...company,
-      settings: company.settings ? JSON.parse(company.settings) : {},
-      branding: company.branding ? JSON.parse(company.branding) : {},
+      settings: safeJson(company.settings, {}),
+      branding: safeJson(company.branding, {}),
     };
   }
 
@@ -36,7 +43,7 @@ export class SettingsService {
     if (dto.name) updateData.name = dto.name;
     if (dto.domain !== undefined) updateData.domain = dto.domain;
     if (dto.logo !== undefined) updateData.logo = dto.logo;
-    const existingSettings = company.settings ? JSON.parse(company.settings) : {};
+    const existingSettings = safeJson<Record<string, any>>(company.settings, {});
     const settings: any = { ...existingSettings };
     if (dto.timezone !== undefined) settings.timezone = dto.timezone;
     if (dto.locale !== undefined) settings.locale = dto.locale;
@@ -68,18 +75,51 @@ export class SettingsService {
     });
   }
 
-  async updateBranding(companyId: string, branding: { primaryColor?: string; logoUrl?: string; companyName?: string }) {
+  async updateBranding(companyId: string, branding: TenantBranding) {
     if (!companyId) throw new ForbiddenException('No company context available');
     const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company) throw new NotFoundException('Company not found');
 
-    const existing = company.branding ? JSON.parse(company.branding) : {};
-    const merged = { ...existing, ...branding };
+    const existing = safeJson<TenantBranding>(company.branding, {});
+    const sanitized = sanitizeBranding(branding);
+    const merged = Object.fromEntries(
+      Object.entries({ ...existing, ...sanitized }).filter(([, value]) => value !== undefined),
+    );
 
-    return this.prisma.company.update({
+    const updated = await this.prisma.company.update({
       where: { id: companyId },
-      data: { branding: JSON.stringify(merged) },
-      select: { id: true, name: true, branding: true },
+      data: {
+        branding: JSON.stringify(merged),
+        logo: sanitized.logoUrl === undefined ? company.logo : sanitized.logoUrl,
+      },
+      select: { id: true, name: true, logo: true, branding: true, settings: true },
     });
+    return { ...updated, branding: safeJson(updated.branding, {}), settings: safeJson(updated.settings, {}) };
+  }
+
+  async updateCustomization(companyId: string, customization: TenantCustomization) {
+    if (!companyId) throw new ForbiddenException('No company context available');
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    if (!company) throw new NotFoundException('Company not found');
+
+    const settings = safeJson<Record<string, any>>(company.settings, {});
+    const existing = (settings.customization || {}) as TenantCustomization;
+    const sanitized = sanitizeCustomization(customization);
+    const defined = (value: Record<string, any>) => Object.fromEntries(
+      Object.entries(value).filter(([, entry]) => entry !== undefined),
+    );
+    settings.customization = {
+      ...existing,
+      banner: { ...(existing.banner || {}), ...defined(sanitized.banner || {}) },
+      workflow: { ...(existing.workflow || {}), ...defined(sanitized.workflow || {}) },
+      reporting: { ...(existing.reporting || {}), ...defined(sanitized.reporting || {}) },
+    };
+
+    const updated = await this.prisma.company.update({
+      where: { id: companyId },
+      data: { settings: JSON.stringify(settings) },
+      select: { id: true, name: true, logo: true, branding: true, settings: true },
+    });
+    return { ...updated, branding: safeJson(updated.branding, {}), settings: safeJson(updated.settings, {}) };
   }
 }

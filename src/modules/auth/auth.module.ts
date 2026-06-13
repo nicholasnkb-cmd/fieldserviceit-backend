@@ -8,6 +8,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MfaService } from './services/mfa.service';
 import { OidcAuthService } from './services/oidc-auth.service';
+import { ServiceAccountGuard } from '../../common/guards/service-account.guard';
 
 @Module({
   imports: [
@@ -22,7 +23,7 @@ import { OidcAuthService } from './services/oidc-auth.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, MfaService, OidcAuthService, JwtStrategy],
+  providers: [AuthService, MfaService, OidcAuthService, JwtStrategy, ServiceAccountGuard],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

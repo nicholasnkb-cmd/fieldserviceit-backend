@@ -9,23 +9,29 @@ import { CurrentUser as CurrentUserType } from '../../common/types';
 import { OperationsService } from './operations.service';
 import { CreateOperationItemDto, OperationModuleKey } from './dto/create-operation-item.dto';
 import { UpdateOperationItemDto } from './dto/update-operation-item.dto';
+import { AuthorizationExempt } from '../../common/decorators/authorization-exempt.decorator';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
 
 @Controller('operations')
-@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
 @BusinessOnly()
 export class OperationsController {
   constructor(private operationsService: OperationsService) {}
 
+  @RequirePermissions('operations.view')
   @Get('modules')
   modules() {
     return this.operationsService.modules();
   }
 
+  @RequirePermissions('operations.view')
   @Get('summary')
   summary(@CurrentUser() user: CurrentUserType) {
     return this.operationsService.summary(user);
   }
 
+  @RequirePermissions('operations.view')
   @Get(':moduleKey/items')
   list(
     @Param('moduleKey') moduleKey: OperationModuleKey,
@@ -35,11 +41,13 @@ export class OperationsController {
     return this.operationsService.list(moduleKey, user, query);
   }
 
+  @RequirePermissions('operations.manage')
   @Post('items')
   create(@Body() dto: CreateOperationItemDto, @CurrentUser() user: CurrentUserType) {
     return this.operationsService.create(dto, user);
   }
 
+  @RequirePermissions('operations.manage')
   @Patch('items/:id')
   update(@Param('id') id: string, @Body() dto: UpdateOperationItemDto, @CurrentUser() user: CurrentUserType) {
     return this.operationsService.update(id, dto, user);

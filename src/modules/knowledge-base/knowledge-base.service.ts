@@ -157,15 +157,19 @@ export class KnowledgeBaseService {
     const keys = Object.keys(updates).filter((key) => updates[key] !== undefined);
     if (keys.length === 0) return this.mapArticle(existing);
     await this.db.execute(
-      `UPDATE KbArticle SET ${keys.map((key) => `${this.escapeColumn(key)} = ?`).join(', ')} WHERE id = ?`,
-      [...keys.map((key) => updates[key]), id],
+      `UPDATE KbArticle SET ${keys.map((key) => `${this.escapeColumn(key)} = ?`).join(', ')} WHERE id = ? AND companyId = ?`,
+      [...keys.map((key) => updates[key]), id, existing.companyId],
     );
     return this.findOne(id, user);
   }
 
   async remove(id: string, user: CurrentUser) {
     await this.getArticle(id, user);
-    await this.db.execute(`UPDATE KbArticle SET status = 'ARCHIVED', updatedById = ?, updatedAt = ? WHERE id = ?`, [user.id, new Date(), id]);
+    const existing = await this.getArticle(id, user);
+    await this.db.execute(
+      `UPDATE KbArticle SET status = 'ARCHIVED', updatedById = ?, updatedAt = ? WHERE id = ? AND companyId = ?`,
+      [user.id, new Date(), id, existing.companyId],
+    );
     return { success: true };
   }
 

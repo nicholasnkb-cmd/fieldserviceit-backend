@@ -83,7 +83,7 @@ describe('UsageService', () => {
       await service.incrementUsage('c1', 'tickets');
       expect(mockPrisma.usageRecord.update).toHaveBeenCalledWith({
         where: { id: 'record-1' },
-        data: { count: { increment: 1 } },
+        data: { count: 6 },
       });
     });
 
@@ -97,7 +97,7 @@ describe('UsageService', () => {
       expect(mockPrisma.usageRecord.create).toHaveBeenCalled();
       expect(mockPrisma.usageRecord.update).toHaveBeenCalledWith({
         where: { id: 'record-new' },
-        data: { count: { increment: 1 } },
+        data: { count: 1 },
       });
     });
   });

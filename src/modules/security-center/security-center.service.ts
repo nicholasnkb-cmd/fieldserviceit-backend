@@ -151,8 +151,8 @@ export class SecurityCenterService {
     const keys = Object.keys(updates).filter((key) => updates[key] !== undefined);
     if (keys.length) {
       await this.db.execute(
-        `UPDATE SecurityFinding SET ${keys.map((key) => `\`${key}\` = ?`).join(', ')} WHERE id = ?`,
-        [...keys.map((key) => updates[key]), id],
+        `UPDATE SecurityFinding SET ${keys.map((key) => `\`${key}\` = ?`).join(', ')} WHERE id = ? AND companyId = ?`,
+        [...keys.map((key) => updates[key]), id, existing.companyId],
       );
       await this.audit(user, existing.companyId, 'SECURITY_FINDING_UPDATED', 'SecurityFinding', id, updates);
     }

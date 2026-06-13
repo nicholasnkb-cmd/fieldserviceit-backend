@@ -50,6 +50,10 @@ export class CreateAssetDto {
 
   @IsOptional()
   @IsString()
+  osVersion?: string;
+
+  @IsOptional()
+  @IsString()
   cpu?: string;
 
   @IsOptional()
@@ -59,6 +63,58 @@ export class CreateAssetDto {
   @IsOptional()
   @IsString()
   storage?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceCategory?: string;
+
+  @IsOptional()
+  @IsString()
+  ownership?: string;
+
+  @IsOptional()
+  @IsString()
+  assignedUser?: string;
+
+  @IsOptional()
+  @IsString()
+  enrollmentStatus?: string;
+
+  @IsOptional()
+  @IsString()
+  managementMode?: string;
+
+  @IsOptional()
+  @IsString()
+  complianceStatus?: string;
+
+  @IsOptional()
+  @IsString()
+  policyProfile?: string;
+
+  @IsOptional()
+  @IsString()
+  mdmProvider?: string;
+
+  @IsOptional()
+  @IsString()
+  encryptionStatus?: string;
+
+  @IsOptional()
+  @IsString()
+  antivirusStatus?: string;
+
+  @IsOptional()
+  @IsString()
+  imei?: string;
+
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  carrier?: string;
 
   @IsOptional()
   @IsString()

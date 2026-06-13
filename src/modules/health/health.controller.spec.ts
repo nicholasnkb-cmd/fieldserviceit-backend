@@ -1,51 +1,114 @@
+import { Test, TestingModule } from '@nestjs/testing';
 import { HealthController } from './health.controller';
+import { HealthService } from './health.service';
+import { MonitoringAccessGuard } from '../../common/guards/monitoring-access.guard';
+import { ConfigService } from '@nestjs/config';
 
 describe('HealthController', () => {
   let controller: HealthController;
-  let mockPrisma: any;
+  let service: HealthService;
 
-  beforeEach(() => {
-    mockPrisma = {
-      $queryRaw: jest.fn(),
-      query: jest.fn().mockResolvedValue([{ lastPollAt: null, snapshotsLastHour: 0 }]),
-    };
-    controller = new HealthController(mockPrisma as any);
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [HealthController],
+      providers: [
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn() },
+        },
+        {
+          provide: MonitoringAccessGuard,
+          useValue: { canActivate: jest.fn().mockReturnValue(true) },
+        },
+        {
+          provide: HealthService,
+          useValue: {
+            check: jest.fn().mockResolvedValue({
+              status: 'ok',
+              timestamp: new Date().toISOString(),
+              version: '1.0.0',
+              database: { status: 'ok', latency: 10 },
+            }),
+            ready: jest.fn().mockResolvedValue({
+              status: 'ok',
+              timestamp: new Date().toISOString(),
+              version: '1.0.0',
+              database: { status: 'ok', latency: 10 },
+            }),
+            live: jest.fn().mockResolvedValue({
+              status: 'ok',
+              timestamp: new Date().toISOString(),
+              version: '1.0.0',
+            }),
+            dashboard: jest.fn().mockResolvedValue({
+              status: 'ok',
+              timestamp: new Date().toISOString(),
+              version: '1.0.0',
+              uptime: { seconds: 3600, readable: '0d 1h 0m 0s' },
+              database: { status: 'ok', latency: 10 },
+              requests: {
+                total: '1000',
+                errors: '5',
+                errorRate: '0.5%',
+                averageLatency: '145ms',
+              },
+              slowQueries: {
+                total: '2',
+                threshold: '1000ms',
+              },
+              memory: {
+                heapUsed: '150 MB',
+                heapTotal: '200 MB',
+                rss: '250 MB',
+              },
+              operations: {},
+            }),
+          },
+        },
+      ],
+    }).compile();
+
+    controller = module.get<HealthController>(HealthController);
+    service = module.get<HealthService>(HealthService);
   });
 
   describe('check', () => {
-    it('should return ok when DB responds', async () => {
-      mockPrisma.$queryRaw.mockResolvedValue([[{ 1: 1 }]]);
-
-      const result: any = await controller.check();
+    it('should return health status', async () => {
+      const result = await controller.check();
       expect(result.status).toBe('ok');
       expect(result.database.status).toBe('ok');
-      expect(result.version.backend).toBeDefined();
-      expect(result.worker.status).toBe('ok');
       expect(result.timestamp).toBeDefined();
-    });
-
-    it('should return degraded when DB is down', async () => {
-      mockPrisma.$queryRaw.mockRejectedValue(new Error('Connection refused'));
-
-      const result: any = await controller.check();
-      expect(result.status).toBe('degraded');
-      expect(result.database.status).toBe('error');
-    });
-
-    it('should report pool info when available', async () => {
-      mockPrisma.$queryRaw.mockResolvedValue([[{ 1: 1 }]]);
-      (mockPrisma as any).pool = { config: { connectionLimit: 10 } };
-
-      const result: any = await controller.check();
-      expect(result.pool.status).toBe('ok');
+      expect(service.check).toHaveBeenCalled();
     });
   });
 
-  describe('ping', () => {
-    it('should return pong', async () => {
-      const result: any = await controller.ping();
-      expect(result.pong).toBe(true);
-      expect(result.timestamp).toBeDefined();
+  describe('ready', () => {
+    it('should return readiness status', async () => {
+      const result = await controller.ready();
+      expect(result.status).toBe('ok');
+      expect(result.database.status).toBe('ok');
+      expect(service.ready).toHaveBeenCalled();
+    });
+  });
+
+  describe('live', () => {
+    it('should return liveness status', async () => {
+      const result = await controller.live();
+      expect(result.status).toBe('ok');
+      expect(service.live).toHaveBeenCalled();
+    });
+  });
+
+  describe('dashboard', () => {
+    it('should return comprehensive health metrics', async () => {
+      const result = await controller.dashboard();
+      expect(result.status).toBe('ok');
+      expect(result.uptime).toBeDefined();
+      expect(result.uptime.seconds).toBe(3600);
+      expect(result.database).toBeDefined();
+      expect(result.requests).toBeDefined();
+      expect(result.memory).toBeDefined();
+      expect(service.dashboard).toHaveBeenCalled();
     });
   });
 });

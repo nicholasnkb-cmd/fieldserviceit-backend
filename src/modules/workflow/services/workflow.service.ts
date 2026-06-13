@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
+import { safeJson, TenantCustomization } from '../../settings/tenant-customization';
 
 @Injectable()
 export class WorkflowService {
@@ -8,14 +9,32 @@ export class WorkflowService {
   ) {}
 
   async create(dto: { name: string; description?: string; triggerOn?: string; steps: any[] }, companyId: string) {
+    const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { settings: true } });
+    const settings = safeJson<Record<string, any>>(company?.settings, {});
+    const preferences = (settings.customization as TenantCustomization | undefined)?.workflow;
+    const steps = [...(dto.steps || [])];
+    const defaultSteps: any[] = [];
+    if (preferences?.requireApproval && !steps.some((step: any) => step.action === 'require_approval')) {
+      defaultSteps.push({
+        action: 'require_approval',
+        config: { group: preferences.approvalGroup || 'Tenant administrators' },
+      });
+    }
+    if (preferences?.defaultPriority && !steps.some((step: any) => step.action === 'set_priority')) {
+      defaultSteps.push({ action: 'set_priority', config: { priority: preferences.defaultPriority } });
+    }
+    if (preferences?.autoAssign && !steps.some((step: any) => step.action === 'auto_assign')) {
+      defaultSteps.push({ action: 'auto_assign', config: { strategy: 'least_loaded' } });
+    }
+    steps.unshift(...defaultSteps);
     const workflow = await this.prisma.workflow.create({
       data: {
         name: dto.name,
         description: dto.description,
-        triggerOn: dto.triggerOn || 'ticket.created',
+        triggerOn: dto.triggerOn || preferences?.defaultTrigger || 'ticket.created',
         companyId,
         steps: {
-          create: dto.steps.map((step: any, index: number) => ({
+          create: steps.map((step: any, index: number) => ({
             stepOrder: index + 1,
             action: step.action,
             config: step.config || {},

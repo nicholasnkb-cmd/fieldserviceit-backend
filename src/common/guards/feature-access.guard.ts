@@ -26,6 +26,16 @@ export class FeatureAccessGuard implements CanActivate {
       this.prisma.user.findUnique({ where: { id: user.id }, select: { featureOverrides: true } }),
     ]);
 
+    const companyPlan = await this.prisma.companyPlan.findUnique({ where: { companyId: user.companyId } });
+    if (companyPlan) {
+      const status = String(companyPlan.status || 'ACTIVE').toUpperCase();
+      const graceEndsAt = companyPlan.gracePeriodEndsAt ? new Date(companyPlan.gracePeriodEndsAt).getTime() : 0;
+      const entitled = ['ACTIVE', 'TRIALING'].includes(status) || (status === 'PAST_DUE' && graceEndsAt > Date.now());
+      if (!entitled && feature !== 'billing') {
+        throw new ForbiddenException('Billing access is required to continue using this function');
+      }
+    }
+
     const companySettings = this.parseJson(company?.settings);
     const companyOverrides = companySettings.featureOverrides || {};
     const userOverrides = this.parseJson(fullUser?.featureOverrides);

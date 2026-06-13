@@ -31,7 +31,7 @@ describe('FieldserviceIT E2E', () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/login')
         .send({ email: 'admin@acme.com', password: 'admin123' })
-        .expect(201);
+        .expect(200);
 
       expect(res.body.accessToken).toBeDefined();
       expect(res.body.user.email).toBe('admin@acme.com');
@@ -42,7 +42,7 @@ describe('FieldserviceIT E2E', () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/login')
         .send({ email: 'super@fieldserviceit.com', password: 'admin123' })
-        .expect(201);
+        .expect(200);
 
       superToken = res.body.accessToken;
     });

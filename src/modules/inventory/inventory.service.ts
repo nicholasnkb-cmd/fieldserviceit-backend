@@ -102,8 +102,8 @@ export class InventoryService {
     const keys = Object.keys(updates).filter((key) => updates[key] !== undefined);
     if (keys.length) {
       await this.db.execute(
-        `UPDATE InventoryPart SET ${keys.map((key) => `\`${key}\` = ?`).join(', ')} WHERE id = ?`,
-        [...keys.map((key) => updates[key]), id],
+        `UPDATE InventoryPart SET ${keys.map((key) => `\`${key}\` = ?`).join(', ')} WHERE id = ? AND companyId = ?`,
+        [...keys.map((key) => updates[key]), id, companyId],
       );
     }
     return this.getPart(user, id);
@@ -154,8 +154,8 @@ export class InventoryService {
     await this.db.execute(
       `UPDATE InventoryPart
        SET quantityOnHand = quantityOnHand + ?, quantityReserved = GREATEST(0, quantityReserved + ?), updatedAt = ?
-       WHERE id = ?`,
-      [signed, reservedDelta, new Date(), part.id],
+       WHERE id = ? AND companyId = ?`,
+      [signed, reservedDelta, new Date(), part.id, part.companyId],
     );
     await this.logTransaction(part.companyId, part.id, dto.locationId || part.locationId, movementType, quantity, dto.notes, dto.ticketId || null, user.id);
     return this.getPart(user, part.id);

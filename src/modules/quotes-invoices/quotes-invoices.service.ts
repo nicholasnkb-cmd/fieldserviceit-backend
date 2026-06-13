@@ -136,7 +136,7 @@ export class QuotesInvoicesService {
       Object.assign(updates, totals);
       await this.replaceQuoteLines(id, lines, data.taxRate ?? Number(existing.taxRate || 0));
     }
-    await this.applyUpdates('ServiceQuote', id, updates);
+    await this.applyUpdates('ServiceQuote', id, existing.companyId, updates);
     return this.getQuote(user, id);
   }
 
@@ -178,7 +178,10 @@ export class QuotesInvoicesService {
       ],
     );
     await this.replaceInvoiceLines(invoiceId, quote.lines);
-    await this.db.execute(`UPDATE ServiceQuote SET status = 'CONVERTED', convertedInvoiceId = ?, updatedAt = ? WHERE id = ?`, [invoiceId, now, quote.id]);
+    await this.db.execute(
+      `UPDATE ServiceQuote SET status = 'CONVERTED', convertedInvoiceId = ?, updatedAt = ? WHERE id = ? AND companyId = ?`,
+      [invoiceId, now, quote.id, quote.companyId],
+    );
     return this.getInvoice(user, invoiceId);
   }
 
@@ -218,7 +221,7 @@ export class QuotesInvoicesService {
 
   async updateInvoice(user: CurrentUser, id: string, dto: any) {
     await this.ensureSchema();
-    await this.getInvoice(user, id);
+    const existing = await this.getInvoice(user, id);
     const updates: Record<string, any> = { updatedAt: new Date() };
     for (const key of ['title', 'customerName', 'customerEmail', 'customerPhone', 'notes', 'terms'] as const) {
       if (dto[key] !== undefined) updates[key] = dto[key]?.trim?.() || null;
@@ -245,7 +248,7 @@ export class QuotesInvoicesService {
         updates.status = 'PARTIAL';
       }
     }
-    await this.applyUpdates('ServiceInvoice', id, updates);
+    await this.applyUpdates('ServiceInvoice', id, existing.companyId, updates);
     return this.getInvoice(user, id);
   }
 
@@ -390,12 +393,12 @@ export class QuotesInvoicesService {
     return `${prefix}-${year}-${String(Number(rows[0]?.count || 0) + 1).padStart(5, '0')}`;
   }
 
-  private async applyUpdates(table: string, id: string, updates: Record<string, any>) {
+  private async applyUpdates(table: string, id: string, companyId: string, updates: Record<string, any>) {
     const keys = Object.keys(updates).filter((key) => updates[key] !== undefined);
     if (!keys.length) return;
     await this.db.execute(
-      `UPDATE ${table} SET ${keys.map((key) => `\`${key}\` = ?`).join(', ')} WHERE id = ?`,
-      [...keys.map((key) => updates[key]), id],
+      `UPDATE ${table} SET ${keys.map((key) => `\`${key}\` = ?`).join(', ')} WHERE id = ? AND companyId = ?`,
+      [...keys.map((key) => updates[key]), id, companyId],
     );
   }
 

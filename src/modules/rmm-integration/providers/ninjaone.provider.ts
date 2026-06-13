@@ -56,7 +56,7 @@ export class NinjaOneProvider implements RmmProvider {
 
       if (!res.ok) {
         this.logger.warn(`NinjaOne syncAllAssets failed: ${res.status}`);
-        return this.getMockAssets();
+        throw new Error(`NinjaOne asset sync failed with HTTP ${res.status}`);
       }
 
       const data = await res.json();
@@ -74,7 +74,7 @@ export class NinjaOneProvider implements RmmProvider {
       }));
     } catch (err: any) {
       this.logger.warn(`NinjaOne syncAllAssets error: ${err.message}`);
-      return this.getMockAssets();
+      throw err;
     }
   }
 
@@ -107,10 +107,4 @@ export class NinjaOneProvider implements RmmProvider {
     return type ? map[type] || 'OTHER' : 'OTHER';
   }
 
-  private getMockAssets(): AssetMapping[] {
-    return [
-      { name: 'N1-Server-01', assetType: 'SERVER', serialNumber: 'N1-SN-001', manufacturer: 'Dell', model: 'PowerEdge R750', os: 'Ubuntu 22.04', ipAddress: '10.0.2.10', status: 'ACTIVE' },
-      { name: 'N1-Laptop-01', assetType: 'LAPTOP', serialNumber: 'N1-SN-002', manufacturer: 'Lenovo', model: 'ThinkPad X1', os: 'Windows 11', ipAddress: '10.0.2.100', status: 'ACTIVE' },
-    ];
-  }
 }

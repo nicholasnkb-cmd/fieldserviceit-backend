@@ -10,20 +10,26 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
+import { AuthorizationExempt } from '../../../common/decorators/authorization-exempt.decorator';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
+import { TenantBranding, TenantCustomization } from '../tenant-customization';
 
 
 @Controller('settings')
-@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
 @BusinessOnly()
 @RequireFeature('settings')
 export class SettingsController {
   constructor(private settingsService: SettingsService) {}
 
+  @RequirePermissions('settings.view')
   @Get()
   getSettings(@CurrentUser() user: CurrentUserType) {
     return this.settingsService.getSettings(user.companyId);
   }
 
+  @RequirePermissions('settings.manage')
   @Patch()
   @UseGuards(RolesGuard)
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
@@ -39,10 +45,19 @@ export class SettingsController {
     return this.settingsService.updateSettings(user.companyId, dto);
   }
 
+  @RequirePermissions('settings.manage')
   @Put('branding')
   @UseGuards(RolesGuard)
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
-  updateBranding(@Body() branding: { primaryColor?: string; logoUrl?: string; companyName?: string }, @CurrentUser() user: CurrentUserType) {
+  updateBranding(@Body() branding: TenantBranding, @CurrentUser() user: CurrentUserType) {
     return this.settingsService.updateBranding(user.companyId, branding);
+  }
+
+  @RequirePermissions('settings.manage')
+  @Put('customization')
+  @UseGuards(RolesGuard)
+  @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
+  updateCustomization(@Body() customization: TenantCustomization, @CurrentUser() user: CurrentUserType) {
+    return this.settingsService.updateCustomization(user.companyId, customization);
   }
 }

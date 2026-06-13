@@ -222,7 +222,7 @@ export class OidcAuthService {
 
   private async assertRequiredMfa(role: string, claims: any) {
     const rows = await this.db.query<any[]>(
-      `SELECT requireMfaSuperAdmin, requireMfaTenantAdmin, requireMfaTechnicians
+      `SELECT requireMfaSuperAdmin, requireMfaTenantAdmin, requireMfaTechnicians, requirePhishingResistantSuperAdmin
        FROM PlatformSecurityPolicy WHERE id = 'global-security-policy' LIMIT 1`,
     ).catch(() => []);
     const policy = rows[0] || {};
@@ -233,6 +233,12 @@ export class OidcAuthService {
         : ['TECHNICIAN', 'GLOBAL_TECH'].includes(role) && Boolean(policy.requireMfaTechnicians);
     if (!required) return;
     const methods = Array.isArray(claims.amr) ? claims.amr.map((item: any) => String(item).toLowerCase()) : [];
+    if (role === 'SUPER_ADMIN' && Boolean(policy.requirePhishingResistantSuperAdmin)) {
+      if (!methods.some((item: string) => ['fido', 'webauthn', 'hwk'].includes(item))) {
+        throw new UnauthorizedException('Phishing-resistant MFA is required for super administrators');
+      }
+      return;
+    }
     if (!methods.some((item: string) => ['mfa', 'otp', 'totp', 'fido', 'webauthn', 'hwk'].includes(item))) {
       throw new UnauthorizedException('The identity provider did not confirm multi-factor authentication');
     }

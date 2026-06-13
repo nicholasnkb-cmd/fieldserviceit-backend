@@ -1,7 +1,7 @@
 import { CmdbService } from './cmdb.service';
 
 describe('CmdbService network utilities', () => {
-  const service = new CmdbService({} as any, {} as any, {} as any, {} as any) as any;
+  const service = new CmdbService({} as any, {} as any, {} as any, {} as any, {} as any) as any;
 
   it('encrypts and decrypts secrets', () => {
     const encrypted = service.encryptSecret('super-secret');

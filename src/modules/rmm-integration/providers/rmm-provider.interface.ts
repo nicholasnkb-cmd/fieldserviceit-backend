@@ -26,6 +26,9 @@ export interface AlertMapping {
 
 export interface RmmProvider {
   name: string;
+  label?: string;
+  helpText?: string;
+  credentialFields?: { key: string; label: string; type?: string; required?: boolean }[];
   syncAsset(assetData: any): Promise<AssetMapping>;
   syncAllAssets(credentials: any): Promise<AssetMapping[]>;
   createAlert(alertData: any): Promise<AlertMapping>;

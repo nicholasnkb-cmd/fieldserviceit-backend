@@ -15,15 +15,18 @@ import { RotateNetworkCredentialDto } from '../dto/rotate-network-credential.dto
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 
 @Controller('assets')
-@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
 @BusinessOnly()
 @RequireFeature('assets')
+@RequirePermissions('assets.view')
 export class CmdbController {
   constructor(private cmdbService: CmdbService) {}
 
   @Post()
+  @RequirePermissions('assets.create')
   create(@Body() dto: CreateAssetDto, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.create(dto, user.companyId);
@@ -32,7 +35,7 @@ export class CmdbController {
   @Get()
   findAll(@Query() query: PaginationQueryDto, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.cmdbService.findAll(user.companyId, query);
+    return this.cmdbService.findAll(user.companyId, { ...query, permissionScopes: user.permissionScopes, user });
   }
 
   @Get('mdm/summary')
@@ -42,6 +45,7 @@ export class CmdbController {
   }
 
   @Post('mdm/enrollment-tokens')
+  @RequirePermissions('assets.create')
   createEnrollmentToken(@Body() dto: CreateEnrollmentTokenDto, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.createEnrollmentToken(user.companyId, dto);
@@ -66,6 +70,7 @@ export class CmdbController {
   }
 
   @Patch('network/alert-events/:eventId')
+  @RequirePermissions('assets.edit')
   updateNetworkAlertEvent(@Param('eventId') eventId: string, @Body('status') status: string, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.updateNetworkAlertEvent(user.companyId, eventId, status, user.id);
@@ -78,6 +83,7 @@ export class CmdbController {
   }
 
   @Post('network/alert-rules')
+  @RequirePermissions('assets.edit')
   createNetworkAlertRule(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.createNetworkAlertRule(user.companyId, body);
@@ -90,6 +96,7 @@ export class CmdbController {
   }
 
   @Post('network/maintenance-windows')
+  @RequirePermissions('assets.edit')
   createMaintenanceWindow(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.createMaintenanceWindow(user.companyId, body);
@@ -102,6 +109,7 @@ export class CmdbController {
   }
 
   @Post('network/ip-reservations')
+  @RequirePermissions('assets.edit')
   createIpReservation(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.createIpReservation(user.companyId, body);
@@ -114,6 +122,7 @@ export class CmdbController {
   }
 
   @Post('network/discovery/scan')
+  @RequirePermissions('assets.edit')
   scanSubnet(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.scanSubnet(user.companyId, body);
@@ -160,6 +169,7 @@ export class CmdbController {
   }
 
   @Post('network/escalation-policies')
+  @RequirePermissions('assets.edit')
   createEscalationPolicy(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.createEscalationPolicy(user.companyId, body, user.id);
@@ -172,6 +182,7 @@ export class CmdbController {
   }
 
   @Post('network/syslog-searches')
+  @RequirePermissions('assets.edit')
   createSyslogSavedSearch(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.createSyslogSavedSearch(user.companyId, body);
@@ -184,6 +195,7 @@ export class CmdbController {
   }
 
   @Put('network/retention-policy')
+  @RequirePermissions('assets.edit')
   updateRetentionPolicy(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.updateRetentionPolicy(user.companyId, body, user.id);
@@ -196,12 +208,14 @@ export class CmdbController {
   }
 
   @Patch(':id')
+  @RequirePermissions('assets.edit')
   update(@Param('id') id: string, @Body() dto: UpdateAssetDto, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.update(id, dto, user.companyId);
   }
 
   @Post(':id/check-in')
+  @RequirePermissions('assets.edit')
   checkIn(@Param('id') id: string, @Body() dto: Record<string, any>, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.checkIn(id, dto, user.companyId);
@@ -214,6 +228,7 @@ export class CmdbController {
   }
 
   @Post(':id/actions/:action')
+  @RequirePermissions('assets.edit')
   runDeviceAction(@Param('id') id: string, @Param('action') action: string, @Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.runDeviceAction(id, action, body, user.companyId, user.id);
@@ -226,18 +241,21 @@ export class CmdbController {
   }
 
   @Put(':id/network-monitoring')
+  @RequirePermissions('assets.edit')
   updateNetworkMonitoring(@Param('id') id: string, @Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.updateNetworkMonitoring(id, user.companyId, body);
   }
 
   @Post(':id/network-monitoring/ping')
+  @RequirePermissions('assets.edit')
   runPingCheck(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.runPingCheck(id, user.companyId);
   }
 
   @Post(':id/network-monitoring/snmp')
+  @RequirePermissions('assets.edit')
   runSnmpPoll(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.runSnmpPoll(id, user.companyId);

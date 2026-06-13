@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node scripts/clean-dist.js && node node_modules/typescript/bin/tsc -p tsconfig.build.json",
+    "build": "node scripts/clean-dist.js && node node_modules/typescript/bin/tsc -p tsconfig.build.json && node scripts/copy-migrations.js",
     "build:tsc": "node node_modules/typescript/bin/tsc -p tsconfig.build.json",
     "seed": "ts-node --transpile-only src/database/seed.ts",
     "validate:network-vendors": "ts-node --transpile-only scripts/validate-network-vendors.ts",
+    "check:permissions": "node scripts/check-permission-coverage.js",
+    "check:tenant-sql": "node scripts/check-tenant-sql.js",
     "smoke:prod": "node ../scripts/production-smoke.mjs",
     "migration:create": "ts-node --transpile-only scripts/create-migration.ts",
     "start": "bash start-hostinger.sh",
@@ -61,6 +63,7 @@
     "stripe": "^22.1.1",
     "swagger-ui-express": "^5.0.1",
     "typescript": "^5.4.0",
+    "uuid": "^14.0.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {

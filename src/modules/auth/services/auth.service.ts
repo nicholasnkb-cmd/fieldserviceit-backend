@@ -7,6 +7,8 @@ import { LoggerService } from '../../../common/logger/logger.service';
 import { MfaService } from './mfa.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+import { hashCredential } from '../../../common/security/credential-hash';
+import { SessionRepository } from '../../../database/repositories/session.repository';
 
 const BCRYPT_ROUNDS = 12;
 const LOGIN_LOCK_THRESHOLD = 5;
@@ -37,6 +39,7 @@ type BusinessRegistrationProfile = RegistrationProfile & {
 type SessionContext = {
   ipAddress?: string | null;
   userAgent?: string | null;
+  mfaVerifiedAt?: Date | null;
 };
 
 @Injectable()
@@ -48,6 +51,7 @@ export class AuthService {
     private emailService: EmailService,
     private readonly logger: LoggerService,
     private readonly mfaService: MfaService,
+    private readonly sessions: SessionRepository,
   ) {}
 
   async login(email: string, password: string, mfaCode?: string, context: SessionContext = {}) {
@@ -80,6 +84,7 @@ export class AuthService {
         };
       }
       await this.mfaService.verifyUserCode(user.id, mfaCode);
+      context.mfaVerifiedAt = new Date();
     } else if (mfaRequiredByPolicy) {
       return {
         mfaEnrollmentRequired: true,
@@ -90,6 +95,7 @@ export class AuthService {
 
     loginFailures.delete(normalizedEmail);
     const tokens = await this.generateTokens(user, context);
+    await this.recordLoginSecuritySignals(user, context);
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
@@ -241,12 +247,7 @@ export class AuthService {
   }
 
   async verifyEmail(token: string) {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        emailVerificationToken: token,
-        emailVerificationExpiresAt: { gte: new Date() },
-      },
-    });
+    const user = await this.findUserByCredential('emailVerificationToken', token, 'emailVerificationExpiresAt');
     if (!user) throw new BadRequestException('Invalid or expired verification token');
 
     await this.prisma.user.update({
@@ -278,7 +279,7 @@ export class AuthService {
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
-        emailVerificationToken: token,
+        emailVerificationToken: hashCredential(token),
         emailVerificationExpiresAt: expiresAt,
       },
     });
@@ -306,7 +307,7 @@ export class AuthService {
       const resetTokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
       await this.prisma.user.update({
         where: { id: user.id },
-        data: { resetToken, resetTokenExpiresAt },
+        data: { resetToken: hashCredential(resetToken), resetTokenExpiresAt },
       });
       this.emailService.sendPasswordResetEmail(user.email, resetToken).catch((e) => {
         this.logger.error('Failed to send reset email: ' + e.message);
@@ -316,9 +317,7 @@ export class AuthService {
   }
 
   async resetPassword(token: string, password: string) {
-    const user = await this.prisma.user.findFirst({
-      where: { resetToken: token, resetTokenExpiresAt: { gte: new Date() } },
-    });
+    const user = await this.findUserByCredential('resetToken', token, 'resetTokenExpiresAt');
     if (!user) throw new BadRequestException('Invalid or expired reset token');
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     await this.prisma.user.update({
@@ -360,24 +359,33 @@ export class AuthService {
     if (!refreshToken) {
       throw new UnauthorizedException('Invalid refresh token');
     }
-    const session = await this.prisma.session.findUnique({
-      where: { refreshToken },
-      include: { user: true },
-    });
+    const session = await this.sessions.findByRefreshToken(refreshToken, true);
 
-    if (!session || session.expiresAt < new Date() || session.revokedAt) {
+    if (!session) {
+      const reused = await this.sessions.findReusedToken(refreshToken);
+      if (reused) {
+        await this.sessions.revokeActiveFamily(reused.userId, 'refresh-token-reuse');
+        await this.insertSecurityAlert(
+          reused.companyId || null,
+          'REFRESH_TOKEN_REUSE',
+          'critical',
+          reused.userId,
+          'A rotated refresh token was reused; active sessions were revoked',
+          { sessionId: reused.sessionId },
+        );
+      }
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+    if (session.expiresAt < new Date() || session.revokedAt) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    return this.generateTokens(session.user, {}, session.id);
+    return this.generateTokens(session.user, {}, session.id, refreshToken);
   }
 
   async logout(refreshToken: string) {
     if (!refreshToken) return;
-    await this.prisma.execute(
-      `UPDATE Session SET revokedAt = NOW(3), revokeReason = 'logout' WHERE refreshToken = ?`,
-      [refreshToken],
-    ).catch(() => {});
+    await this.sessions.revokeByRefreshToken(refreshToken, 'logout').catch(() => {});
   }
 
   async beginChallengeEnrollment(challengeToken: string) {
@@ -392,7 +400,9 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user || !user.isActive) throw new UnauthorizedException('MFA challenge is invalid');
     const setup = await this.mfaService.confirmSetup(user.id, code);
+    context.mfaVerifiedAt = new Date();
     const tokens = await this.generateTokens(user, context);
+    await this.recordLoginSecuritySignals(user, context);
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     return { user: this.responseUser(user), ...tokens, ...setup };
   }
@@ -415,6 +425,18 @@ export class AuthService {
       throw new UnauthorizedException('Password confirmation is invalid');
     }
     return this.mfaService.disable(userId, code);
+  }
+
+  async stepUp(userId: string, sessionId: string | undefined, code: string) {
+    if (!sessionId) throw new UnauthorizedException('A revocable session is required');
+    await this.mfaService.verifyUserCode(userId, code);
+    const result = await this.prisma.execute(
+      `UPDATE Session SET mfaVerifiedAt = NOW(3), lastSeenAt = NOW(3)
+       WHERE id = ? AND userId = ? AND revokedAt IS NULL AND expiresAt > NOW(3)`,
+      [sessionId, userId],
+    );
+    if (!result.affectedRows) throw new UnauthorizedException('Session is not active');
+    return { verified: true, expiresAt: new Date(Date.now() + 10 * 60 * 1000) };
   }
 
   async listSessions(userId: string, currentSessionId?: string) {
@@ -460,12 +482,14 @@ export class AuthService {
         user: this.responseUser(user),
       };
     }
+    if (trustedMfa) context.mfaVerifiedAt = new Date();
     const tokens = await this.generateTokens(user, context);
+    await this.recordLoginSecuritySignals(user, context);
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     return { user: this.responseUser(user), ...tokens };
   }
 
-  private async generateTokens(user: any, context: SessionContext = {}, existingSessionId?: string) {
+  private async generateTokens(user: any, context: SessionContext = {}, existingSessionId?: string, previousRefreshToken?: string) {
     const policyRows = await this.prisma.query<any[]>(
       `SELECT sessionLifetimeDays, maxActiveSessions FROM PlatformSecurityPolicy WHERE id = 'global-security-policy' LIMIT 1`,
     ).catch(() => []);
@@ -475,29 +499,35 @@ export class AuthService {
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const refreshToken = crypto.randomBytes(32).toString('hex');
+      const refreshTokenHash = this.sessions.hashRefreshToken(refreshToken);
       try {
         let session: any;
         if (existingSessionId) {
+          if (previousRefreshToken) {
+            await this.sessions.recordRotation(existingSessionId, user.id, previousRefreshToken, expiresAt);
+          }
           session = await this.prisma.session.update({
             where: { id: existingSessionId },
             data: {
-              refreshToken,
+              refreshToken: refreshTokenHash,
               expiresAt,
               lastSeenAt: new Date(),
               revokedAt: null,
               revokedById: null,
               revokeReason: null,
+              mfaVerifiedAt: context.mfaVerifiedAt || undefined,
             },
           });
         } else {
           session = await this.prisma.session.create({
             data: {
               userId: user.id,
-              refreshToken,
+              refreshToken: refreshTokenHash,
               deviceInfo: this.deviceLabel(context.userAgent),
               userAgent: context.userAgent?.slice(0, 500) || null,
               ipAddress: context.ipAddress?.slice(0, 191) || null,
               lastSeenAt: new Date(),
+              mfaVerifiedAt: context.mfaVerifiedAt || null,
               expiresAt,
             },
           });
@@ -510,6 +540,7 @@ export class AuthService {
           role: user.role,
           userType: user.userType,
           companyId: user.companyId,
+          av: user.authVersion || 0,
         };
         const accessToken = this.jwtService.sign(payload);
         await this.trimSessions(user.id, maxActiveSessions, session.id);
@@ -529,6 +560,21 @@ export class AuthService {
       { sub: userId, purpose, nonce: crypto.randomBytes(12).toString('hex') },
       { expiresIn: '5m' },
     );
+  }
+
+  private async findUserByCredential(
+    tokenColumn: 'resetToken' | 'emailVerificationToken',
+    token: string,
+    expiryColumn: 'resetTokenExpiresAt' | 'emailVerificationExpiresAt',
+  ) {
+    const rows = await this.prisma.query<any[]>(
+      `SELECT id FROM User
+       WHERE ${tokenColumn} IN (?, ?)
+         AND ${expiryColumn} >= NOW(3)
+       LIMIT 1`,
+      [hashCredential(token), token],
+    );
+    return rows[0] ? this.prisma.user.findUnique({ where: { id: rows[0].id } }) : null;
   }
 
   private verifyMfaChallenge(token: string, purpose: 'login' | 'enroll') {
@@ -562,6 +608,47 @@ export class AuthService {
     const browser = value.includes('Edg/') ? 'Edge' : value.includes('Chrome/') ? 'Chrome' : value.includes('Firefox/') ? 'Firefox' : value.includes('Safari/') ? 'Safari' : 'Browser';
     const os = value.includes('Windows') ? 'Windows' : value.includes('Mac OS') ? 'macOS' : value.includes('Android') ? 'Android' : value.includes('iPhone') || value.includes('iPad') ? 'iOS' : value.includes('Linux') ? 'Linux' : 'Unknown device';
     return `${browser} on ${os}`.slice(0, 191);
+  }
+
+  private async recordLoginSecuritySignals(user: any, context: SessionContext) {
+    if (!['SUPER_ADMIN', 'TENANT_ADMIN'].includes(user.role)) return;
+    const prior = await this.prisma.query<any[]>(
+      `SELECT id FROM Session
+       WHERE userId = ? AND createdAt >= DATE_SUB(NOW(3), INTERVAL 90 DAY)
+         AND revokedAt IS NULL
+         AND ((ipAddress IS NOT NULL AND ipAddress <> ?) OR (userAgent IS NOT NULL AND userAgent <> ?))
+       LIMIT 1`,
+      [user.id, context.ipAddress || '', context.userAgent || ''],
+    ).catch(() => []);
+    if (prior[0]) {
+      await this.insertSecurityAlert(
+        user.companyId,
+        'PRIVILEGED_NEW_CONTEXT',
+        'warning',
+        user.id,
+        `Privileged login from a new network or device: ${user.email}`,
+        { ipAddress: context.ipAddress, device: this.deviceLabel(context.userAgent) },
+      );
+    }
+    if (user.isBreakGlass) {
+      await this.insertSecurityAlert(
+        user.companyId,
+        'BREAK_GLASS_LOGIN',
+        'critical',
+        user.id,
+        `Break-glass account used: ${user.email}`,
+        { ipAddress: context.ipAddress, device: this.deviceLabel(context.userAgent) },
+      );
+    }
+  }
+
+  private async insertSecurityAlert(companyId: string | null, alertType: string, severity: string, subjectId: string, summary: string, detail: any) {
+    await this.prisma.execute(
+      `INSERT INTO SecurityAlert
+       (id, companyId, alertType, severity, subjectId, summary, detail, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3))`,
+      [crypto.randomUUID(), companyId, alertType, severity, subjectId, summary.slice(0, 255), JSON.stringify(detail)],
+    ).catch(() => {});
   }
 
   private async enforceLoginBackoff(email: string) {

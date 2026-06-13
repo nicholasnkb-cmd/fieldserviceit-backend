@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, OnApplicationShutdown, Logger, Optional, BadRequestException } from '@nestjs/common';
 import { createPool, Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { MigrationsService } from './migrations/migrations.service';
+import { StructuredLogger } from '../common/logger/structured-logger.service';
 
 interface QueryOptions {
   nestTables?: boolean;
@@ -13,6 +14,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
   constructor(
     @Optional() private readonly migrationsService?: MigrationsService,
+    @Optional() private readonly structuredLogger?: StructuredLogger,
   ) {
     const databaseUrl = process.env.DATABASE_URL || '';
     const parsed = this.parseDatabaseUrl(databaseUrl);
@@ -166,6 +168,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         managementMode VARCHAR(191),
         mdmProvider VARCHAR(191),
         mdmDeviceId VARCHAR(191),
+        mdmDeviceTokenHash VARCHAR(191),
         lastCheckInAt DATETIME(3),
         complianceStatus VARCHAR(191) DEFAULT 'UNKNOWN',
         complianceReasons TEXT,
@@ -280,6 +283,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         description TEXT,
         stripePriceId VARCHAR(191),
         monthlyPrice DECIMAL(10,2) NOT NULL DEFAULT 0,
+        annualPrice DECIMAL(10,2) NOT NULL DEFAULT 0,
+        seatMonthlyPrice DECIMAL(10,2) NOT NULL DEFAULT 0,
+        seatAnnualPrice DECIMAL(10,2) NOT NULL DEFAULT 0,
+        trialDays INT NOT NULL DEFAULT 0,
         maxUsers INT DEFAULT -1,
         maxTickets INT DEFAULT -1,
         features JSON,
@@ -294,14 +301,50 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         planId VARCHAR(191) NOT NULL,
         stripeSubscriptionId VARCHAR(191),
         stripeCustomerId VARCHAR(191),
+        billingProvider VARCHAR(32) NOT NULL DEFAULT 'STRIPE',
+        providerCustomerId VARCHAR(191),
+        providerSubscriptionId VARCHAR(191),
+        billingInterval VARCHAR(16) NOT NULL DEFAULT 'MONTH',
+        seatQuantity INT NOT NULL DEFAULT 1,
+        cancelAtPeriodEnd TINYINT(1) NOT NULL DEFAULT 0,
         status VARCHAR(191) DEFAULT 'ACTIVE',
         trialEndsAt DATETIME(3),
+        gracePeriodEndsAt DATETIME(3),
         currentPeriodStart DATETIME(3),
         currentPeriodEnd DATETIME(3),
         createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
         updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
         INDEX(companyId),
         INDEX(planId)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`BillingPrice\` (
+        id VARCHAR(191) PRIMARY KEY,
+        planId VARCHAR(191) NOT NULL,
+        provider VARCHAR(32) NOT NULL,
+        billingInterval VARCHAR(16) NOT NULL,
+        component VARCHAR(16) NOT NULL DEFAULT 'BASE',
+        externalPriceId VARCHAR(255) NOT NULL,
+        isActive TINYINT(1) NOT NULL DEFAULT 1,
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE KEY BillingPrice_catalog_key (planId, provider, billingInterval, component),
+        INDEX(provider, isActive)
+      ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE TABLE IF NOT EXISTS \`BillingEvent\` (
+        id VARCHAR(191) PRIMARY KEY,
+        provider VARCHAR(32) NOT NULL,
+        providerEventId VARCHAR(255) NOT NULL,
+        eventType VARCHAR(191) NOT NULL,
+        companyId VARCHAR(191),
+        status VARCHAR(32) NOT NULL DEFAULT 'RECEIVED',
+        payload LONGTEXT,
+        errorMessage TEXT,
+        processedAt DATETIME(3),
+        createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+        UNIQUE KEY BillingEvent_provider_event_key (provider, providerEventId),
+        INDEX(companyId, createdAt),
+        INDEX(status, createdAt)
       ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
       `CREATE TABLE IF NOT EXISTS \`UsageRecord\` (
         id VARCHAR(191) PRIMARY KEY,
@@ -785,12 +828,28 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   }
 
   async query<T = RowDataPacket[]>(sql: string, values?: any[]): Promise<T> {
-    const [rows] = await this.pool.execute(sql, values || []);
+    const start = Date.now();
+    const [rows] = await this.pool.query(sql, values || []);
+    const latency = Date.now() - start;
+
+    // Track performance metrics
+    if (this.structuredLogger) {
+      this.structuredLogger.trackPerformance('database.query', latency, 'query');
+    }
+
     return rows as T;
   }
 
   async execute(sql: string, values?: any[]): Promise<ResultSetHeader> {
+    const start = Date.now();
     const [result] = await this.pool.execute(sql, values || []);
+    const latency = Date.now() - start;
+
+    // Track performance metrics
+    if (this.structuredLogger) {
+      this.structuredLogger.trackPerformance('database.execute', latency, 'query');
+    }
+
     return result as ResultSetHeader;
   }
 
@@ -1335,6 +1394,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   };
 
   asset = {
+    /**
+     * findMany - Query assets with support for complex WHERE conditions
+     *
+     * CRITICAL FEATURE (June 10, 2026): Supports AND array for fine-grained permission scopes
+     *
+     * Where clause syntax:
+     * - Simple equality: { companyId: '123' }
+     * - OR conditions: { OR: [{ status: 'active' }, { status: 'pending' }] }
+     * - AND conditions: { AND: [{ companyId: '123' }, { status: { in: ['active', 'pending'] } }] }
+     * - String contains: { name: { contains: 'printer' } }
+     * - IN operator: { status: { in: ['active', 'pending'] } }
+     *
+     * This is used by PermissionsGuard to apply permission scopes. For example:
+     * - Tenant admin sees only assets where companyId = their companyId AND assetType IN [permitted types]
+     * - This prevents unauthorized cross-company data access while maintaining complex filter logic
+     *
+     * Implementation note: The AND/OR arrays are flattened with flatMap to build compound WHERE conditions.
+     * Each condition in an AND array must be satisfied (AND logic).
+     */
     findMany: async ({ where, select, orderBy, skip, take }: { where?: Record<string, any>; select?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number }) => {
       const cols = select ? Object.keys(select).filter(k => select[k]) : ['*'];
       let sql = `SELECT ${cols.join(', ')} FROM Asset`;
@@ -1351,6 +1429,27 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
               return `${this.escapeColumn(orKey)} = ?`;
             }));
             return orClauses.length > 0 ? [`(${orClauses.join(' OR ')})`] : [];
+          }
+          // CRITICAL FIX: AND array support for permission scopes
+          // Allows queries like: { AND: [{ companyId: '123' }, { status: { in: ['active'] } }] }
+          // This enables tenant admins to see only their company's assets with specific statuses
+          if (k === 'AND' && Array.isArray(v)) {
+            const andClauses = v.flatMap((condition: Record<string, any>) => Object.entries(condition).map(([andKey, andValue]) => {
+              if (typeof andValue === 'object' && andValue?.contains !== undefined) {
+                values.push(`%${andValue.contains}%`);
+                return `${this.escapeColumn(andKey)} LIKE ?`;
+              }
+              if (andValue === null) return `${this.escapeColumn(andKey)} IS NULL`;
+              if (typeof andValue === 'object' && andValue?.in !== undefined) {
+                const inList = Array.isArray(andValue.in) ? andValue.in : [andValue.in];
+                if (inList.length === 0) return '1=0';
+                values.push(...inList);
+                return `${this.escapeColumn(andKey)} IN (${inList.map(() => '?').join(',')})`;
+              }
+              values.push(andValue);
+              return `${this.escapeColumn(andKey)} = ?`;
+            }));
+            return andClauses.length > 0 ? [`(${andClauses.join(' AND ')})`] : [];
           }
           if (v === null) return `${this.escapeColumn(k)} IS NULL`;
           if (typeof v === 'object' && v?.contains !== undefined) { values.push(`%${v.contains}%`); return `${this.escapeColumn(k)} LIKE ?`; }
@@ -1395,6 +1494,22 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       return rows[0] || null;
     },
 
+    /**
+     * count - Get the count of assets matching WHERE conditions
+     *
+     * CRITICAL FEATURE (June 10, 2026): Supports AND array for permission scope counting
+     *
+     * This method mirrors the WHERE clause logic from findMany() to ensure consistent
+     * counting when permission scopes are applied. Used by pagination to calculate
+     * total available records for a user.
+     *
+     * Supports the same where clause syntax as findMany():
+     * - Simple: { companyId: '123' }
+     * - AND array: { AND: [{ companyId: '123' }, { status: { in: ['active'] } }] }
+     * - OR array: { OR: [{ status: 'active' }, { status: 'pending' }] }
+     *
+     * Returns the total count of matching records.
+     */
     count: async ({ where }: { where?: Record<string, any> }) => {
       let sql = 'SELECT COUNT(*) as count FROM Asset';
       const values: any[] = [];
@@ -1410,6 +1525,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
               return `${this.escapeColumn(orKey)} = ?`;
             }));
             return orClauses.length > 0 ? [`(${orClauses.join(' OR ')})`] : [];
+          }
+          // CRITICAL FIX: AND array support mirrors findMany() for consistent counting
+          if (k === 'AND' && Array.isArray(v)) {
+            const andClauses = v.flatMap((condition: Record<string, any>) => Object.entries(condition).map(([andKey, andValue]) => {
+              if (typeof andValue === 'object' && andValue?.contains !== undefined) {
+                values.push(`%${andValue.contains}%`);
+                return `${this.escapeColumn(andKey)} LIKE ?`;
+              }
+              if (andValue === null) return `${this.escapeColumn(andKey)} IS NULL`;
+              if (typeof andValue === 'object' && andValue?.in !== undefined) {
+                const inList = Array.isArray(andValue.in) ? andValue.in : [andValue.in];
+                if (inList.length === 0) return '1=0';
+                values.push(...inList);
+                return `${this.escapeColumn(andKey)} IN (${inList.map(() => '?').join(',')})`;
+              }
+              values.push(andValue);
+              return `${this.escapeColumn(andKey)} = ?`;
+            }));
+            return andClauses.length > 0 ? [`(${andClauses.join(' AND ')})`] : [];
           }
           if (v === null) return `${this.escapeColumn(k)} IS NULL`;
           if (typeof v === 'object' && v?.contains !== undefined) { values.push(`%${v.contains}%`); return `${this.escapeColumn(k)} LIKE ?`; }
@@ -2717,7 +2851,7 @@ class TransactionClient {
   constructor(private conn: any) {}
 
   async query<T = RowDataPacket[]>(sql: string, values?: any[]): Promise<T> {
-    const [rows] = await this.conn.execute(sql, values || []);
+    const [rows] = await this.conn.query(sql, values || []);
     return rows as T;
   }
 

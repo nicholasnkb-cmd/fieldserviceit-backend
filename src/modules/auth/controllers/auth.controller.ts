@@ -16,6 +16,8 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { OidcAuthService } from '../services/oidc-auth.service';
+import { ServiceAccountGuard } from '../../../common/guards/service-account.guard';
+import { AuthorizationExempt } from '../../../common/decorators/authorization-exempt.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -178,44 +180,70 @@ export class AuthController {
 
   @Get('mfa/status')
   @UseGuards(JwtAuthGuard)
+  @AuthorizationExempt('Authenticated users may inspect their own MFA status', 'identity-team', '2026-09-30')
   mfaStatus(@CurrentUser() user: CurrentUserType) {
     return this.authService.mfaStatus(user.id);
   }
 
   @Post('mfa/setup')
   @UseGuards(JwtAuthGuard)
+  @AuthorizationExempt('Authenticated users may enroll their own MFA device', 'identity-team', '2026-09-30')
   beginMfaSetup(@CurrentUser() user: CurrentUserType) {
     return this.authService.beginMfaSetup(user);
   }
 
   @Post('mfa/confirm')
   @UseGuards(JwtAuthGuard)
+  @AuthorizationExempt('Authenticated users may confirm their own MFA enrollment', 'identity-team', '2026-09-30')
   confirmMfaSetup(@CurrentUser() user: CurrentUserType, @Body() body: { code: string }) {
     return this.authService.confirmMfaSetup(user, body.code);
   }
 
   @Post('mfa/disable')
   @UseGuards(JwtAuthGuard)
+  @AuthorizationExempt('Authenticated users may disable their own MFA after credential verification', 'identity-team', '2026-09-30')
   disableMfa(@CurrentUser() user: CurrentUserType, @Body() body: { code: string; password: string }) {
     return this.authService.disableMfa(user.id, body.code, body.password);
   }
 
+  @AuthorizationExempt('Authenticated users manage only their own MFA and session state', 'identity-team', '2026-09-30')
+  @Post('step-up')
+  @UseGuards(JwtAuthGuard)
+  stepUp(@CurrentUser() user: CurrentUserType, @Body() body: { code: string }) {
+    return this.authService.stepUp(user.id, user.sessionId, body.code);
+  }
+
+  @AuthorizationExempt('Authenticated users manage only their own MFA and session state', 'identity-team', '2026-09-30')
   @Get('sessions')
   @UseGuards(JwtAuthGuard)
   listSessions(@CurrentUser() user: CurrentUserType) {
     return this.authService.listSessions(user.id, user.sessionId);
   }
 
+  @AuthorizationExempt('Authenticated users manage only their own MFA and session state', 'identity-team', '2026-09-30')
   @Delete('sessions/:id')
   @UseGuards(JwtAuthGuard)
   revokeSession(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.authService.revokeSession(user.id, id, user.id);
   }
 
+  @AuthorizationExempt('Authenticated users manage only their own MFA and session state', 'identity-team', '2026-09-30')
   @Post('sessions/revoke-others')
   @UseGuards(JwtAuthGuard)
   revokeOtherSessions(@CurrentUser() user: CurrentUserType) {
     return this.authService.revokeOtherSessions(user.id, user.sessionId);
+  }
+
+  @Get('service-account/context')
+  @UseGuards(ServiceAccountGuard)
+  serviceAccountContext(@CurrentUser() user: CurrentUserType) {
+    return {
+      id: user.id,
+      role: user.role,
+      companyId: user.companyId,
+      permissions: (user as any).permissionSlugs || [],
+      scopes: user.permissionScopes || [],
+    };
   }
 
   private clientContext(req: Request) {

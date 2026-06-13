@@ -1,56 +1,83 @@
-import { Controller, Get } from '@nestjs/common';
-import { PrismaService } from '../../database/prisma.service';
+import { Controller, Get, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import { Public } from '../../common/decorators/public.decorator';
+import { HealthService, HealthCheckResponse, HealthDashboard } from './health.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { MonitoringAccessGuard } from '../../common/guards/monitoring-access.guard';
+import { AuthorizationExempt } from '../../common/decorators/authorization-exempt.decorator';
 
+/**
+ * HealthController - Provides health check and liveness probe endpoints
+ *
+ * Used for:
+ * - Kubernetes liveness/readiness probes
+ * - Load balancer health checks
+ * - Monitoring and alerting systems
+ * - Uptime verification
+ */
 @Controller('health')
 export class HealthController {
-  constructor(private prisma: PrismaService) {}
+  constructor(private healthService: HealthService) {}
 
+  /**
+   * GET /v1/health - Basic health check
+   *
+   * Returns 200 if the backend is running and can connect to the database.
+   * Returns 503 if database is unavailable.
+   *
+   * Response: { status: "ok", timestamp: "2026-06-10T12:00:00.000Z", version: "1.0.0" }
+   */
+  @Public()
   @Get()
-  async check() {
-    const checks: Record<string, any> = {};
-
-    checks.timestamp = new Date().toISOString();
-    checks.version = {
-      frontend: process.env.FRONTEND_VERSION || process.env.APP_VERSION || 'unknown',
-      backend: process.env.BACKEND_VERSION || process.env.APP_VERSION || process.env.npm_package_version || 'unknown',
-      environment: process.env.NODE_ENV || 'development',
-    };
-
-    try {
-      await this.prisma.$queryRaw`SELECT 1`;
-      checks.database = { status: 'ok' };
-    } catch {
-      checks.database = { status: 'error' };
-    }
-
-    checks.pool = { status: 'ok' };
-    checks.worker = await this.getMonitoringWorkerStatus();
-
-    const statuses = Object.values(checks).filter((c: any) => typeof c === 'object' && c !== null && 'status' in c);
-    const allOk = statuses.length === 0 || statuses.every((c: any) => c.status === 'ok' || c.status === 'unknown');
-    return { status: allOk ? 'ok' : 'degraded', ...checks };
+  @HttpCode(HttpStatus.OK)
+  async check(): Promise<HealthCheckResponse> {
+    return this.healthService.check();
   }
 
-  @Get('ping')
-  ping() {
-    return { pong: true, timestamp: new Date().toISOString() };
+  /**
+   * GET /v1/health/ready - Readiness probe
+   *
+   * Returns 200 if the backend is ready to handle requests.
+   * Includes database connectivity check.
+   */
+  @Public()
+  @Get('ready')
+  @HttpCode(HttpStatus.OK)
+  async ready(): Promise<HealthCheckResponse> {
+    return this.healthService.ready();
   }
 
-  private async getMonitoringWorkerStatus() {
-    try {
-      const rows = await this.prisma.query<any[]>(
-        `SELECT MAX(createdAt) as lastPollAt, COUNT(*) as snapshotsLastHour
-         FROM NetworkHealthSnapshot
-         WHERE createdAt >= DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
-      );
-      const row = rows[0] || {};
-      return {
-        status: 'ok',
-        lastPollAt: row.lastPollAt || null,
-        snapshotsLastHour: Number(row.snapshotsLastHour || 0),
-      };
-    } catch {
-      return { status: 'unknown', lastPollAt: null, snapshotsLastHour: 0 };
-    }
+  /**
+   * GET /v1/health/live - Liveness probe
+   *
+   * Returns 200 if the backend process is alive.
+   * Lighter weight than readiness probe; does not check dependencies.
+   */
+  @Public()
+  @Get('live')
+  @HttpCode(HttpStatus.OK)
+  async live(): Promise<HealthCheckResponse> {
+    return this.healthService.live();
+  }
+
+  /**
+   * GET /v1/health/dashboard - Comprehensive health dashboard
+   *
+   * Returns detailed health metrics including:
+   * - Overall health status
+   * - Uptime information
+   * - Database latency
+   * - Request metrics (total, errors, error rate)
+   * - Memory usage (heap and RSS)
+   * - Per-operation performance metrics
+   *
+   * Used for monitoring dashboards and detailed diagnostics
+   */
+  @Get('dashboard')
+  @Public()
+  @UseGuards(JwtAuthGuard, MonitoringAccessGuard)
+  @AuthorizationExempt('Restricted to monitoring credentials or authenticated administrators', 'security-team', '2026-09-30')
+  @HttpCode(HttpStatus.OK)
+  async dashboard(): Promise<HealthDashboard> {
+    return this.healthService.dashboard();
   }
 }

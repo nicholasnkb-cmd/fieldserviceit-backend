@@ -134,9 +134,10 @@ export class MaintenanceService {
     if (Array.isArray(updates.checklist)) updates.checklist = JSON.stringify(updates.checklist);
     const keys = Object.keys(updates).filter((key) => updates[key] !== undefined);
     if (keys.length) {
-      await this.db.execute(`UPDATE MaintenancePlan SET ${keys.map((key) => `\`${key}\` = ?`).join(', ')} WHERE id = ?`, [
+      await this.db.execute(`UPDATE MaintenancePlan SET ${keys.map((key) => `\`${key}\` = ?`).join(', ')} WHERE id = ? AND companyId = ?`, [
         ...keys.map((key) => updates[key]),
         id,
+        companyId,
       ]);
     }
     return this.getPlan(user, id);
@@ -169,7 +170,10 @@ export class MaintenanceService {
       user.userType,
     );
     if (plan.assignedToId) {
-      await this.db.execute('UPDATE Ticket SET assignedToId = ?, status = ? WHERE id = ?', [plan.assignedToId, 'ASSIGNED', ticket.id]);
+      await this.db.execute(
+        'UPDATE Ticket SET assignedToId = ?, status = ? WHERE id = ? AND companyId = ?',
+        [plan.assignedToId, 'ASSIGNED', ticket.id, companyId],
+      );
       await this.db.execute(
         `INSERT INTO TicketTimeline (id, ticketId, action, actorId, comment, isInternal, createdAt)
          VALUES (?, ?, 'ASSIGNED', ?, ?, 1, ?)`,
@@ -200,8 +204,8 @@ export class MaintenanceService {
     if (runId) {
       await this.assertRunAccess(companyId, plan.id, runId);
       await this.db.execute(
-        `UPDATE MaintenanceRun SET status = 'COMPLETED', completedAt = ?, completedById = ?, notes = ?, updatedAt = ? WHERE id = ?`,
-        [completedAt, user.id, dto.notes?.trim() || null, new Date(), runId],
+        `UPDATE MaintenanceRun SET status = 'COMPLETED', completedAt = ?, completedById = ?, notes = ?, updatedAt = ? WHERE id = ? AND companyId = ?`,
+        [completedAt, user.id, dto.notes?.trim() || null, new Date(), runId, companyId],
       );
     } else {
       const pending = await this.db.query<any[]>(
@@ -211,8 +215,8 @@ export class MaintenanceService {
       runId = pending[0]?.id || randomUUID();
       if (pending[0]) {
         await this.db.execute(
-          `UPDATE MaintenanceRun SET status = 'COMPLETED', completedAt = ?, completedById = ?, notes = ?, updatedAt = ? WHERE id = ?`,
-          [completedAt, user.id, dto.notes?.trim() || null, new Date(), runId],
+          `UPDATE MaintenanceRun SET status = 'COMPLETED', completedAt = ?, completedById = ?, notes = ?, updatedAt = ? WHERE id = ? AND companyId = ?`,
+          [completedAt, user.id, dto.notes?.trim() || null, new Date(), runId, companyId],
         );
       } else {
         await this.db.execute(
@@ -222,7 +226,10 @@ export class MaintenanceService {
         );
       }
     }
-    await this.db.execute('UPDATE MaintenancePlan SET lastCompletedAt = ?, nextDueAt = ?, updatedAt = ? WHERE id = ?', [completedAt, nextDueAt, new Date(), plan.id]);
+    await this.db.execute(
+      'UPDATE MaintenancePlan SET lastCompletedAt = ?, nextDueAt = ?, updatedAt = ? WHERE id = ? AND companyId = ?',
+      [completedAt, nextDueAt, new Date(), plan.id, companyId],
+    );
     return { plan: await this.getPlan(user, plan.id), run: (await this.db.query<any[]>('SELECT * FROM MaintenanceRun WHERE id = ? LIMIT 1', [runId]))[0] };
   }
 

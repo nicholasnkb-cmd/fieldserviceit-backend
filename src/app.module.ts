@@ -6,6 +6,7 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import * as Joi from 'joi';
 import { DatabaseModule } from './database/database.module';
 import { PermissionsGuard } from './common/guards/permissions.guard';
+import { StepUpGuard } from './common/guards/step-up.guard';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { AuditLogModule } from './modules/audit-log/audit-log.module';
@@ -77,6 +78,7 @@ import { PlatformSecurityModule } from './modules/platform-security/platform-sec
         CLAMAV_PORT: Joi.number().port().optional().default(3310),
         CLAMAV_REQUIRED: Joi.boolean().optional().default(false),
         OIDC_ALLOW_PRIVATE_ISSUERS: Joi.boolean().optional().default(false),
+        MONITORING_API_KEY: Joi.string().min(24).optional(),
       }),
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),
@@ -126,6 +128,7 @@ import { PlatformSecurityModule } from './modules/platform-security/platform-sec
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
     PermissionsGuard,
+    StepUpGuard,
   ],
 })
 export class AppModule {}

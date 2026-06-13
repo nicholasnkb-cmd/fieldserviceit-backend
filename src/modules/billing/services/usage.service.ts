@@ -27,9 +27,10 @@ export class UsageService {
     const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
     const record = await this.getOrCreateUsageRecord(companyId, metric, periodStart, periodEnd);
+    const nextCount = Number(record.count || 0) + 1;
     return this.prisma.usageRecord.update({
       where: { id: record.id },
-      data: { count: { increment: 1 } },
+      data: { count: nextCount },
     }) as any;
   }
 

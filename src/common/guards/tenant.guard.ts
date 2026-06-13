@@ -24,9 +24,42 @@ export class TenantGuard implements CanActivate {
       throw new ForbiddenException('Authentication required');
     }
 
-    if (user.role === 'SUPER_ADMIN' || user.role === 'GLOBAL_TECH') {
+    const impersonationId = this.getHeader(request.headers, 'x-impersonation-session');
+    if (impersonationId && ['SUPER_ADMIN', 'TENANT_ADMIN'].includes(user.role)) {
+      const rows = await this.prisma.query<any[]>(
+        `SELECT ims.id, ims.actorId, ims.targetUserId, ims.expiresAt,
+                t.id as targetId, t.email, t.role, t.userType, t.companyId, t.isActive,
+                t.authVersion, t.department, t.location
+         FROM ImpersonationSession ims JOIN User t ON t.id = ims.targetUserId
+         WHERE ims.id = ? AND ims.actorId = ? AND ims.endedAt IS NULL
+           AND ims.expiresAt > NOW(3) AND t.isActive = 1 AND t.deletedAt IS NULL
+         LIMIT 1`,
+        [impersonationId, user.id],
+      ).catch(() => []);
+      const session = rows[0];
+      if (!session) throw new ForbiddenException('Impersonation session is invalid or expired');
+      request.user = {
+        id: session.targetId,
+        email: session.email,
+        role: session.role,
+        userType: session.userType,
+        companyId: session.companyId,
+        isActive: Boolean(session.isActive),
+        authVersion: session.authVersion,
+        department: session.department,
+        location: session.location,
+        isImpersonatingUser: true,
+        impersonationSessionId: session.id,
+        impersonationActorId: user.id,
+        impersonationActorEmail: user.email,
+      };
+    }
+
+    const effectiveUser = request.user;
+
+    if (effectiveUser.role === 'SUPER_ADMIN' || effectiveUser.role === 'GLOBAL_TECH') {
       const companyContext = this.getCompanyContextHeader(request.headers);
-      if (user.role === 'GLOBAL_TECH') {
+      if (effectiveUser.role === 'GLOBAL_TECH') {
         request.companyId = null;
         return true;
       }
@@ -47,7 +80,7 @@ export class TenantGuard implements CanActivate {
 
       request.companyId = company.id;
       request.user = {
-        ...user,
+        ...effectiveUser,
         companyId: company.id,
         effectiveCompanyId: company.id,
         isImpersonatingCompany: true,
@@ -56,28 +89,32 @@ export class TenantGuard implements CanActivate {
     }
 
     // Public users have no company context
-    if (user.userType === 'PUBLIC') {
+    if (effectiveUser.userType === 'PUBLIC') {
       request.companyId = null;
       return true;
     }
 
     // Business users must have a company context
-    if (!user.companyId) {
+    if (!effectiveUser.companyId) {
       throw new ForbiddenException('No company context available');
     }
 
     const paramCompanyId = request.params?.companyId || request.body?.companyId;
 
-    if (paramCompanyId && paramCompanyId !== user.companyId) {
+    if (paramCompanyId && paramCompanyId !== effectiveUser.companyId) {
       throw new ForbiddenException('Cross-tenant access denied');
     }
 
-    request.companyId = user.companyId;
+    request.companyId = effectiveUser.companyId;
     return true;
   }
 
   private getCompanyContextHeader(headers: Record<string, string | string[] | undefined>): string | null {
-    const value = headers['x-company-context'];
+    return this.getHeader(headers, 'x-company-context');
+  }
+
+  private getHeader(headers: Record<string, string | string[] | undefined>, name: string): string | null {
+    const value = headers[name];
     if (Array.isArray(value)) return value[0] || null;
     return value || null;
   }

@@ -5,6 +5,8 @@ import { NotificationsService } from '../../notifications/services/notifications
 import { EmailService } from '../../notifications/services/email.service';
 import { TicketParticipantNotifierService } from '../../tickets/services/ticket-participant-notifier.service';
 import * as crypto from 'crypto';
+import { credentialLookupValues, credentialMatches, hashCredential } from '../../../common/security/credential-hash';
+import { AssetRepository } from '../../../database/repositories/asset.repository';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as dgram from 'dgram';
@@ -38,6 +40,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     private notificationsService: NotificationsService,
     private emailService: EmailService,
     private participantNotifier: TicketParticipantNotifierService,
+    private assetRepository: AssetRepository,
   ) {}
 
   onModuleInit() {
@@ -162,12 +165,13 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     return this.prisma.asset.create({ data: { ...data, companyId } });
   }
 
-  async findAll(companyId: string, query: { page?: number; limit?: number; assetType?: string; search?: string; deviceCategory?: string; enrollmentStatus?: string; complianceStatus?: string; ownership?: string }) {
+  async findAll(companyId: string, query: { page?: number; limit?: number; assetType?: string; search?: string; deviceCategory?: string; enrollmentStatus?: string; complianceStatus?: string; ownership?: string; permissionScopes?: any[]; user?: any }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 25;
     const skip = (page - 1) * limit;
 
     const where: any = { companyId, deletedAt: null };
+    this.applyAssetScopes(where, query.permissionScopes, query.user);
     if (query.assetType) where.assetType = query.assetType;
     if (query.deviceCategory) where.deviceCategory = query.deviceCategory;
     if (query.enrollmentStatus) where.enrollmentStatus = query.enrollmentStatus;
@@ -189,6 +193,30 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     ]);
 
     return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  }
+
+  private applyAssetScopes(where: any, scopes: any[] | undefined, user: any) {
+    const matching = (scopes || []).filter((scope) => String(scope.permissionSlug || '').startsWith('assets.'));
+    if (!matching.length || matching.some((scope) => scope.scopeType === 'ALL')) return;
+    const alternatives: any[] = [];
+    for (const scope of matching) {
+      if (scope.scopeType === 'ASSIGNED') alternatives.push({ assignedUser: user?.email || user?.id });
+      if (scope.scopeType === 'LOCATION' && user?.location) alternatives.push({ location: user.location });
+      if (scope.scopeType === 'CUSTOMERS') {
+        const values = this.parseScopeValues(scope.scopeValues);
+        if (values.length) alternatives.push({ companyId: { in: values } });
+      }
+    }
+    where.AND = [...(where.AND || []), alternatives.length ? { OR: alternatives } : { id: '__scope_denied__' }];
+  }
+
+  private parseScopeValues(value: any): string[] {
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+      return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
   }
 
   async getMdmSummary(companyId: string) {
@@ -216,23 +244,19 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
   }
 
   async findOne(id: string, companyId: string) {
-    const asset = await this.prisma.asset.findFirst({
-      where: { id, companyId, deletedAt: null },
-      include: { tickets: { take: 10, orderBy: { createdAt: 'desc' } } },
-    });
-
-    if (!asset) throw new NotFoundException('Asset not found');
-    return asset;
+    return this.assetRepository.findTenantAsset(
+      id,
+      companyId,
+      { tickets: { take: 10, orderBy: { createdAt: 'desc' } } },
+    );
   }
 
   async update(id: string, dto: any, companyId: string) {
-    await this.findOne(id, companyId);
-    return this.prisma.asset.update({ where: { id }, data: this.normalizeDevicePayload(dto) });
+    return this.assetRepository.updateTenantAsset(id, companyId, this.normalizeDevicePayload(dto));
   }
 
   async remove(id: string, companyId: string) {
-    await this.findOne(id, companyId);
-    return this.prisma.asset.update({ where: { id }, data: { deletedAt: new Date() } });
+    return this.assetRepository.retireTenantAsset(id, companyId);
   }
 
   async checkIn(id: string, dto: any, companyId: string) {
@@ -290,7 +314,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.execute(
       `INSERT INTO MdmEnrollmentToken (id, companyId, token, deviceCategory, ownership, policyProfile, expiresAt, createdAt)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, companyId, token, deviceCategory, ownership, dto.policyProfile || null, expiresAt, now],
+      [id, companyId, hashCredential(token), deviceCategory, ownership, dto.policyProfile || null, expiresAt, now],
     );
 
     return { id, token, companyId, deviceCategory, ownership, policyProfile: dto.policyProfile || null, expiresAt, usedAt: null };
@@ -298,7 +322,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
 
   async listEnrollmentTokens(companyId: string) {
     return this.prisma.query(
-      `SELECT id, companyId, token, deviceCategory, ownership, policyProfile, expiresAt, usedAt, assetId, createdAt
+      `SELECT id, companyId, deviceCategory, ownership, policyProfile, expiresAt, usedAt, assetId, createdAt
        FROM MdmEnrollmentToken
        WHERE companyId = ?
        ORDER BY createdAt DESC
@@ -952,8 +976,8 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
       result = { error: err?.message || 'Action failed' };
     }
     await this.prisma.execute(
-      `UPDATE NetworkDeviceAction SET status = ?, result = ?, completedAt = ? WHERE id = ?`,
-      [status, JSON.stringify(result), new Date(), actionId],
+      `UPDATE NetworkDeviceAction SET status = ?, result = ?, completedAt = ? WHERE id = ? AND companyId = ?`,
+      [status, JSON.stringify(result), new Date(), actionId, companyId],
     );
     await this.auditNetworkChange(companyId, actorId, `network.action.${status.toLowerCase()}`, 'NetworkDeviceAction', actionId, { action: action.action, result });
     const updated = await this.prisma.query<any[]>(`SELECT * FROM NetworkDeviceAction WHERE id = ? LIMIT 1`, [actionId]);
@@ -965,8 +989,8 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     if (!token) throw new BadRequestException('Enrollment token is required');
 
     const rows = await this.prisma.query<any[]>(
-      `SELECT * FROM MdmEnrollmentToken WHERE token = ? AND usedAt IS NULL AND expiresAt > NOW() LIMIT 1`,
-      [token],
+      `SELECT * FROM MdmEnrollmentToken WHERE token IN (?, ?) AND usedAt IS NULL AND expiresAt > NOW() LIMIT 1`,
+      credentialLookupValues(token),
     );
     const enrollment = rows[0];
     if (!enrollment) throw new UnauthorizedException('Enrollment token is invalid or expired');
@@ -994,7 +1018,8 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
         enrollmentStatus: 'ENROLLED',
         managementMode: dto.managementMode || 'AGENT',
         mdmProvider: dto.mdmProvider || 'FieldserviceIT',
-        mdmDeviceId: deviceToken,
+        mdmDeviceId: crypto.randomUUID(),
+        mdmDeviceTokenHash: hashCredential(deviceToken),
         lastCheckInAt: new Date(),
         complianceStatus: dto.complianceStatus || 'UNKNOWN',
         policyProfile: dto.policyProfile || enrollment.policyProfile,
@@ -1043,14 +1068,14 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
 
   async completeDeviceCommand(commandId: string, deviceToken: string, dto: any = {}) {
     const rows = await this.prisma.query<any[]>(
-      `SELECT c.*, a.mdmDeviceId, a.companyId FROM MdmCommand c
+      `SELECT c.*, a.mdmDeviceId, a.mdmDeviceTokenHash, a.companyId FROM MdmCommand c
        INNER JOIN Asset a ON a.id = c.assetId
        WHERE c.id = ?
        LIMIT 1`,
       [commandId],
     );
     const command = rows[0];
-    if (!command || command.mdmDeviceId !== deviceToken) {
+    if (!command || !credentialMatches(deviceToken, command.mdmDeviceTokenHash || command.mdmDeviceId)) {
       throw new UnauthorizedException('Device command credential is invalid');
     }
 
@@ -1076,8 +1101,12 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async findByDeviceCredential(assetId: string, deviceToken: string, companyId?: string) {
-    let sql = `SELECT * FROM Asset WHERE id = ? AND mdmDeviceId = ? AND deletedAt IS NULL`;
-    const params: any[] = [assetId, deviceToken];
+    const [hashedToken, legacyToken] = credentialLookupValues(deviceToken);
+    let sql = `SELECT * FROM Asset
+      WHERE id = ?
+        AND (mdmDeviceTokenHash = ? OR (mdmDeviceTokenHash IS NULL AND mdmDeviceId = ?))
+        AND deletedAt IS NULL`;
+    const params: any[] = [assetId, hashedToken, legacyToken];
     if (companyId) {
       sql += ` AND companyId = ?`;
       params.push(companyId);

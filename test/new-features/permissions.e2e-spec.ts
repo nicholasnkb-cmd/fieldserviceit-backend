@@ -30,7 +30,7 @@ describe('Permissions & Roles (E2E)', () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/login')
         .send({ email: 'super@fieldserviceit.com', password: 'admin123' })
-        .expect(201);
+        .expect(200);
       superToken = res.body.accessToken;
     });
 
@@ -38,7 +38,7 @@ describe('Permissions & Roles (E2E)', () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/login')
         .send({ email: 'admin@acme.com', password: 'admin123' })
-        .expect(201);
+        .expect(200);
       adminToken = res.body.accessToken;
     });
   });

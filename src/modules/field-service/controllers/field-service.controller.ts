@@ -8,15 +8,19 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 
 @Controller('dispatch')
-@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
 @BusinessOnly()
 @RequireFeature('dispatch')
+@RequirePermissions('dispatch.view')
 export class FieldServiceController {
   constructor(private fieldService: FieldServiceService) {}
 
   @Post()
+  @RequirePermissions('dispatch.create')
   dispatch(@Body() body: { ticketId: string; technicianId: string }, @CurrentUser() user: CurrentUserType) {
     const companyId = this.companyId(user);
     return this.fieldService.dispatch(body.ticketId, body.technicianId, companyId, user.id);
@@ -33,31 +37,37 @@ export class FieldServiceController {
   }
 
   @Patch(':id')
+  @RequirePermissions('dispatch.edit')
   updateStatus(@Param('id') id: string, @Body('status') status: string, @CurrentUser() user: CurrentUserType) {
     return this.fieldService.updateStatus(id, status, this.companyId(user), user.id);
   }
 
   @Post(':id/checkin')
+  @RequirePermissions('dispatch.edit')
   checkIn(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.fieldService.updateStatus(id, 'ON_SITE', this.companyId(user), user.id);
   }
 
   @Post(':id/checkout')
+  @RequirePermissions('dispatch.edit')
   checkOut(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.fieldService.updateStatus(id, 'COMPLETED', this.companyId(user), user.id);
   }
 
   @Post(':id/notes')
+  @RequirePermissions('dispatch.edit')
   addNotes(@Param('id') id: string, @Body('notes') notes: string, @CurrentUser() user: CurrentUserType) {
     return this.fieldService.addNotes(id, notes, this.companyId(user), user.id);
   }
 
   @Post(':id/signature')
+  @RequirePermissions('dispatch.edit')
   addSignature(@Param('id') id: string, @Body('signature') signature: string, @CurrentUser() user: CurrentUserType) {
     return this.fieldService.addSignature(id, signature, this.companyId(user), user.id);
   }
 
   @Post(':id/photos')
+  @RequirePermissions('dispatch.edit')
   addPhotos(@Param('id') id: string, @Body('photoUrls') photoUrls: string[], @CurrentUser() user: CurrentUserType) {
     return this.fieldService.addPhotos(id, photoUrls, this.companyId(user), user.id);
   }

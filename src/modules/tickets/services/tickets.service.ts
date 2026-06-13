@@ -165,6 +165,7 @@ export class TicketsService {
     } else {
       where.companyId = user.companyId;
     }
+    await this.applyTicketScopes(where, user.permissionScopes, user);
 
     if (query.status) where.status = query.status;
     if (query.search) {
@@ -190,10 +191,13 @@ export class TicketsService {
       this.prisma.ticket.count({ where }),
     ]);
 
-    return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+    return {
+      data: data.map((ticket: any) => this.maskSensitiveTicket(ticket, user)),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
   }
 
-  async findOne(id: string, user: any) {
+  async findOne(id: string, user: any, maskSensitive = true) {
     const where: any = { id, deletedAt: null };
 
     if (user.role === 'SUPER_ADMIN' && !user.companyId) {
@@ -205,6 +209,8 @@ export class TicketsService {
     } else {
       where.companyId = user.companyId;
     }
+    await this.applyTicketScopes(where, user.permissionScopes, user);
+    const includeInternalTimeline = this.canViewInternalTimeline(user);
 
     const ticket = await this.prisma.ticket.findFirst({
       where,
@@ -214,7 +220,12 @@ export class TicketsService {
         resolvedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
         asset: true,
         sla: true,
-        timeline: { orderBy: { createdAt: 'desc' }, take: 50, include: { actor: { select: { id: true, firstName: true, lastName: true } } } },
+        timeline: {
+          where: includeInternalTimeline ? undefined : { isInternal: false },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+          include: { actor: { select: { id: true, firstName: true, lastName: true } } },
+        },
         attachments: { include: { uploadedBy: { select: { id: true, firstName: true, lastName: true } } } },
         dispatches: true,
       },
@@ -228,11 +239,74 @@ export class TicketsService {
       (ticket as any).slaStatus = pct >= 100 ? 'breached' : pct >= 75 ? 'at_risk' : 'within_sla';
       (ticket as any).slaProgress = pct;
     }
-    return ticket;
+    return maskSensitive ? this.maskSensitiveTicket(ticket, user) : ticket;
+  }
+
+  private maskSensitiveTicket(ticket: any, user: any) {
+    if (user?.role === 'SUPER_ADMIN' || user?.userType === 'PUBLIC' || user?.permissionSlugs?.includes('tickets.sensitive.view')) return ticket;
+    const copy: any = { ...ticket };
+    if (copy.contactEmail) {
+      const [local, domain] = String(copy.contactEmail).split('@');
+      copy.contactEmail = domain ? `${local.slice(0, 1)}***@${domain}` : '***';
+    }
+    if (copy.contactPhone) {
+      const digits = String(copy.contactPhone).replace(/\D/g, '');
+      copy.contactPhone = digits.length >= 4 ? `***-***-${digits.slice(-4)}` : '***';
+    }
+    if (copy.contactName) copy.contactName = `${String(copy.contactName).slice(0, 1)}***`;
+    if (Array.isArray(copy.timeline)) {
+      copy.timeline = this.canViewInternalTimeline(user)
+        ? copy.timeline
+        : copy.timeline.filter((entry: any) => !entry.isInternal);
+    }
+    return copy;
+  }
+
+  private canViewInternalTimeline(user: any) {
+    return ['SUPER_ADMIN', 'GLOBAL_TECH', 'TENANT_ADMIN', 'TECHNICIAN'].includes(user?.role)
+      || user?.permissionSlugs?.includes('tickets.sensitive.view');
+  }
+
+  private async applyTicketScopes(where: any, scopes: any[] | undefined, user: any) {
+    const matching = (scopes || []).filter((scope) => String(scope.permissionSlug || '').startsWith('tickets.'));
+    if (!matching.length || matching.some((scope) => scope.scopeType === 'ALL')) return;
+    const alternatives: any[] = [];
+    for (const scope of matching) {
+      if (scope.scopeType === 'ASSIGNED') alternatives.push({ assignedToId: user.id });
+      if (scope.scopeType === 'LOCATION' && user.location) alternatives.push({ location: user.location });
+      if (scope.scopeType === 'CUSTOMERS') {
+        const values = this.parseScopeValues(scope.scopeValues);
+        if (values.length) alternatives.push({ companyId: { in: values } });
+      }
+      if (scope.scopeType === 'RELATIONSHIP') {
+        const relationships = await this.prisma.query<any[]>(
+          `SELECT resourceType, resourceId FROM AuthorizationRelationship
+           WHERE subjectType = 'USER' AND subjectId = ?
+             AND relationName IN ('viewer', 'editor', 'owner', 'technician')
+             AND (expiresAt IS NULL OR expiresAt > NOW(3))
+             AND resourceType IN ('TICKET', 'COMPANY')`,
+          [user.id],
+        ).catch(() => []);
+        const ticketIds = relationships.filter((item: any) => item.resourceType === 'TICKET').map((item: any) => item.resourceId);
+        const companyIds = relationships.filter((item: any) => item.resourceType === 'COMPANY').map((item: any) => item.resourceId);
+        if (ticketIds.length) alternatives.push({ id: { in: ticketIds } });
+        if (companyIds.length) alternatives.push({ companyId: { in: companyIds } });
+      }
+    }
+    where.AND = [...(where.AND || []), alternatives.length ? { OR: alternatives } : { id: '__scope_denied__' }];
+  }
+
+  private parseScopeValues(value: any): string[] {
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+      return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
   }
 
   async update(id: string, dto: UpdateTicketDto, user: any, userId?: string) {
-    const ticket = await this.findOne(id, user);
+    const ticket = await this.findOne(id, user, false);
     const companyId = ticket.companyId;
     const newStatus = dto.status;
     if (newStatus && newStatus !== ticket.status) {
@@ -334,7 +408,7 @@ export class TicketsService {
   }
 
   async remove(id: string, user: any) {
-    const ticket = await this.findOne(id, user);
+    const ticket = await this.findOne(id, user, false);
     const deleted = await this.prisma.ticket.update({
       where: { id },
       data: { deletedAt: new Date() },
@@ -349,7 +423,7 @@ export class TicketsService {
   }
 
   async assign(id: string, targetUserId: string, user: any, actorUserId?: string) {
-    const ticket = await this.findOne(id, user);
+    const ticket = await this.findOne(id, user, false);
     const companyId = ticket.companyId;
     this.validateTransition(ticket.status, 'ASSIGNED');
     const updated = await this.prisma.ticket.update({
@@ -379,7 +453,7 @@ export class TicketsService {
   }
 
   async resolve(id: string, resolution: string, user: any, userId?: string) {
-    const ticket = await this.findOne(id, user);
+    const ticket = await this.findOne(id, user, false);
     const companyId = ticket.companyId;
     this.validateTransition(ticket.status, 'RESOLVED');
     const updated = await this.prisma.ticket.update({

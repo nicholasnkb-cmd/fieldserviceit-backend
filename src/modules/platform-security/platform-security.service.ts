@@ -89,10 +89,12 @@ export class PlatformSecurityService {
 
   async updateSecurityPolicy(user: CurrentUser, dto: any) {
     this.assertSuperAdmin(user);
+    await this.snapshotPolicy('PLATFORM_SECURITY', SECURITY_POLICY_ID, await this.securityPolicy(), user.id);
     const values = {
       requireMfaSuperAdmin: this.boolean(dto.requireMfaSuperAdmin),
       requireMfaTenantAdmin: this.boolean(dto.requireMfaTenantAdmin),
       requireMfaTechnicians: this.boolean(dto.requireMfaTechnicians),
+      requirePhishingResistantSuperAdmin: this.boolean(dto.requirePhishingResistantSuperAdmin),
       sessionLifetimeDays: this.integer(dto.sessionLifetimeDays, 1, 30, 7),
       maxActiveSessions: this.integer(dto.maxActiveSessions, 1, 50, 10),
       requireNetworkApproval: this.boolean(dto.requireNetworkApproval, true),
@@ -100,15 +102,76 @@ export class PlatformSecurityService {
     await this.db.execute(
       `UPDATE PlatformSecurityPolicy SET
        requireMfaSuperAdmin = ?, requireMfaTenantAdmin = ?, requireMfaTechnicians = ?,
+       requirePhishingResistantSuperAdmin = ?,
        sessionLifetimeDays = ?, maxActiveSessions = ?, requireNetworkApproval = ?,
        updatedById = ?, updatedAt = NOW(3) WHERE id = ?`,
       [
         values.requireMfaSuperAdmin, values.requireMfaTenantAdmin, values.requireMfaTechnicians,
+        values.requirePhishingResistantSuperAdmin,
         values.sessionLifetimeDays, values.maxActiveSessions, values.requireNetworkApproval,
         user.id, SECURITY_POLICY_ID,
       ],
     );
     return this.securityPolicy();
+  }
+
+  async securityPolicyHistory() {
+    const rows = await this.db.query<any[]>(
+      `SELECT s.id, s.policyType, s.policyId, s.snapshot, s.createdAt,
+              u.firstName, u.lastName, u.email
+       FROM SecurityPolicySnapshot s LEFT JOIN User u ON u.id = s.createdById
+       WHERE s.policyType = 'PLATFORM_SECURITY' AND s.policyId = ?
+       ORDER BY s.createdAt DESC LIMIT 50`,
+      [SECURITY_POLICY_ID],
+    ).catch(() => []);
+    return rows.map((row) => ({ ...row, snapshot: this.parseJson(row.snapshot, {}) }));
+  }
+
+  async rollbackSecurityPolicy(user: CurrentUser, snapshotId: string) {
+    this.assertSuperAdmin(user);
+    const rows = await this.db.query<any[]>(
+      `SELECT snapshot FROM SecurityPolicySnapshot
+       WHERE id = ? AND policyType = 'PLATFORM_SECURITY' AND policyId = ? LIMIT 1`,
+      [snapshotId, SECURITY_POLICY_ID],
+    );
+    if (!rows[0]) throw new NotFoundException('Policy snapshot not found');
+    const snapshot = this.parseJson(rows[0].snapshot, {});
+    await this.snapshotPolicy('PLATFORM_SECURITY', SECURITY_POLICY_ID, await this.securityPolicy(), user.id);
+    return this.updateSecurityPolicyValues(user, snapshot);
+  }
+
+  private async updateSecurityPolicyValues(user: CurrentUser, dto: any) {
+    const values = {
+      requireMfaSuperAdmin: this.boolean(dto.requireMfaSuperAdmin),
+      requireMfaTenantAdmin: this.boolean(dto.requireMfaTenantAdmin),
+      requireMfaTechnicians: this.boolean(dto.requireMfaTechnicians),
+      requirePhishingResistantSuperAdmin: this.boolean(dto.requirePhishingResistantSuperAdmin),
+      sessionLifetimeDays: this.integer(dto.sessionLifetimeDays, 1, 30, 7),
+      maxActiveSessions: this.integer(dto.maxActiveSessions, 1, 50, 10),
+      requireNetworkApproval: this.boolean(dto.requireNetworkApproval, true),
+    };
+    await this.db.execute(
+      `UPDATE PlatformSecurityPolicy SET
+       requireMfaSuperAdmin = ?, requireMfaTenantAdmin = ?, requireMfaTechnicians = ?,
+       requirePhishingResistantSuperAdmin = ?,
+       sessionLifetimeDays = ?, maxActiveSessions = ?, requireNetworkApproval = ?,
+       updatedById = ?, updatedAt = NOW(3) WHERE id = ?`,
+      [
+        values.requireMfaSuperAdmin, values.requireMfaTenantAdmin, values.requireMfaTechnicians,
+        values.requirePhishingResistantSuperAdmin,
+        values.sessionLifetimeDays, values.maxActiveSessions, values.requireNetworkApproval,
+        user.id, SECURITY_POLICY_ID,
+      ],
+    );
+    return this.securityPolicy();
+  }
+
+  private async snapshotPolicy(policyType: string, policyId: string, snapshot: any, actorId: string) {
+    await this.db.execute(
+      `INSERT INTO SecurityPolicySnapshot (id, policyType, policyId, snapshot, createdById, createdAt)
+       VALUES (?, ?, ?, ?, ?, NOW(3))`,
+      [crypto.randomUUID(), policyType, policyId, JSON.stringify(snapshot || {}), actorId],
+    ).catch(() => {});
   }
 
   async listOidcProviders(user: CurrentUser) {
@@ -424,14 +487,14 @@ export class PlatformSecurityService {
     if (decision === 'APPROVE') {
       await this.db.execute(
         `UPDATE NetworkDeviceAction SET approvalStatus = 'APPROVED', approvedById = ?, approvedAt = NOW(3),
-         approvalNote = ?, status = 'QUEUED' WHERE id = ?`,
-        [user.id, String(note || '').slice(0, 500) || null, id],
+         approvalNote = ?, status = 'QUEUED' WHERE id = ? AND companyId = ?`,
+        [user.id, String(note || '').slice(0, 500) || null, id, action.companyId],
       );
     } else {
       await this.db.execute(
         `UPDATE NetworkDeviceAction SET approvalStatus = 'REJECTED', rejectedById = ?, rejectedAt = NOW(3),
-         approvalNote = ?, status = 'REJECTED' WHERE id = ?`,
-        [user.id, String(note || '').slice(0, 500) || null, id],
+         approvalNote = ?, status = 'REJECTED' WHERE id = ? AND companyId = ?`,
+        [user.id, String(note || '').slice(0, 500) || null, id, action.companyId],
       );
     }
     return (await this.db.query<any[]>(`SELECT * FROM NetworkDeviceAction WHERE id = ? LIMIT 1`, [id]))[0];

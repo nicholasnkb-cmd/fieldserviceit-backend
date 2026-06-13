@@ -6,6 +6,7 @@ import { FeatureAccessGuard } from '../../common/guards/feature-access.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { CustomerPortalService } from './customer-portal.service';
+import { AuthorizationExempt } from '../../common/decorators/authorization-exempt.decorator';
 
 @Controller('customer-portal')
 @UseGuards(JwtAuthGuard, TenantGuard, FeatureAccessGuard)
@@ -13,21 +14,25 @@ import { CustomerPortalService } from './customer-portal.service';
 export class CustomerPortalController {
   constructor(private service: CustomerPortalService) {}
 
+  @AuthorizationExempt('Customer portal service enforces requester ownership and tenant scope', 'customer-experience', '2026-09-30')
   @Get('summary')
   summary(@CurrentUser() user: CurrentUserType) {
     return this.service.summary(user);
   }
 
+  @AuthorizationExempt('Customer portal service enforces requester ownership and tenant scope', 'customer-experience', '2026-09-30')
   @Get('feedback')
   listFeedback(@CurrentUser() user: CurrentUserType) {
     return this.service.listFeedback(user);
   }
 
+  @AuthorizationExempt('Customer portal service enforces requester ownership and tenant scope', 'customer-experience', '2026-09-30')
   @Post('tickets/:ticketId/message')
   addMessage(@Param('ticketId') ticketId: string, @Body() dto: any, @CurrentUser() user: CurrentUserType) {
     return this.service.addCustomerMessage(ticketId, dto, user);
   }
 
+  @AuthorizationExempt('Customer portal service enforces requester ownership and tenant scope', 'customer-experience', '2026-09-30')
   @Post('tickets/:ticketId/feedback')
   saveFeedback(@Param('ticketId') ticketId: string, @Body() dto: any, @CurrentUser() user: CurrentUserType) {
     return this.service.saveFeedback(ticketId, dto, user);

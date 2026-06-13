@@ -11,6 +11,22 @@ export class UpdatePlanDto {
 
   @IsOptional()
   @IsNumber()
+  annualPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  seatMonthlyPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  seatAnnualPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  trialDays?: number;
+
+  @IsOptional()
+  @IsNumber()
   maxUsers?: number;
 
   @IsOptional()

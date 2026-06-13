@@ -1,4 +1,4 @@
-import { ConflictException, BadRequestException } from '@nestjs/common';
+import { ConflictException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
@@ -15,6 +15,7 @@ describe('AuthService', () => {
   let mockJwt: any;
   let mockConfig: any;
   let mockEmail: any;
+  let mockSessions: any;
 
   beforeEach(() => {
     mockJwt = {
@@ -69,6 +70,14 @@ describe('AuthService', () => {
       status: jest.fn(),
       disable: jest.fn(),
     };
+    mockSessions = {
+      hashRefreshToken: jest.fn((value: string) => `sha256:${value}`),
+      findByRefreshToken: jest.fn(),
+      findReusedToken: jest.fn(),
+      revokeActiveFamily: jest.fn(),
+      revokeByRefreshToken: jest.fn(),
+      recordRotation: jest.fn(),
+    };
     service = new AuthService(
       mockPrisma as any,
       mockJwt as any,
@@ -76,7 +85,27 @@ describe('AuthService', () => {
       mockEmail as any,
       mockLogger as any,
       mockMfa as any,
+      mockSessions as any,
     );
+  });
+
+  describe('refresh token reuse', () => {
+    it('revokes the active family and records a critical alert', async () => {
+      mockSessions.findByRefreshToken.mockResolvedValue(null);
+      mockSessions.findReusedToken.mockResolvedValue({
+        sessionId: 'session-1',
+        userId: 'user-1',
+        companyId: 'company-1',
+      });
+
+      await expect(service.refresh('replayed-token')).rejects.toThrow(UnauthorizedException);
+
+      expect(mockSessions.revokeActiveFamily).toHaveBeenCalledWith('user-1', 'refresh-token-reuse');
+      expect(mockPrisma.execute).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO SecurityAlert'),
+        expect.arrayContaining(['company-1', 'REFRESH_TOKEN_REUSE', 'critical', 'user-1']),
+      );
+    });
   });
 
   describe('registerBusiness', () => {

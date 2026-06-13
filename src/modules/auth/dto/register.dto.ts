@@ -14,29 +14,36 @@ export class RegisterDto {
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(80)
   firstName: string;
 
   @IsString()
   @IsNotEmpty()
+  @MaxLength(80)
   lastName: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(24)
   phone?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(160)
   location?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(40)
   preferredContactMethod?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(80)
   timezone?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(80)
   planName?: string;
 }

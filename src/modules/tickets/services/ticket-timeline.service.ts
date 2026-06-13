@@ -12,9 +12,12 @@ export class TicketTimelineService {
     });
   }
 
-  async getTimeline(ticketId: string) {
+  async getTimeline(ticketId: string, includeInternal = false) {
     return this.prisma.ticketTimeline.findMany({
-      where: { ticketId },
+      where: {
+        ticketId,
+        ...(includeInternal ? {} : { isInternal: false }),
+      },
       orderBy: { createdAt: 'desc' },
       include: { actor: { select: { id: true, firstName: true, lastName: true } } },
     });

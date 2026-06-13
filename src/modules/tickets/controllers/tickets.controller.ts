@@ -20,10 +20,13 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { TicketParticipantNotifierService } from '../services/ticket-participant-notifier.service';
 import { EmailDeliveryService } from '../../notifications/services/email-delivery.service';
 import { EmailService } from '../../notifications/services/email.service';
+import { PermissionsGuard } from '../../../common/guards/permissions.guard';
+import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 
 @Controller('tickets')
-@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
 @RequireFeature('tickets')
+@RequirePermissions('tickets.view')
 export class TicketsController {
   constructor(
     private ticketsService: TicketsService,
@@ -54,12 +57,14 @@ export class TicketsController {
     return ticket;
   }
 
-  @Public()
+  private canViewInternalTimeline(user: CurrentUserType) {
+    return ['SUPER_ADMIN', 'GLOBAL_TECH', 'TENANT_ADMIN', 'TECHNICIAN'].includes(user.role)
+      || user.permissionSlugs?.includes('tickets.sensitive.view');
+  }
+
   @Post()
-  create(@Body() dto: CreateTicketDto, @CurrentUser() user?: CurrentUserType) {
-    if (!user) {
-      return this.ticketsService.createPublic(dto);
-    }
+  @RequirePermissions('tickets.create')
+  create(@Body() dto: CreateTicketDto, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.create(dto, user.companyId, user.id, user.userType);
   }
 
@@ -69,10 +74,12 @@ export class TicketsController {
   }
 
   @Get('export/csv')
+  @RequirePermissions('tickets.export')
   @Header('Content-Type', 'text/csv')
   @Header('Content-Disposition', 'attachment; filename="tickets.csv"')
   async exportCsv(@Query('status') status: string, @CurrentUser() user: CurrentUserType, @Res() res: Response) {
-    const csv = await this.exportService.exportCsv(user.companyId, status);
+    const result = await this.ticketsService.findAll(user, { page: 1, limit: 10000, status });
+    const csv = this.exportService.exportCsv(result.data);
     res.send(csv);
   }
 
@@ -117,29 +124,34 @@ export class TicketsController {
 
   @BusinessOnly()
   @Patch(':id')
+  @RequirePermissions('tickets.edit')
   update(@Param('id') id: string, @Body() dto: UpdateTicketDto, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.update(id, dto, user, user.id);
   }
 
   @BusinessOnly()
   @Delete(':id')
+  @RequirePermissions('tickets.delete')
   remove(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.remove(id, user);
   }
 
   @BusinessOnly()
   @Post(':id/assign')
+  @RequirePermissions('tickets.edit')
   assign(@Param('id') id: string, @Body('userId') userId: string, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.assign(id, userId, user, user.id);
   }
 
   @BusinessOnly()
   @Post(':id/resolve')
+  @RequirePermissions('tickets.edit')
   resolve(@Param('id') id: string, @Body('resolution') resolution: string, @CurrentUser() user: CurrentUserType) {
     return this.ticketsService.resolve(id, resolution, user, user.id);
   }
 
   @Post(':id/comments')
+  @RequirePermissions('tickets.edit')
   async addComment(@Param('id') id: string, @Body() dto: CreateCommentDto, @CurrentUser() user: CurrentUserType) {
     await this.assertTicketAccess(id, user);
     const entry = await this.timelineService.addEntry(id, user.id, 'COMMENT', dto.comment, undefined, undefined, dto.isInternal);
@@ -156,7 +168,7 @@ export class TicketsController {
   @Get(':id/timeline')
   async getTimeline(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     await this.assertTicketAccess(id, user);
-    return this.timelineService.getTimeline(id);
+    return this.timelineService.getTimeline(id, this.canViewInternalTimeline(user));
   }
 
   @Get(':id/email-deliveries')
@@ -168,6 +180,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Post(':id/attachments')
+  @RequirePermissions('tickets.edit')
   async addAttachment(@Param('id') id: string, @Body() body: { fileUrl: string; fileName: string; fileSize: number; mimeType: string }, @CurrentUser() user: CurrentUserType) {
     await this.assertTicketAccess(id, user);
     const attachment = await this.prisma.ticketAttachment.create({
@@ -185,6 +198,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Delete(':id/attachments/:attachmentId')
+  @RequirePermissions('tickets.delete')
   async removeAttachment(@Param('id') id: string, @Param('attachmentId') attachmentId: string, @CurrentUser() user: CurrentUserType) {
     await this.assertTicketAccess(id, user);
     const rows = await this.prisma.query<any[]>(`SELECT id, fileName FROM TicketAttachment WHERE id = ? AND ticketId = ? LIMIT 1`, [attachmentId, id]);
@@ -201,6 +215,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Post('bulk/status')
+  @RequirePermissions('tickets.edit')
   async bulkStatus(@Body() body: { ids: string[]; status: string }, @CurrentUser() user: CurrentUserType) {
     const results = [];
     for (const id of body.ids) {
@@ -214,6 +229,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Post('bulk/assign')
+  @RequirePermissions('tickets.edit')
   async bulkAssign(@Body() body: { ids: string[]; userId: string }, @CurrentUser() user: CurrentUserType) {
     const results = [];
     for (const id of body.ids) {
@@ -227,6 +243,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Post('bulk/delete')
+  @RequirePermissions('tickets.delete')
   async bulkDelete(@Body() body: { ids: string[] }, @CurrentUser() user: CurrentUserType) {
     const results = [];
     for (const id of body.ids) {
@@ -240,6 +257,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Post('templates')
+  @RequirePermissions('tickets.edit')
   async createTemplate(@Body() body: { name: string; description?: string; category?: string; subcategory?: string; priority?: string; title?: string; body?: string }, @CurrentUser() user: CurrentUserType) {
     const data = {
       name: body.name,
@@ -259,6 +277,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Delete('templates/:id')
+  @RequirePermissions('tickets.delete')
   async deleteTemplate(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     const template = await this.prisma.ticketTemplate.findMany({ where: { id, companyId: user.companyId, isActive: true } });
     if (!template[0]) throw new NotFoundException('Template not found');
@@ -267,6 +286,7 @@ export class TicketsController {
   }
 
   @Post(':id/time')
+  @RequirePermissions('tickets.edit')
   async addTimeEntry(@Param('id') id: string, @Body() body: { duration: number; description?: string; billable?: boolean; startTime?: string }, @CurrentUser() user: CurrentUserType) {
     await this.assertTicketAccess(id, user);
     const entry = await this.prisma.timeEntry.create({
@@ -303,6 +323,7 @@ export class TicketsController {
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Public()
   @Post('inbound-email')
+  @RequirePermissions()
   async inboundEmail(
     @Body() body: { from: string; subject: string; text?: string; html?: string; messageId?: string; inReplyTo?: string },
     @Headers('x-api-key') apiKey?: string,

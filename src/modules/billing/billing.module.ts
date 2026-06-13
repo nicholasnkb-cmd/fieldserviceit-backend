@@ -4,11 +4,12 @@ import { PlansController } from './controllers/plans.controller';
 import { PlansService } from './services/plans.service';
 import { BillingService } from './services/billing.service';
 import { UsageService } from './services/usage.service';
+import { BillingProviderFactory } from './services/billing-provider.factory';
 
 @Global()
 @Module({
   controllers: [BillingController, PlansController],
-  providers: [PlansService, BillingService, UsageService],
-  exports: [PlansService, UsageService],
+  providers: [PlansService, BillingProviderFactory, BillingService, UsageService],
+  exports: [PlansService, BillingService, UsageService],
 })
 export class BillingModule {}
