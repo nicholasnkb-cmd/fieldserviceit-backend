@@ -105,7 +105,7 @@ export class AiAgentService {
         ? { provider: descriptor.provider, model: descriptor.model, status: synthesis ? 'completed' : 'analysis-only' }
         : { ...this.aiModel.descriptor(), status: this.aiModel.isConfigured() ? 'fallback' : 'not-configured' },
       intent,
-      answer: synthesis?.data.answer || this.answerFromResults(intent, snapshot, results),
+      answer: synthesis?.data.answer || this.answerFromResults(cleanQuestion, intent, snapshot, results),
       facts: synthesis?.data.facts?.length ? synthesis.data.facts : this.factsFromResults(snapshot, results),
       suggestedActions: synthesis?.data.suggestedActions?.length
         ? synthesis.data.suggestedActions
@@ -633,21 +633,87 @@ export class AiAgentService {
     return ['Tenant scope is active; answers and actions are limited to the selected business.'];
   }
 
-  private answerFromResults(intent: AgentIntent, snapshot: Record<string, number>, results: any[]) {
+  private answerFromResults(question: string, intent: AgentIntent, snapshot: Record<string, number>, results: any[]) {
     const completed = results.filter((result) => result.status === 'completed');
     const skipped = results.filter((result) => result.status === 'skipped');
-    const parts = [
-      `I treated this as a ${intent.primary} request with ${intent.confidence}% confidence.`,
-      `Current scope has ${snapshot.openTickets} open tickets, ${snapshot.assets} assets, ${snapshot.activeNetworkAlerts} active network alerts, and ${snapshot.rmmProviders} active RMM providers.`,
-    ];
+    const normalized = question.toLowerCase();
+    if (this.matches(normalized, ['hello', 'hi ', 'hey', 'good morning', 'good afternoon'])) {
+      return 'Hello. I can inspect tickets, assets, device compliance, network health, RMM syncs, and enrollment state. I can also prepare approved actions such as creating a ticket or enrollment token.';
+    }
+    if (this.matches(normalized, ['what can you do', 'help me', 'capabilities', 'how do i use', 'what do you do'])) {
+      return 'I can search and summarize tickets, locate assets, report device compliance, inspect network alerts and health snapshots, review RMM sync status, and prepare service tickets or MDM enrollment tokens for your approval.';
+    }
+
+    const parts: string[] = [];
     const ticketSearch = completed.find((result) => result.tool === 'search_tickets');
-    if (ticketSearch) parts.push(`Ticket search returned ${ticketSearch.data.count} matching ticket${ticketSearch.data.count === 1 ? '' : 's'}.`);
+    const backlog = completed.find((result) => result.tool === 'summarize_ticket_backlog');
     const assetSearch = completed.find((result) => result.tool === 'search_assets');
-    if (assetSearch) parts.push(`Asset search returned ${assetSearch.data.count} matching asset${assetSearch.data.count === 1 ? '' : 's'}.`);
     const compliance = completed.find((result) => result.tool === 'device_compliance_report');
-    if (compliance) parts.push(`Device compliance is ${compliance.data.complianceRate}% across ${compliance.data.enrolled} enrolled device${compliance.data.enrolled === 1 ? '' : 's'}.`);
+    const network = completed.find((result) => result.tool === 'network_health_report');
+    const rmm = completed.find((result) => result.tool === 'rmm_summary');
+
+    if (intent.primary === 'ticket' || intent.secondary.includes('ticket')) {
+      if (ticketSearch?.data.count) {
+        const items = ticketSearch.data.items.slice(0, 3).map((item: any) => `${item.ticketNumber}: ${item.title} (${item.status}, ${item.priority})`);
+        parts.push(`I found ${ticketSearch.data.count} matching ticket${ticketSearch.data.count === 1 ? '' : 's'}: ${items.join('; ')}.`);
+      } else {
+        parts.push(`I found no tickets matching "${intent.entities.query || question}".`);
+      }
+      if (backlog?.data.oldestOpen?.length) {
+        const oldest = backlog.data.oldestOpen[0];
+        parts.push(`The oldest unresolved ticket is ${oldest.ticketNumber}: ${oldest.title}.`);
+      }
+    }
+
+    if (intent.primary === 'asset' || intent.secondary.includes('asset')) {
+      if (assetSearch?.data.count) {
+        const items = assetSearch.data.items.slice(0, 3).map((item: any) => `${item.name} (${item.assetType}, ${item.status})`);
+        parts.push(`I found ${assetSearch.data.count} matching asset${assetSearch.data.count === 1 ? '' : 's'}: ${items.join('; ')}.`);
+      } else {
+        parts.push(`I found no assets matching "${intent.entities.query || question}".`);
+      }
+    }
+
+    if (intent.primary === 'compliance' || intent.secondary.includes('compliance')) {
+      if (compliance) {
+        parts.push(
+          `Device compliance is ${compliance.data.complianceRate}% across ${compliance.data.enrolled} enrolled devices. ` +
+          `${compliance.data.nonCompliant} are non-compliant, ${compliance.data.stale} are stale, and ${compliance.data.unmanaged} are unmanaged.`,
+        );
+      }
+    }
+
+    if (intent.primary === 'network' || intent.secondary.includes('network')) {
+      if (network?.status === 'completed') {
+        parts.push(
+          `The current scope has ${network.data.networkDevices} network devices, ${network.data.activeAlerts} active alerts, ` +
+          `and ${network.data.syslogEvents24h} syslog events in the last 24 hours.`,
+        );
+      } else {
+        parts.push(`The current scope has ${snapshot.activeNetworkAlerts} active network alerts.`);
+      }
+    }
+
+    if (intent.primary === 'rmm' || intent.secondary.includes('rmm')) {
+      if (rmm?.status === 'completed') {
+        parts.push(`I found ${rmm.data.providers.length} RMM provider configurations and ${rmm.data.recentSyncs.length} recent sync runs.`);
+      } else {
+        parts.push(`The current scope has ${snapshot.rmmProviders} active RMM providers.`);
+      }
+    }
+
+    if (intent.primary === 'enrollment') {
+      parts.push(`There are ${snapshot.enrolledDevices} enrolled devices in the current scope. Creating a new enrollment token requires an approved plan.`);
+    }
+
+    if (intent.primary === 'general' && parts.length === 0) {
+      parts.push(
+        'Model reasoning is not configured, so I cannot reliably answer this open-ended question yet. ' +
+        'I can still answer questions about tickets, assets, compliance, network health, RMM syncs, and device enrollment.',
+      );
+    }
+
     if (skipped.length) parts.push(`${skipped.length} tool${skipped.length === 1 ? '' : 's'} could not run because context or tables were unavailable.`);
-    parts.push('Create a plan if you want me to take an approved action.');
     return parts.join(' ');
   }
 
