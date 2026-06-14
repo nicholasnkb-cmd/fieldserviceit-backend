@@ -15,7 +15,7 @@ export class MigrationsService {
 
   constructor(
     @Inject(forwardRef(() => DatabaseService))
-    private readonly db: DatabaseService,
+    private readonly db: Pick<DatabaseService, 'query'>,
   ) {}
 
   async run(): Promise<void> {
