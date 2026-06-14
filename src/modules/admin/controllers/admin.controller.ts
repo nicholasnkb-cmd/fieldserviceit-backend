@@ -501,6 +501,18 @@ export class AdminController {
   }
 
   @RequirePermissions('roles.manage')
+  @Post('roles/:id/history/:historyId/rollback')
+  @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
+  @RequireStepUp()
+  rollbackRolePermissions(
+    @Param('id') id: string,
+    @Param('historyId') historyId: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return this.adminService.rollbackRolePermissions(id, historyId, user);
+  }
+
+  @RequirePermissions('roles.manage')
   @Post('roles/:id/analyze-permissions')
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
   analyzeRolePermissions(

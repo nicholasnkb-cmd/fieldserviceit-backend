@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Patch, Put, Body, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Patch, Post, Put, Body, UseGuards } from '@nestjs/common';
 import { SettingsService } from '../services/settings.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
@@ -23,10 +23,22 @@ import { TenantBranding, TenantCustomization } from '../tenant-customization';
 export class SettingsController {
   constructor(private settingsService: SettingsService) {}
 
+  private companyId(user: CurrentUserType) {
+    return user.effectiveCompanyId || user.companyId;
+  }
+
   @RequirePermissions('settings.view')
   @Get()
   getSettings(@CurrentUser() user: CurrentUserType) {
-    return this.settingsService.getSettings(user.companyId);
+    return this.settingsService.getSettings(this.companyId(user));
+  }
+
+  @RequirePermissions('settings.view')
+  @Get('history')
+  @UseGuards(RolesGuard)
+  @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
+  getHistory(@CurrentUser() user: CurrentUserType) {
+    return this.settingsService.getHistory(this.companyId(user));
   }
 
   @RequirePermissions('settings.manage')
@@ -42,7 +54,7 @@ export class SettingsController {
     featureOverrides?: Record<string, boolean>;
     restrictions?: Record<string, string | number | boolean>;
   }, @CurrentUser() user: CurrentUserType) {
-    return this.settingsService.updateSettings(user.companyId, dto);
+    return this.settingsService.updateSettings(this.companyId(user), dto, user.id);
   }
 
   @RequirePermissions('settings.manage')
@@ -50,7 +62,7 @@ export class SettingsController {
   @UseGuards(RolesGuard)
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
   updateBranding(@Body() branding: TenantBranding, @CurrentUser() user: CurrentUserType) {
-    return this.settingsService.updateBranding(user.companyId, branding);
+    return this.settingsService.updateBranding(this.companyId(user), branding, user.id);
   }
 
   @RequirePermissions('settings.manage')
@@ -58,7 +70,7 @@ export class SettingsController {
   @UseGuards(RolesGuard)
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
   updateCustomization(@Body() customization: TenantCustomization, @CurrentUser() user: CurrentUserType) {
-    return this.settingsService.updateCustomization(user.companyId, customization);
+    return this.settingsService.updateCustomization(this.companyId(user), customization, user.id);
   }
 
   @RequirePermissions('settings.manage')
@@ -66,6 +78,14 @@ export class SettingsController {
   @UseGuards(RolesGuard)
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
   resetCustomization(@CurrentUser() user: CurrentUserType) {
-    return this.settingsService.resetCustomization(user.companyId);
+    return this.settingsService.resetCustomization(this.companyId(user), user.id);
+  }
+
+  @RequirePermissions('settings.manage')
+  @Post('history/:id/rollback')
+  @UseGuards(RolesGuard)
+  @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
+  rollback(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.settingsService.rollback(this.companyId(user), id, user.id);
   }
 }

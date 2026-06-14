@@ -1019,6 +1019,28 @@ export class AdminService {
     return updated;
   }
 
+  async rollbackRolePermissions(roleId: string, historyId: string, actor: CurrentUser) {
+    await this.assertRoleScope(roleId, actor, true);
+    const rows = await this.prisma.query<any[]>(
+      `SELECT id, companyId, resourceId, diff
+       FROM AuditLog
+       WHERE id = ? AND resourceType = 'ROLE_PERMISSIONS' AND resourceId = ?
+       LIMIT 1`,
+      [historyId, roleId],
+    );
+    const entry = rows[0];
+    if (!entry) throw new NotFoundException('Permission history version not found');
+    if (actor.role !== 'SUPER_ADMIN' && entry.companyId !== actor.companyId) {
+      throw new ForbiddenException('Permission history version is outside your tenant');
+    }
+    const diff = this.parseJson(entry.diff) || {};
+    if (!Array.isArray(diff.before)) throw new BadRequestException('Permission history version cannot be restored');
+    return this.updateRole(roleId, {
+      permissionSlugs: diff.before,
+      acknowledgeCriticalRemoval: true,
+    }, actor);
+  }
+
   async deleteRole(roleId: string, actor?: CurrentUser) {
     const role = actor
       ? await this.assertRoleScope(roleId, actor, true)

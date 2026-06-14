@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, OnApplicationShutdown, Logger, Optional, BadRequestException } from '@nestjs/common';
 import { createPool, Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import { randomUUID } from 'crypto';
 import { MigrationsService } from './migrations/migrations.service';
 import { StructuredLogger } from '../common/logger/structured-logger.service';
 
@@ -2018,12 +2019,22 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
   auditLog = {
     create: async ({ data }: { data: Record<string, any> }) => {
-      const cols = Object.keys(data);
-      const values = Object.values(data);
+      const record = {
+        id: data.id || randomUUID(),
+        createdAt: data.createdAt || new Date(),
+        ...data,
+      };
+      const cols = Object.keys(record);
+      const values = Object.values(record);
       const placeholders = cols.map(() => '?').join(', ');
       const sql = `INSERT INTO AuditLog (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`;
       await this.execute(sql, values);
-      return data;
+      return record;
+    },
+
+    findUnique: async ({ where }: { where: { id: string } }) => {
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM AuditLog WHERE id = ? LIMIT 1`, [where.id]);
+      return rows[0] || null;
     },
 
     findMany: async ({ where, orderBy, skip, take, include }: { where?: Record<string, any>; orderBy?: Record<string, 'asc' | 'desc'>; skip?: number; take?: number; include?: Record<string, any> }) => {
@@ -2046,7 +2057,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       const rows = await this.query<RowDataPacket[]>(sql, values);
       if (include?.actor) {
         for (const row of rows) {
-          const actorRows = await this.query<RowDataPacket[]>(`SELECT id, firstName, lastName FROM User WHERE id = ? LIMIT 1`, [row.actorId]);
+          const actorRows = await this.query<RowDataPacket[]>(`SELECT id, firstName, lastName, email FROM User WHERE id = ? LIMIT 1`, [row.actorId]);
           row.actor = actorRows[0] || null;
         }
       }

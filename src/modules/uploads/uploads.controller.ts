@@ -83,7 +83,7 @@ export class UploadsController {
     const companyId = user.effectiveCompanyId || user.companyId;
     const companyDir = companyId || 'platform';
     const url = await this.uploadsService.saveBrandingImage(file, `branding/${companyDir}`, field);
-    const company = await this.settingsService.configureUploadedImage(companyId, field, url);
+    const company = await this.settingsService.configureUploadedImage(companyId, field, url, user.id);
     return { url, field, company };
   }
 
