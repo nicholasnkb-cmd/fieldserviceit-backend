@@ -40,6 +40,7 @@ import { SecurityCenterModule } from './modules/security-center/security-center.
 import { TopologyModule } from './modules/topology/topology.module';
 import { CatalogRequestsModule } from './modules/catalog-requests/catalog-requests.module';
 import { PlatformSecurityModule } from './modules/platform-security/platform-security.module';
+import { EndpointOperationsModule } from './modules/endpoint-operations/endpoint-operations.module';
 
 @Module({
   imports: [
@@ -122,6 +123,7 @@ import { PlatformSecurityModule } from './modules/platform-security/platform-sec
     TopologyModule,
     CatalogRequestsModule,
     PlatformSecurityModule,
+    EndpointOperationsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },

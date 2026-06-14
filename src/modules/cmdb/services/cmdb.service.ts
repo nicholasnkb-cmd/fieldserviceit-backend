@@ -276,7 +276,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
   async runDeviceAction(id: string, action: string, body: any, companyId: string, requestedById?: string) {
     const asset = await this.findOne(id, companyId);
     const normalizedAction = String(action || '').toUpperCase();
-    const allowed = ['LOCK', 'WIPE', 'RESTART', 'LOST_MODE', 'CLEAR_LOST_MODE', 'SYNC', 'PUSH_POLICY'];
+    const allowed = ['LOCK', 'WIPE', 'RESTART', 'LOST_MODE', 'CLEAR_LOST_MODE', 'SYNC', 'PUSH_POLICY', 'INSTALL_PATCHES'];
     if (!allowed.includes(normalizedAction)) {
       throw new NotFoundException('Device action not supported');
     }
