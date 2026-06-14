@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../../database/prisma.service';
 import { TicketParticipantNotifierService } from '../../tickets/services/ticket-participant-notifier.service';
+import { AgentHistoryItem, AiModelService, ModelAnalysis } from './ai-model.service';
 
 type AgentStep = {
   id: string;
@@ -20,6 +21,7 @@ type AgentTool = {
 
 type AgentIntent = {
   primary: string;
+  secondary: string[];
   confidence: number;
   entities: {
     status?: string;
@@ -47,57 +49,77 @@ export class AiAgentService {
   constructor(
     private prisma: PrismaService,
     private participantNotifier: TicketParticipantNotifierService,
+    private aiModel: AiModelService,
   ) {}
 
   listTools() {
     return { data: tools };
   }
 
-  async plan(goal: string, user: any) {
+  async plan(goal: string, user: any, history: AgentHistoryItem[] = []) {
     const cleanGoal = this.cleanGoal(goal);
-    const intent = this.classifyIntent(cleanGoal);
-    const steps = this.buildPlan(cleanGoal, intent);
     const snapshot = await this.workspaceSnapshot(user);
+    const modelAnalysis = await this.aiModel.analyze(cleanGoal, snapshot, history);
+    const intent = modelAnalysis ? this.intentFromModel(modelAnalysis.data) : this.classifyIntent(cleanGoal);
+    const readTools = modelAnalysis?.data.readTools;
+    const steps = this.buildPlan(cleanGoal, intent, readTools);
+    const descriptor = modelAnalysis
+      ? { provider: modelAnalysis.provider, model: modelAnalysis.model, status: 'completed' }
+      : { ...this.aiModel.descriptor(), status: this.aiModel.isConfigured() ? 'fallback' : 'not-configured' };
 
     return {
       goal: cleanGoal,
-      mode: process.env.AI_PROVIDER ? 'model-ready' : 'deterministic',
+      mode: modelAnalysis ? 'model-assisted' : 'deterministic',
+      model: descriptor,
       intent,
-      summary: this.summarizePlan(steps, intent),
+      summary: modelAnalysis?.data.summary || this.summarizePlan(steps, intent),
       contextNotes: this.contextNotes(user),
       snapshot,
       steps,
       requiredApprovals: [...new Set(steps.filter((step) => step.requiresApproval).map((step) => step.tool).filter(Boolean))],
-      suggestedActions: this.suggestedActions(intent),
+      suggestedActions: modelAnalysis?.data.suggestedActions?.length ? modelAnalysis.data.suggestedActions : this.suggestedActions(intent),
       riskSummary: this.riskSummary(steps),
     };
   }
 
-  async ask(question: string, user: any) {
+  async ask(question: string, user: any, history: AgentHistoryItem[] = []) {
     const cleanQuestion = this.cleanGoal(question);
-    const intent = this.classifyIntent(cleanQuestion);
     const snapshot = await this.workspaceSnapshot(user);
-    const toolIds = this.readToolsForIntent(intent);
+    const modelAnalysis = await this.aiModel.analyze(cleanQuestion, snapshot, history);
+    const intent = modelAnalysis ? this.intentFromModel(modelAnalysis.data) : this.classifyIntent(cleanQuestion);
+    const toolIds = this.allowedReadTools(modelAnalysis?.data.readTools || this.readToolsForIntent(intent));
     const results = [];
 
     for (const toolId of toolIds) {
       results.push(await this.runTool(toolId, cleanQuestion, user, intent));
     }
+    const synthesis = modelAnalysis
+      ? await this.aiModel.synthesize(cleanQuestion, modelAnalysis.data, snapshot, results, history)
+      : null;
+    const descriptor = synthesis || modelAnalysis;
 
     return {
       question: cleanQuestion,
+      mode: descriptor ? 'model-assisted' : 'deterministic',
+      model: descriptor
+        ? { provider: descriptor.provider, model: descriptor.model, status: synthesis ? 'completed' : 'analysis-only' }
+        : { ...this.aiModel.descriptor(), status: this.aiModel.isConfigured() ? 'fallback' : 'not-configured' },
       intent,
-      answer: this.answerFromResults(intent, snapshot, results),
-      facts: this.factsFromResults(snapshot, results),
-      suggestedActions: this.suggestedActions(intent),
+      answer: synthesis?.data.answer || this.answerFromResults(intent, snapshot, results),
+      facts: synthesis?.data.facts?.length ? synthesis.data.facts : this.factsFromResults(snapshot, results),
+      suggestedActions: synthesis?.data.suggestedActions?.length
+        ? synthesis.data.suggestedActions
+        : modelAnalysis?.data.suggestedActions?.length
+          ? modelAnalysis.data.suggestedActions
+          : this.suggestedActions(intent),
       contextNotes: this.contextNotes(user),
       snapshot,
       results,
     };
   }
 
-  async execute(goal: string, user: any, approvedActions: string[]) {
-    const planned = await this.plan(goal, user);
+  async execute(goal: string, user: any, approvedActions: string[], history: AgentHistoryItem[] = []) {
+    const planned = await this.plan(goal, user, history);
     const approved = new Set(approvedActions);
     const results: any[] = [];
 
@@ -146,6 +168,7 @@ export class AiAgentService {
 
     return {
       primary,
+      secondary: ranked.filter(([name, value]) => name !== primary && value > 0).slice(0, 3).map(([name]) => name),
       confidence: Math.min(95, Math.max(45, 45 + ranked[0][1] * 12)),
       entities: {
         status,
@@ -189,7 +212,7 @@ export class AiAgentService {
       .slice(0, 120);
   }
 
-  private buildPlan(goal: string, intent: AgentIntent): AgentStep[] {
+  private buildPlan(goal: string, intent: AgentIntent, selectedReadTools?: string[]): AgentStep[] {
     const steps: AgentStep[] = [
       {
         id: 'understand',
@@ -204,7 +227,7 @@ export class AiAgentService {
       },
     ];
 
-    for (const toolId of this.readToolsForIntent(intent)) {
+    for (const toolId of this.allowedReadTools(selectedReadTools || this.readToolsForIntent(intent))) {
       if (toolId === 'inspect_workspace') continue;
       const tool = tools.find((item) => item.id === toolId);
       if (tool) {
@@ -248,19 +271,40 @@ export class AiAgentService {
 
   private readToolsForIntent(intent: AgentIntent) {
     const toolIds = new Set<string>(['inspect_workspace']);
-    if (['ticket', 'general'].includes(intent.primary)) {
+    const intents = new Set([intent.primary, ...(intent.secondary || [])]);
+    if (intents.has('ticket') || intents.has('general')) {
       toolIds.add('search_tickets');
       toolIds.add('summarize_ticket_backlog');
     }
-    if (['asset', 'compliance', 'enrollment', 'general'].includes(intent.primary)) {
+    if (['asset', 'compliance', 'enrollment', 'general'].some((name) => intents.has(name))) {
       toolIds.add('search_assets');
     }
-    if (['compliance', 'asset', 'enrollment'].includes(intent.primary)) {
+    if (['compliance', 'asset', 'enrollment'].some((name) => intents.has(name))) {
       toolIds.add('device_compliance_report');
     }
-    if (intent.primary === 'network') toolIds.add('network_health_report');
-    if (intent.primary === 'rmm') toolIds.add('rmm_summary');
+    if (intents.has('network')) toolIds.add('network_health_report');
+    if (intents.has('rmm')) toolIds.add('rmm_summary');
     return [...toolIds];
+  }
+
+  private allowedReadTools(toolIds: string[]) {
+    const allowed = new Set(tools.filter((tool) => tool.risk === 'read').map((tool) => tool.id));
+    return [...new Set(toolIds)].filter((toolId) => allowed.has(toolId));
+  }
+
+  private intentFromModel(analysis: ModelAnalysis): AgentIntent {
+    return {
+      primary: analysis.primaryIntent,
+      secondary: analysis.secondaryIntents,
+      confidence: analysis.confidence,
+      entities: {
+        status: analysis.status || undefined,
+        priority: analysis.priority || undefined,
+        ticketNumber: analysis.ticketNumber || undefined,
+        email: analysis.email || undefined,
+        query: analysis.query || undefined,
+      },
+    };
   }
 
   private shouldCreateTicket(goal: string, intent: AgentIntent) {

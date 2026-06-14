@@ -8,6 +8,7 @@ import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard'
 import { AuthorizationExempt } from '../../../common/decorators/authorization-exempt.decorator';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
+import { AgentHistoryItem } from '../services/ai-model.service';
 
 @Controller('ai-agent')
 @UseGuards(JwtAuthGuard, TenantGuard, FeatureAccessGuard, PermissionsGuard)
@@ -23,19 +24,19 @@ export class AiAgentController {
 
   @RequirePermissions('ai-agent.use')
   @Post('plan')
-  plan(@Body() body: { goal: string }, @CurrentUser() user: any) {
-    return this.aiAgentService.plan(body.goal, user);
+  plan(@Body() body: { goal: string; history?: AgentHistoryItem[] }, @CurrentUser() user: any) {
+    return this.aiAgentService.plan(body.goal, user, body.history || []);
   }
 
   @RequirePermissions('ai-agent.use')
   @Post('ask')
-  ask(@Body() body: { question: string }, @CurrentUser() user: any) {
-    return this.aiAgentService.ask(body.question, user);
+  ask(@Body() body: { question: string; history?: AgentHistoryItem[] }, @CurrentUser() user: any) {
+    return this.aiAgentService.ask(body.question, user, body.history || []);
   }
 
   @RequirePermissions('ai-agent.use')
   @Post('execute')
-  execute(@Body() body: { goal: string; approvedActions?: string[] }, @CurrentUser() user: any) {
-    return this.aiAgentService.execute(body.goal, user, body.approvedActions || []);
+  execute(@Body() body: { goal: string; approvedActions?: string[]; history?: AgentHistoryItem[] }, @CurrentUser() user: any) {
+    return this.aiAgentService.execute(body.goal, user, body.approvedActions || [], body.history || []);
   }
 }
