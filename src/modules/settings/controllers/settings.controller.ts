@@ -8,18 +8,13 @@ import { BusinessOnly } from '../../../common/decorators/business-only.decorator
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
-import { RequireFeature } from '../../../common/decorators/feature.decorator';
-import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 import { AuthorizationExempt } from '../../../common/decorators/authorization-exempt.decorator';
-import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
-import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { TenantBranding, TenantCustomization } from '../tenant-customization';
 
 
 @Controller('settings')
-@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard)
 @BusinessOnly()
-@RequireFeature('settings')
 export class SettingsController {
   constructor(private settingsService: SettingsService) {}
 
@@ -27,13 +22,13 @@ export class SettingsController {
     return user.effectiveCompanyId || user.companyId;
   }
 
-  @RequirePermissions('settings.view')
+  @AuthorizationExempt('Authenticated business users may view settings for their resolved tenant only', 'platform-operations', '2026-12-31')
   @Get()
   getSettings(@CurrentUser() user: CurrentUserType) {
     return this.settingsService.getSettings(this.companyId(user));
   }
 
-  @RequirePermissions('settings.view')
+  @AuthorizationExempt('Company settings history is tenant-scoped and restricted to administrators', 'platform-operations', '2026-12-31')
   @Get('history')
   @UseGuards(RolesGuard)
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
@@ -41,7 +36,7 @@ export class SettingsController {
     return this.settingsService.getHistory(this.companyId(user));
   }
 
-  @RequirePermissions('settings.manage')
+  @AuthorizationExempt('Company setting changes are tenant-scoped and restricted to administrators', 'platform-operations', '2026-12-31')
   @Patch()
   @UseGuards(RolesGuard)
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
@@ -57,7 +52,7 @@ export class SettingsController {
     return this.settingsService.updateSettings(this.companyId(user), dto, user.id);
   }
 
-  @RequirePermissions('settings.manage')
+  @AuthorizationExempt('Company branding changes are tenant-scoped and restricted to administrators', 'platform-operations', '2026-12-31')
   @Put('branding')
   @UseGuards(RolesGuard)
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
@@ -65,7 +60,7 @@ export class SettingsController {
     return this.settingsService.updateBranding(this.companyId(user), branding, user.id);
   }
 
-  @RequirePermissions('settings.manage')
+  @AuthorizationExempt('Company customization changes are tenant-scoped and restricted to administrators', 'platform-operations', '2026-12-31')
   @Put('customization')
   @UseGuards(RolesGuard)
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
@@ -73,7 +68,7 @@ export class SettingsController {
     return this.settingsService.updateCustomization(this.companyId(user), customization, user.id);
   }
 
-  @RequirePermissions('settings.manage')
+  @AuthorizationExempt('Company customization resets are tenant-scoped and restricted to administrators', 'platform-operations', '2026-12-31')
   @Delete('customization')
   @UseGuards(RolesGuard)
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
@@ -81,7 +76,7 @@ export class SettingsController {
     return this.settingsService.resetCustomization(this.companyId(user), user.id);
   }
 
-  @RequirePermissions('settings.manage')
+  @AuthorizationExempt('Company settings rollback is tenant-scoped and restricted to administrators', 'platform-operations', '2026-12-31')
   @Post('history/:id/rollback')
   @UseGuards(RolesGuard)
   @Roles('TENANT_ADMIN', 'SUPER_ADMIN')
