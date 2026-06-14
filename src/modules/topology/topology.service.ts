@@ -48,7 +48,7 @@ export class TopologyService {
       this.optionalCount(`SELECT COUNT(*) as count FROM NetworkTopologyShare WHERE ${company}active = 1`, values),
       this.getSettings(scope),
     ]);
-    const byHealth = latest.reduce<Record<string, number>>((acc, row) => {
+    const byHealth = (latest as any[]).reduce<Record<string, number>>((acc, row) => {
       acc[row.status || 'UNKNOWN'] = Number(row.count || 0);
       return acc;
     }, {});
@@ -507,9 +507,12 @@ export class TopologyService {
     throw new ForbiddenException('Select a company context to view topology');
   }
 
-  private resolveWriteCompany(user: CurrentUser, requestedCompanyId?: string) {
+  private resolveWriteCompany(user: CurrentUser, requestedCompanyId?: string): string {
     if (user.companyId) return user.companyId;
-    if (user.role === 'SUPER_ADMIN' && (user.effectiveCompanyId || requestedCompanyId)) return user.effectiveCompanyId || requestedCompanyId;
+    if (user.role === 'SUPER_ADMIN') {
+      const companyId = user.effectiveCompanyId || requestedCompanyId;
+      if (companyId) return companyId;
+    }
     throw new ForbiddenException('Select a company context before changing topology');
   }
 

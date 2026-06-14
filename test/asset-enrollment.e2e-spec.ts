@@ -24,6 +24,7 @@ describe('Asset Enrollment Workflow (e2e)', () => {
   let testUserId: string;
   let testCompanyId: string;
   let enrollmentTokenId: string;
+  let assetId: string;
 
   // Test data
   const testUser = {
@@ -179,7 +180,7 @@ describe('Asset Enrollment Workflow (e2e)', () => {
       expect(response.body.imei).toBe(testDevice.imei);
 
       // Store asset ID for later tests
-      testDevice['assetId'] = response.body.id;
+      assetId = response.body.id;
     });
 
     /**
@@ -193,7 +194,7 @@ describe('Asset Enrollment Workflow (e2e)', () => {
         .expect(200);
 
       expect(response.body.data).toBeDefined();
-      expect(response.body.data.some((a: any) => a.id === testDevice['assetId'])).toBe(true);
+      expect(response.body.data.some((a: any) => a.id === assetId)).toBe(true);
     });
 
     /**
@@ -201,7 +202,7 @@ describe('Asset Enrollment Workflow (e2e)', () => {
      */
     it('should update enrollment status', async () => {
       const response = await request(app.getHttpServer())
-        .patch(`/v1/cmdb/assets/${testDevice['assetId']}`)
+        .patch(`/v1/cmdb/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           enrollmentStatus: 'Enrolled',
@@ -252,7 +253,7 @@ describe('Asset Enrollment Workflow (e2e)', () => {
      */
     it('should update device compliance and policy status', async () => {
       const response = await request(app.getHttpServer())
-        .patch(`/v1/cmdb/assets/${testDevice['assetId']}`)
+        .patch(`/v1/cmdb/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           complianceStatus: 'NonCompliant',
@@ -271,7 +272,7 @@ describe('Asset Enrollment Workflow (e2e)', () => {
      */
     it('should retrieve device with complete MDM details', async () => {
       const response = await request(app.getHttpServer())
-        .get(`/v1/cmdb/assets/${testDevice['assetId']}`)
+        .get(`/v1/cmdb/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
@@ -292,7 +293,7 @@ describe('Asset Enrollment Workflow (e2e)', () => {
      */
     it('should unenroll device', async () => {
       const response = await request(app.getHttpServer())
-        .patch(`/v1/cmdb/assets/${testDevice['assetId']}`)
+        .patch(`/v1/cmdb/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           enrollmentStatus: 'Unenrolled',
@@ -308,7 +309,7 @@ describe('Asset Enrollment Workflow (e2e)', () => {
      */
     it('should delete unenrolled device', async () => {
       await request(app.getHttpServer())
-        .delete(`/v1/cmdb/assets/${testDevice['assetId']}`)
+        .delete(`/v1/cmdb/assets/${assetId}`)
         .set('Authorization', `Bearer ${authToken}`)
         .expect(204);
     });

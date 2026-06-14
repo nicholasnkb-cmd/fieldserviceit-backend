@@ -324,9 +324,12 @@ export class MaintenanceService {
     throw new ForbiddenException('Select a company context to manage recurring maintenance');
   }
 
-  private resolveWriteCompany(user: CurrentUser, requestedCompanyId?: string) {
+  private resolveWriteCompany(user: CurrentUser, requestedCompanyId?: string): string {
     if (user.companyId) return user.companyId;
-    if (user.role === 'SUPER_ADMIN' && (user.effectiveCompanyId || requestedCompanyId)) return user.effectiveCompanyId || requestedCompanyId;
+    if (user.role === 'SUPER_ADMIN') {
+      const companyId = user.effectiveCompanyId || requestedCompanyId;
+      if (companyId) return companyId;
+    }
     throw new ForbiddenException('Select a company context before changing recurring maintenance');
   }
 

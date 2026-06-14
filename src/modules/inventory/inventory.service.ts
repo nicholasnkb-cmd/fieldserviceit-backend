@@ -75,6 +75,7 @@ export class InventoryService {
     await this.ensureSchema();
     const companyId = this.resolveWriteCompany(user, dto.companyId);
     const data = await this.normalizePart(companyId, dto, true);
+    const quantityOnHand = data.quantityOnHand ?? 0;
     const id = randomUUID();
     const now = new Date();
     await this.db.execute(
@@ -83,12 +84,12 @@ export class InventoryService {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id, companyId, data.sku, data.name, data.description, data.category, data.vendor, data.manufacturer, data.model,
-        data.locationId, data.unitCost, data.unitPrice, data.quantityOnHand, 0, data.reorderPoint, data.reorderQuantity,
+        data.locationId, data.unitCost, data.unitPrice, quantityOnHand, 0, data.reorderPoint, data.reorderQuantity,
         data.status, user.id, now, now,
       ],
     );
-    if (data.quantityOnHand > 0) {
-      await this.logTransaction(companyId, id, data.locationId, 'RECEIVE', data.quantityOnHand, 'Initial stock', null, user.id);
+    if (quantityOnHand > 0) {
+      await this.logTransaction(companyId, id, data.locationId ?? null, 'RECEIVE', quantityOnHand, 'Initial stock', null, user.id);
     }
     return this.getPart(user, id);
   }
@@ -267,9 +268,12 @@ export class InventoryService {
     throw new ForbiddenException('Select a company context to manage inventory');
   }
 
-  private resolveWriteCompany(user: CurrentUser, requestedCompanyId?: string) {
+  private resolveWriteCompany(user: CurrentUser, requestedCompanyId?: string): string {
     if (user.companyId) return user.companyId;
-    if (user.role === 'SUPER_ADMIN' && (user.effectiveCompanyId || requestedCompanyId)) return user.effectiveCompanyId || requestedCompanyId;
+    if (user.role === 'SUPER_ADMIN') {
+      const companyId = user.effectiveCompanyId || requestedCompanyId;
+      if (companyId) return companyId;
+    }
     throw new ForbiddenException('Select a company context before creating inventory records');
   }
 

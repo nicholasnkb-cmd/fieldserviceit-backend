@@ -33,7 +33,9 @@ export class CompaniesController {
     if (user.role === 'SUPER_ADMIN') {
       return this.companiesService.findAll(query);
     }
-    return this.companiesService.findOne(user.companyId);
+    const companyId = user.effectiveCompanyId || user.companyId;
+    if (!companyId) throw new ForbiddenException('Select a company context to view company details');
+    return this.companiesService.findOne(companyId);
   }
 
   @RequirePermissions('companies.view')

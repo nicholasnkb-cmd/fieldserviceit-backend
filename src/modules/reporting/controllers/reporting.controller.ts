@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { ReportingService } from '../services/reporting.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
@@ -20,38 +20,44 @@ import { CustomReportDto } from '../dto/custom-report.dto';
 export class ReportingController {
   constructor(private reportingService: ReportingService) {}
 
+  private getCompanyId(user: CurrentUserType): string {
+    const companyId = user.effectiveCompanyId || user.companyId;
+    if (!companyId) throw new ForbiddenException('Select a company context to view reports');
+    return companyId;
+  }
+
   @Get('preferences')
   getPreferences(@CurrentUser() user: CurrentUserType) {
-    return this.reportingService.getPreferences(user.companyId);
+    return this.reportingService.getPreferences(this.getCompanyId(user));
   }
 
   @Get('tickets')
   getTicketSummary(@Query('from') from: string, @Query('to') to: string, @CurrentUser() user: CurrentUserType) {
-    return this.reportingService.getTicketSummary(user.companyId, from, to);
+    return this.reportingService.getTicketSummary(this.getCompanyId(user), from, to);
   }
 
   @Get('sla')
   getSlaCompliance(@CurrentUser() user: CurrentUserType) {
-    return this.reportingService.getSlaCompliance(user.companyId);
+    return this.reportingService.getSlaCompliance(this.getCompanyId(user));
   }
 
   @Get('technician')
   getTechnicianPerformance(@CurrentUser() user: CurrentUserType) {
-    return this.reportingService.getTechnicianPerformance(user.companyId);
+    return this.reportingService.getTechnicianPerformance(this.getCompanyId(user));
   }
 
   @Get('assets')
   getAssetInventory(@CurrentUser() user: CurrentUserType) {
-    return this.reportingService.getAssetInventory(user.companyId);
+    return this.reportingService.getAssetInventory(this.getCompanyId(user));
   }
 
   @Get('activity')
   getActivityFeed(@CurrentUser() user: CurrentUserType) {
-    return this.reportingService.getActivityFeed(user.companyId);
+    return this.reportingService.getActivityFeed(this.getCompanyId(user));
   }
 
   @Post('custom')
   createCustomReport(@Body() dto: CustomReportDto, @CurrentUser() user: CurrentUserType) {
-    return this.reportingService.createCustomReport(user.companyId, dto);
+    return this.reportingService.createCustomReport(this.getCompanyId(user), dto);
   }
 }

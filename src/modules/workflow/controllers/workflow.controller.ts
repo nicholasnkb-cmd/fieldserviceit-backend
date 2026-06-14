@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, ForbiddenException } from '@nestjs/common';
 import { WorkflowService } from '../services/workflow.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../../common/guards/tenant.guard';
@@ -16,33 +16,39 @@ import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 export class WorkflowController {
   constructor(private workflowService: WorkflowService) {}
 
+  private getCompanyId(user: CurrentUserType): string {
+    const companyId = user.effectiveCompanyId || user.companyId;
+    if (!companyId) throw new ForbiddenException('Select a company context to manage workflows');
+    return companyId;
+  }
+
   @RequirePermissions('workflows.manage')
   @Post()
   create(@Body() dto: { name: string; description?: string; triggerOn?: string; steps: any[] }, @CurrentUser() user: CurrentUserType) {
-    return this.workflowService.create(dto, user.companyId);
+    return this.workflowService.create(dto, this.getCompanyId(user));
   }
 
   @RequirePermissions('workflows.view')
   @Get()
   findAll(@CurrentUser() user: CurrentUserType) {
-    return this.workflowService.findAll(user.companyId);
+    return this.workflowService.findAll(this.getCompanyId(user));
   }
 
   @RequirePermissions('workflows.view')
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
-    return this.workflowService.findOne(id, user.companyId);
+    return this.workflowService.findOne(id, this.getCompanyId(user));
   }
 
   @RequirePermissions('workflows.manage')
   @Post(':id/execute')
   execute(@Param('id') id: string, @Body('ticketId') ticketId: string, @CurrentUser() user: CurrentUserType) {
-    return this.workflowService.execute(id, ticketId, user.companyId);
+    return this.workflowService.execute(id, ticketId, this.getCompanyId(user));
   }
 
   @RequirePermissions('workflows.view')
   @Get(':id/runs')
   getRuns(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
-    return this.workflowService.getRuns(id, user.companyId);
+    return this.workflowService.getRuns(id, this.getCompanyId(user));
   }
 }

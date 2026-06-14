@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Res, UseGuards, UseInterceptors, UploadedFile, UploadedFiles, UnprocessableEntityException } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Res, UseGuards, UseInterceptors, UploadedFile, UploadedFiles, UnprocessableEntityException } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { UploadsService } from './uploads.service';
@@ -81,7 +81,8 @@ export class UploadsController {
     @CurrentUser() user: CurrentUserType,
   ) {
     const companyId = user.effectiveCompanyId || user.companyId;
-    const companyDir = companyId || 'platform';
+    if (!companyId) throw new ForbiddenException('Select a company context to update branding');
+    const companyDir = companyId;
     const url = await this.uploadsService.saveBrandingImage(file, `branding/${companyDir}`, field);
     const company = await this.settingsService.configureUploadedImage(companyId, field, url, user.id);
     return { url, field, company };

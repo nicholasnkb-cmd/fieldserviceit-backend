@@ -160,7 +160,12 @@ export class AdminService {
   }
 
   async getPermissionWorkspace(actor: CurrentUser) {
-    const companyId = actor.role === 'SUPER_ADMIN' ? undefined : actor.companyId;
+    const companyId = actor.role === 'SUPER_ADMIN'
+      ? undefined
+      : actor.effectiveCompanyId || actor.companyId || undefined;
+    if (actor.role !== 'SUPER_ADMIN' && !companyId) {
+      throw new ForbiddenException('Select a company context to view permissions');
+    }
     const [permissions, roles] = await Promise.all([this.listPermissions(), this.listRoles(companyId)]);
     const roleIds = roles.map((role: any) => role.id);
     const affectedUsers = roleIds.length ? await this.prisma.query<any[]>(
@@ -732,7 +737,7 @@ export class AdminService {
   async exportAccessReview(reviewId: string, format: 'csv' | 'pdf', actor: CurrentUser, approvalRequestId?: string) {
     await this.accessGovernance.assertApprovedAction(approvalRequestId || '', 'AUDIT_EXPORT', reviewId, actor);
     const review = await this.getAccessReview(reviewId, actor);
-    const lines = [
+    const lines: unknown[][] = [
       ['User', 'Email', 'Primary role', 'Decision', 'Reviewer notes', 'Last login'],
       ...review.items.map((item: any) => [
         `${item.firstName} ${item.lastName}`, item.email, item.role, item.decision,
@@ -1004,8 +1009,8 @@ export class AdminService {
     }).then((result: any) => this.normalizeRole(result));
 
     if (actor && dto.permissionSlugs !== undefined) {
-      const before = (beforeRole?.permissions || []).map((entry: any) => entry.permission.slug).sort();
-      const after = [...dto.permissionSlugs].sort();
+      const before: string[] = (beforeRole?.permissions || []).map((entry: any) => String(entry.permission.slug)).sort();
+      const after: string[] = [...dto.permissionSlugs].sort();
       await this.recordPermissionAudit(actor, roleId, 'ROLE_PERMISSIONS_UPDATED', {
         roleName: role.name,
         before,
@@ -1078,9 +1083,9 @@ export class AdminService {
   }
 
   async removeUserRole(userId: string, roleId: string, actor?: CurrentUser) {
-    if (actor?.role !== 'SUPER_ADMIN') {
+    if (actor && actor.role !== 'SUPER_ADMIN') {
       const user = await this.prisma.user.findUnique({ where: { id: userId } });
-      if (!user || user.companyId !== actor?.companyId) throw new ForbiddenException('User is outside your tenant');
+      if (!user || user.companyId !== actor.companyId) throw new ForbiddenException('User is outside your tenant');
       await this.assertRoleScope(roleId, actor, false);
     }
     const existing = await this.prisma.userRole.findUnique({

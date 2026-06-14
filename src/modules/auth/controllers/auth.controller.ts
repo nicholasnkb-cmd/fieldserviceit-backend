@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, Query, Delete, HttpCode, HttpStatus, Req, Res, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, Delete, HttpCode, HttpStatus, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service';
@@ -86,6 +86,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() body: RefreshDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken = body.refreshToken || readRefreshCookie(req);
+    if (!refreshToken) throw new UnauthorizedException('Refresh token is required');
     const result = await this.authService.refresh(refreshToken);
     setAuthCookies(res, result, req);
     return result;
@@ -97,6 +98,7 @@ export class AuthController {
   async logout(@Body() body: RefreshDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken = body.refreshToken || readRefreshCookie(req);
     clearAuthCookies(res, req);
+    if (!refreshToken) throw new UnauthorizedException('Refresh token is required');
     return this.authService.logout(refreshToken);
   }
 

@@ -114,7 +114,7 @@ export class QuotesInvoicesService {
         now,
       ],
     );
-    await this.replaceQuoteLines(id, lines, data.taxRate);
+    await this.replaceQuoteLines(id, lines);
     return this.getQuote(user, id);
   }
 
@@ -134,7 +134,7 @@ export class QuotesInvoicesService {
       const lines = this.normalizeLines(dto.lines);
       const totals = this.calculateTotals(lines, data.taxRate ?? Number(existing.taxRate || 0), data.discountTotal ?? Number(existing.discountTotal || 0));
       Object.assign(updates, totals);
-      await this.replaceQuoteLines(id, lines, data.taxRate ?? Number(existing.taxRate || 0));
+      await this.replaceQuoteLines(id, lines);
     }
     await this.applyUpdates('ServiceQuote', id, existing.companyId, updates);
     return this.getQuote(user, id);
@@ -359,7 +359,7 @@ export class QuotesInvoicesService {
     return { subtotal, taxTotal, total };
   }
 
-  private async replaceQuoteLines(quoteId: string, lines: any[], taxRate: number) {
+  private async replaceQuoteLines(quoteId: string, lines: any[]) {
     await this.db.execute('DELETE FROM ServiceQuoteLine WHERE quoteId = ?', [quoteId]);
     for (const line of lines) {
       await this.db.execute(
@@ -438,10 +438,11 @@ export class QuotesInvoicesService {
     throw new ForbiddenException('Select a company context to manage quotes and invoices');
   }
 
-  private resolveWriteCompany(user: CurrentUser, requestedCompanyId?: string) {
+  private resolveWriteCompany(user: CurrentUser, requestedCompanyId?: string): string {
     if (user.companyId) return user.companyId;
-    if (user.role === 'SUPER_ADMIN' && (user.effectiveCompanyId || requestedCompanyId)) {
-      return user.effectiveCompanyId || requestedCompanyId;
+    if (user.role === 'SUPER_ADMIN') {
+      const companyId = user.effectiveCompanyId || requestedCompanyId;
+      if (companyId) return companyId;
     }
     throw new ForbiddenException('Select a company context before creating quotes or invoices');
   }

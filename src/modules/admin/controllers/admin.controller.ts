@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, ForbiddenException, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from '../services/admin.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { BusinessOnlyGuard } from '../../../common/guards/business-only.guard';
@@ -29,6 +29,12 @@ export class AdminController {
     private billingService: BillingService,
     private accessGovernance: AccessGovernanceService,
   ) {}
+
+  private getCompanyId(user: CurrentUserType): string {
+    const companyId = user.effectiveCompanyId || user.companyId;
+    if (!companyId) throw new ForbiddenException('Select a company context for this admin operation');
+    return companyId;
+  }
 
   @RequirePermissions('permissions.governance.view')
   @Get('permissions')
@@ -466,7 +472,7 @@ export class AdminController {
   @Get('roles')
   @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
   listRoles(@CurrentUser() user: CurrentUserType) {
-    const companyId = user.role === 'SUPER_ADMIN' ? undefined : user.companyId;
+    const companyId = user.role === 'SUPER_ADMIN' ? undefined : this.getCompanyId(user);
     return this.adminService.listRoles(companyId);
   }
 
@@ -739,14 +745,14 @@ export class AdminController {
   @Get('company/roles')
   @Roles('TENANT_ADMIN')
   listCompanyRoles(@CurrentUser() user: CurrentUserType) {
-    return this.adminService.listRoles(user.companyId);
+    return this.adminService.listRoles(this.getCompanyId(user));
   }
 
   @RequirePermissions('roles.manage')
   @Post('company/roles')
   @Roles('TENANT_ADMIN')
   createCompanyRole(@Body() dto: { name: string; slug: string; description?: string; permissionSlugs?: string[] }, @CurrentUser() user: CurrentUserType) {
-    return this.adminService.createRole({ ...dto, companyId: user.companyId });
+    return this.adminService.createRole({ ...dto, companyId: this.getCompanyId(user) });
   }
 
   @RequirePermissions('roles.manage')
@@ -767,55 +773,55 @@ export class AdminController {
   @Get('company/users')
   @Roles('TENANT_ADMIN')
   listCompanyUsers(@Query() query: PaginationQueryDto, @CurrentUser() user: CurrentUserType) {
-    return this.adminService.listCompanyUsers(user.companyId, query);
+    return this.adminService.listCompanyUsers(this.getCompanyId(user), query);
   }
 
   @RequirePermissions('users.manage')
   @Post('company/users')
   @Roles('TENANT_ADMIN')
   createCompanyUser(@Body() dto: { email: string; password: string; firstName: string; lastName: string; role?: string }, @CurrentUser() user: CurrentUserType) {
-    return this.adminService.createCompanyUser(dto, user.companyId, user);
+    return this.adminService.createCompanyUser(dto, this.getCompanyId(user), user);
   }
 
   @RequirePermissions('users.view')
   @Get('company/users/:id')
   @Roles('TENANT_ADMIN')
   getCompanyUser(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
-    return this.adminService.getCompanyUser(id, user.companyId);
+    return this.adminService.getCompanyUser(id, this.getCompanyId(user));
   }
 
   @RequirePermissions('users.manage')
   @Patch('company/users/:id/role')
   @Roles('TENANT_ADMIN')
   updateCompanyUserRole(@Param('id') id: string, @Body('role') role: string, @CurrentUser() user: CurrentUserType) {
-    return this.adminService.updateCompanyUserRole(id, role, user.companyId, user);
+    return this.adminService.updateCompanyUserRole(id, role, this.getCompanyId(user), user);
   }
 
   @RequirePermissions('users.delete')
   @Delete('company/users/:id')
   @Roles('TENANT_ADMIN')
   removeCompanyUser(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
-    return this.adminService.removeCompanyUser(id, user.companyId, user);
+    return this.adminService.removeCompanyUser(id, this.getCompanyId(user), user);
   }
 
   @RequirePermissions('settings.manage')
   @Post('company/invite-code')
   @Roles('TENANT_ADMIN')
   generateCompanyInviteCode(@CurrentUser() user: CurrentUserType, @Body('expiresInDays') expiresInDays?: number) {
-    return this.adminService.generateInviteCode(user.companyId, expiresInDays);
+    return this.adminService.generateInviteCode(this.getCompanyId(user), expiresInDays);
   }
 
   @RequirePermissions('settings.view')
   @Get('company/settings')
   @Roles('TENANT_ADMIN')
   getCompanySettings(@CurrentUser() user: CurrentUserType) {
-    return this.adminService.getCompanySettings(user.companyId);
+    return this.adminService.getCompanySettings(this.getCompanyId(user));
   }
 
   @RequirePermissions('settings.manage')
   @Patch('company/settings')
   @Roles('TENANT_ADMIN')
   updateCompanySettings(@Body() dto: UpdateCompanySettingsDto, @CurrentUser() user: CurrentUserType) {
-    return this.adminService.updateCompanySettings(user.companyId, dto);
+    return this.adminService.updateCompanySettings(this.getCompanyId(user), dto);
   }
 }

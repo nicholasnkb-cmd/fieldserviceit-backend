@@ -61,7 +61,9 @@ export class UsersController {
   @RequirePermissions('users.create')
   @Post()
   create(@Body() dto: { email: string; password: string; firstName: string; lastName: string; role?: string }, @CurrentUser() user: CurrentUserType) {
-    return this.usersService.create(dto as any, user.companyId);
+    const companyId = user.effectiveCompanyId || user.companyId;
+    if (!companyId) throw new ForbiddenException('Select a company context to create users');
+    return this.usersService.create(dto as any, companyId);
   }
 
   @RequirePermissions('users.view')
