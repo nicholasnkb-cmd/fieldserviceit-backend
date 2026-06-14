@@ -6,35 +6,36 @@ import { AiAgentService } from '../services/ai-agent.service';
 import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 import { AuthorizationExempt } from '../../../common/decorators/authorization-exempt.decorator';
-import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
-import { PermissionsGuard } from '../../../common/guards/permissions.guard';
+import { Roles } from '../../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../../common/guards/roles.guard';
 import { AgentHistoryItem } from '../services/ai-model.service';
 
 @Controller('ai-agent')
-@UseGuards(JwtAuthGuard, TenantGuard, FeatureAccessGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, TenantGuard, FeatureAccessGuard, RolesGuard)
 @RequireFeature('aiAgent')
+@Roles('TENANT_ADMIN', 'SUPER_ADMIN', 'TECHNICIAN', 'DISPATCHER')
 export class AiAgentController {
   constructor(private aiAgentService: AiAgentService) {}
 
-  @RequirePermissions('ai-agent.use')
+  @AuthorizationExempt('AI tools are tenant-scoped and restricted to supported operational roles', 'platform-operations', '2026-12-31')
   @Get('tools')
   listTools() {
     return this.aiAgentService.listTools();
   }
 
-  @RequirePermissions('ai-agent.use')
+  @AuthorizationExempt('AI planning is tenant-scoped and restricted to supported operational roles', 'platform-operations', '2026-12-31')
   @Post('plan')
   plan(@Body() body: { goal: string; history?: AgentHistoryItem[] }, @CurrentUser() user: any) {
     return this.aiAgentService.plan(body.goal, user, body.history || []);
   }
 
-  @RequirePermissions('ai-agent.use')
+  @AuthorizationExempt('AI answers use tenant-scoped read tools and supported operational roles', 'platform-operations', '2026-12-31')
   @Post('ask')
   ask(@Body() body: { question: string; history?: AgentHistoryItem[] }, @CurrentUser() user: any) {
     return this.aiAgentService.ask(body.question, user, body.history || []);
   }
 
-  @RequirePermissions('ai-agent.use')
+  @AuthorizationExempt('AI execution is tenant-scoped, role-restricted, and separately approval-gated for writes', 'platform-operations', '2026-12-31')
   @Post('execute')
   execute(@Body() body: { goal: string; approvedActions?: string[]; history?: AgentHistoryItem[] }, @CurrentUser() user: any) {
     return this.aiAgentService.execute(body.goal, user, body.approvedActions || [], body.history || []);

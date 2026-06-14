@@ -138,6 +138,7 @@ async function ensurePermissionsAndRoles(db: DatabaseService) {
     ['users.manage', 'Manage users', 'Admin'],
     ['roles.manage', 'Manage roles', 'Admin'],
     ['companies.manage', 'Manage companies', 'Admin'],
+    ['ai-agent.use', 'Use AI agent', 'Automation'],
     ['settings.manage', 'Manage settings', 'Admin'],
     ['tickets.manage', 'Manage tickets', 'Service Desk'],
     ['tickets.view', 'View tickets', 'Service Desk'],
@@ -180,8 +181,8 @@ async function ensurePermissionsAndRoles(db: DatabaseService) {
 
   const rolePermissionMap: Record<string, string[]> = {
     'super-admin': permissions.map(([slug]) => slug),
-    'tenant-admin': ['users.manage', 'roles.manage', 'settings.manage', 'tickets.manage', 'tickets.view', 'assets.manage', 'dispatch.manage', 'reports.view', 'billing.manage', 'audit.view'],
-    technician: ['tickets.manage', 'tickets.view', 'assets.manage', 'dispatch.manage'],
+    'tenant-admin': ['users.manage', 'roles.manage', 'ai-agent.use', 'settings.manage', 'tickets.manage', 'tickets.view', 'assets.manage', 'dispatch.manage', 'reports.view', 'billing.manage', 'audit.view'],
+    technician: ['ai-agent.use', 'tickets.manage', 'tickets.view', 'assets.manage', 'dispatch.manage'],
     client: ['tickets.view'],
     'read-only': ['tickets.view', 'reports.view'],
   };
