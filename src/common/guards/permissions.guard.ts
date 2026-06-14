@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { PrismaService } from '../../database/prisma.service';
 import { AuthorizationRepository } from '../../database/repositories/authorization.repository';
+import { TENANT_ADMIN_DEFAULT_PERMISSIONS } from '../authorization/tenant-admin-defaults';
 
 /**
  * PermissionsGuard - Enforces role-based and attribute-based access control (RBAC/ABAC)
@@ -63,6 +64,11 @@ export class PermissionsGuard implements CanActivate {
 
     // Regular user: Load roles and their permissions
     const userPermissionSlugs = new Set<string>();
+    if (user.role === 'TENANT_ADMIN') {
+      for (const permission of TENANT_ADMIN_DEFAULT_PERMISSIONS) {
+        userPermissionSlugs.add(permission);
+      }
+    }
     const assignedPermissions = await this.authorizationRepository.findUserRolePermissions(user.id);
     const effectiveRoleIds = [...new Set(assignedPermissions.map((permission) => permission.roleId))];
     for (const permission of assignedPermissions) {

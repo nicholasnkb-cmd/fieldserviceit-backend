@@ -84,6 +84,32 @@ describe('PermissionsGuard', () => {
     expect(result).toBe(true);
   });
 
+  it('allows tenant admins to use baseline tenant features when role rows are missing', async () => {
+    const request: any = { user: { role: 'TENANT_ADMIN', id: 'admin-1', companyId: 'company-1' } };
+    const context: any = {
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      switchToHttp: () => ({ getRequest: () => request }),
+    };
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['assets.view', 'tickets.edit', 'remote-access.launch']);
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(request.user.permissionSlugs).toEqual(expect.arrayContaining(['assets.view', 'tickets.edit', 'remote-access.launch']));
+  });
+
+  it('does not grant platform-owner permissions to tenant admins', async () => {
+    const context: any = {
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      switchToHttp: () => ({
+        getRequest: () => ({ user: { role: 'TENANT_ADMIN', id: 'admin-1', companyId: 'company-1' } }),
+      }),
+    };
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(['impersonation.use']);
+
+    await expect(guard.canActivate(context)).rejects.toThrow('Insufficient permissions');
+  });
+
   it('should allow service accounts with explicit permissions', async () => {
     const context: any = {
       getHandler: () => ({}),
