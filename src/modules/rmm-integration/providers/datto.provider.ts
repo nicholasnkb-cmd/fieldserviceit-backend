@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { RmmProvider, AssetMapping, AlertMapping } from './rmm-provider.interface';
+import { RmmProvider, AssetMapping, AlertMapping, RmmConnectionResult } from './rmm-provider.interface';
 import { LoggerService } from '../../../common/logger/logger.service';
 
 @Injectable()
@@ -27,15 +27,21 @@ export class DattoProvider implements RmmProvider {
   }
 
   async validateCredentials(credentials: any): Promise<boolean> {
-    if (!credentials?.apiToken) return false;
+    return (await this.testConnection(credentials)).valid;
+  }
+
+  async testConnection(credentials: any): Promise<RmmConnectionResult> {
+    if (!credentials?.apiToken) return { valid: false, message: 'Datto API token is required.' };
     try {
       const res = await fetch(`${this.baseUrl(credentials)}/sites?limit=1`, {
         headers: this.headers(credentials),
         signal: AbortSignal.timeout(10000),
       });
-      return res.ok;
-    } catch {
-      return false;
+      return res.ok
+        ? { valid: true, message: 'Datto RMM accepted the API token.' }
+        : { valid: false, statusCode: res.status, message: `Datto returned HTTP ${res.status}. Verify the token and API base URL.` };
+    } catch (error: any) {
+      return { valid: false, message: `Datto RMM could not be reached: ${error?.message || 'network error'}` };
     }
   }
 

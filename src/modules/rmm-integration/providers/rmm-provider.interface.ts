@@ -24,6 +24,12 @@ export interface AlertMapping {
   raw?: any;
 }
 
+export interface RmmConnectionResult {
+  valid: boolean;
+  message: string;
+  statusCode?: number;
+}
+
 export interface RmmProvider {
   name: string;
   label?: string;
@@ -39,4 +45,5 @@ export interface RmmProvider {
   syncAllAssets(credentials: any): Promise<AssetMapping[]>;
   createAlert(alertData: any): Promise<AlertMapping>;
   validateCredentials(credentials: any): Promise<boolean>;
+  testConnection?(credentials: any): Promise<RmmConnectionResult>;
 }

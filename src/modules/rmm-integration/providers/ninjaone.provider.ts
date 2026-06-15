@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { RmmProvider, AssetMapping, AlertMapping } from './rmm-provider.interface';
+import { RmmProvider, AssetMapping, AlertMapping, RmmConnectionResult } from './rmm-provider.interface';
 import { LoggerService } from '../../../common/logger/logger.service';
 
 @Injectable()
@@ -40,7 +40,7 @@ export class NinjaOneProvider implements RmmProvider {
       }),
       signal: AbortSignal.timeout(10000),
     });
-    if (!response.ok) return null;
+    if (!response.ok) throw new Error(`OAuth token endpoint returned HTTP ${response.status}`);
     const payload: any = await response.json();
     return payload.access_token || null;
   }
@@ -53,17 +53,26 @@ export class NinjaOneProvider implements RmmProvider {
   }
 
   async validateCredentials(credentials: any): Promise<boolean> {
-    if (!credentials?.instanceUrl || (!credentials?.apiKey && !credentials?.accessToken && (!credentials?.clientId || !credentials?.clientSecret))) return false;
+    return (await this.testConnection(credentials)).valid;
+  }
+
+  async testConnection(credentials: any): Promise<RmmConnectionResult> {
+    if (!credentials?.instanceUrl) return { valid: false, message: 'NinjaOne instance URL is required.' };
+    if (!credentials?.apiKey && !credentials?.accessToken && (!credentials?.clientId || !credentials?.clientSecret)) {
+      return { valid: false, message: 'Provide a NinjaOne OAuth client ID and client secret, or a legacy access token.' };
+    }
     try {
       const accessToken = await this.accessToken(credentials);
-      if (!accessToken) return false;
+      if (!accessToken) return { valid: false, message: 'NinjaOne did not return an OAuth access token.' };
       const res = await fetch(`${this.baseUrl(credentials)}/api/v2/devices?pageSize=1`, {
         headers: this.headers(accessToken),
         signal: AbortSignal.timeout(10000),
       });
-      return res.ok;
-    } catch {
-      return false;
+      return res.ok
+        ? { valid: true, message: 'NinjaOne OAuth and Monitoring API access passed.' }
+        : { valid: false, statusCode: res.status, message: `NinjaOne device access returned HTTP ${res.status}. Confirm the Monitoring scope and instance region.` };
+    } catch (error: any) {
+      return { valid: false, message: `NinjaOne connection failed: ${error?.message || 'network error'}` };
     }
   }
 

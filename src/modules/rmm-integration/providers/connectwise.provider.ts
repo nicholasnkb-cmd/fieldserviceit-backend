@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { RmmProvider, AssetMapping, AlertMapping } from './rmm-provider.interface';
+import { RmmProvider, AssetMapping, AlertMapping, RmmConnectionResult } from './rmm-provider.interface';
 import { LoggerService } from '../../../common/logger/logger.service';
 
 @Injectable()
@@ -31,15 +31,22 @@ export class ConnectWiseProvider implements RmmProvider {
   }
 
   async validateCredentials(credentials: any): Promise<boolean> {
-    if (!credentials?.companyId || !credentials?.publicKey || !credentials?.privateKey || !credentials?.clientId) return false;
+    return (await this.testConnection(credentials)).valid;
+  }
+
+  async testConnection(credentials: any): Promise<RmmConnectionResult> {
+    const missing = ['baseUrl', 'companyId', 'publicKey', 'privateKey', 'clientId'].filter((key) => !credentials?.[key]);
+    if (missing.length) return { valid: false, message: `Missing required ConnectWise fields: ${missing.join(', ')}` };
     try {
       const res = await fetch(`${this.baseUrl(credentials)}/company/companies?pageSize=1`, {
         headers: this.headers(credentials),
         signal: AbortSignal.timeout(10000),
       });
-      return res.ok;
-    } catch {
-      return false;
+      return res.ok
+        ? { valid: true, message: 'ConnectWise Manage accepted the API credentials.' }
+        : { valid: false, statusCode: res.status, message: `ConnectWise returned HTTP ${res.status}. Verify the regional Manage API URL, company ID, API keys, and client ID.` };
+    } catch (error: any) {
+      return { valid: false, message: `ConnectWise could not be reached: ${error?.message || 'network error'}` };
     }
   }
 

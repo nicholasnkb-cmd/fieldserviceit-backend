@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AlertMapping, AssetMapping, RmmProvider } from './rmm-provider.interface';
+import { AlertMapping, AssetMapping, RmmConnectionResult, RmmProvider } from './rmm-provider.interface';
 
 @Injectable()
 export class SyncroProvider implements RmmProvider {
@@ -19,10 +19,19 @@ export class SyncroProvider implements RmmProvider {
     return { Authorization: `Bearer ${credentials.apiToken}`, Accept: 'application/json' };
   }
   async validateCredentials(credentials: any) {
-    if (!credentials?.apiToken || (!credentials?.subdomain && !credentials?.baseUrl)) return false;
+    return (await this.testConnection(credentials)).valid;
+  }
+  async testConnection(credentials: any): Promise<RmmConnectionResult> {
+    if (!credentials?.apiToken) return { valid: false, message: 'Syncro API token is required.' };
+    if (!credentials?.subdomain && !credentials?.baseUrl) return { valid: false, message: 'Syncro account subdomain or API base URL is required.' };
     try {
-      return (await fetch(`${this.baseUrl(credentials)}/customer_assets?page=1`, { headers: this.headers(credentials), signal: AbortSignal.timeout(10000) })).ok;
-    } catch { return false; }
+      const response = await fetch(`${this.baseUrl(credentials)}/customer_assets?page=1`, { headers: this.headers(credentials), signal: AbortSignal.timeout(10000) });
+      return response.ok
+        ? { valid: true, message: 'Syncro accepted the account URL and API token.' }
+        : { valid: false, statusCode: response.status, message: `Syncro returned HTTP ${response.status}. Verify the account subdomain and token permissions.` };
+    } catch (error: any) {
+      return { valid: false, message: `Syncro could not be reached: ${error?.message || 'network error'}` };
+    }
   }
   async syncAllAssets(credentials: any): Promise<AssetMapping[]> {
     const response = await fetch(`${this.baseUrl(credentials)}/customer_assets?page=1`, { headers: this.headers(credentials), signal: AbortSignal.timeout(30000) });

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AlertMapping, AssetMapping, RmmProvider } from './rmm-provider.interface';
+import { AlertMapping, AssetMapping, RmmConnectionResult, RmmProvider } from './rmm-provider.interface';
 
 @Injectable()
 export class AteraProvider implements RmmProvider {
@@ -20,12 +20,21 @@ export class AteraProvider implements RmmProvider {
   }
 
   async validateCredentials(credentials: any) {
-    if (!credentials?.apiKey) return false;
+    return (await this.testConnection(credentials)).valid;
+  }
+
+  async testConnection(credentials: any): Promise<RmmConnectionResult> {
+    if (!credentials?.apiKey) return { valid: false, message: 'Atera API key is required.' };
     try {
-      return (await fetch(`${this.baseUrl(credentials)}/agents?page=1&itemsInPage=1`, {
+      const response = await fetch(`${this.baseUrl(credentials)}/agents?page=1&itemsInPage=1`, {
         headers: this.headers(credentials), signal: AbortSignal.timeout(10000),
-      })).ok;
-    } catch { return false; }
+      });
+      return response.ok
+        ? { valid: true, message: 'Atera accepted the API key.' }
+        : { valid: false, statusCode: response.status, message: `Atera returned HTTP ${response.status}. Verify the API key and base URL.` };
+    } catch (error: any) {
+      return { valid: false, message: `Atera could not be reached: ${error?.message || 'network error'}` };
+    }
   }
 
   async syncAllAssets(credentials: any): Promise<AssetMapping[]> {

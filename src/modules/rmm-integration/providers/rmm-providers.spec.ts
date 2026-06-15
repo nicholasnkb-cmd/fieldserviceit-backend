@@ -14,6 +14,10 @@ describe('RMM provider configuration', () => {
     const provider = new DattoProvider(logger);
 
     await expect(provider.validateCredentials({ siteId: 'site-1' })).resolves.toBe(false);
+    await expect(provider.testConnection({ siteId: 'site-1' })).resolves.toEqual({
+      valid: false,
+      message: 'Datto API token is required.',
+    });
   });
 
   it('omits the Datto site filter when no site ID is configured', async () => {
@@ -49,6 +53,24 @@ describe('RMM provider configuration', () => {
     expect(String(fetchMock.mock.calls[0][0])).toBe('https://eu.ninjarmm.com/ws/oauth/token');
     expect(String(fetchMock.mock.calls[1][0])).toBe('https://eu.ninjarmm.com/api/v2/devices?pageSize=1');
     expect((fetchMock.mock.calls[1][1]?.headers as Record<string, string>).Authorization).toBe('Bearer oauth-token');
+  });
+
+  it('returns a sanitized NinjaOne OAuth diagnostic', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 401,
+    } as Response);
+    const provider = new NinjaOneProvider(logger);
+
+    const result = await provider.testConnection({
+      instanceUrl: 'https://app.ninjarmm.com',
+      clientId: 'client',
+      clientSecret: 'do-not-return-this-secret',
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.message).toContain('OAuth token endpoint returned HTTP 401');
+    expect(result.message).not.toContain('do-not-return-this-secret');
   });
 
   it('uses the N-able territory API key endpoint and parses XML devices', async () => {

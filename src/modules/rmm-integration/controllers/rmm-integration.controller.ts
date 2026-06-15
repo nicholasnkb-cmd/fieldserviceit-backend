@@ -72,8 +72,15 @@ export class RmmIntegrationController {
     const rmmProvider = this.providerFactory.getProvider(provider);
     const existing = await this.prisma.rmmProviderConfig.findFirst({ where: { companyId, provider } });
     const credentials = this.mergeCredentials(existing?.credentials, body.credentials || {});
-    const valid = await rmmProvider.validateCredentials(credentials);
-    return { provider, status: valid ? 'PASS' : 'FAIL' };
+    const result = rmmProvider.testConnection
+      ? await rmmProvider.testConnection(credentials)
+      : { valid: await rmmProvider.validateCredentials(credentials), message: 'Connection test completed.' };
+    return {
+      provider,
+      status: result.valid ? 'PASS' : 'FAIL',
+      message: result.message,
+      ...(result.statusCode ? { statusCode: result.statusCode } : {}),
+    };
   }
 
   @Post('configs')
@@ -125,15 +132,22 @@ export class RmmIntegrationController {
 
     const rmmProvider = this.providerFactory.getProvider(normalizedProvider);
     const credentials = this.parseCredentials(config.credentials);
-    const valid = await rmmProvider.validateCredentials(credentials);
-    const status = valid ? 'PASS' : 'FAIL';
+    const result = rmmProvider.testConnection
+      ? await rmmProvider.testConnection(credentials)
+      : { valid: await rmmProvider.validateCredentials(credentials), message: 'Connection test completed.' };
+    const status = result.valid ? 'PASS' : 'FAIL';
 
     await this.prisma.rmmProviderConfig.update({
       where: { id: config.id },
       data: { lastTestStatus: status, lastTestAt: new Date() },
     });
 
-    return { provider: normalizedProvider, status };
+    return {
+      provider: normalizedProvider,
+      status,
+      message: result.message,
+      ...(result.statusCode ? { statusCode: result.statusCode } : {}),
+    };
   }
 
   @Post('sync-now/:provider')

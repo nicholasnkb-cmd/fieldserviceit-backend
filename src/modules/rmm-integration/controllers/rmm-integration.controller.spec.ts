@@ -24,7 +24,11 @@ describe('RmmIntegrationController configuration tests', () => {
     await expect(controller.testUnsavedConfig(
       { provider: 'ninjaone', credentials: { scope: 'monitoring management' } },
       { companyId: 'company-1' } as any,
-    )).resolves.toEqual({ provider: 'ninjaone', status: 'PASS' });
+    )).resolves.toEqual({
+      provider: 'ninjaone',
+      status: 'PASS',
+      message: 'Connection test completed.',
+    });
 
     expect(validateCredentials).toHaveBeenCalledWith({
       instanceUrl: 'https://app.ninjarmm.com',

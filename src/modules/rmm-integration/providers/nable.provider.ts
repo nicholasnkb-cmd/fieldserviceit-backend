@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AlertMapping, AssetMapping, RmmProvider } from './rmm-provider.interface';
+import { AlertMapping, AssetMapping, RmmConnectionResult, RmmProvider } from './rmm-provider.interface';
 import { XMLParser } from 'fast-xml-parser';
 
 @Injectable()
@@ -24,8 +24,18 @@ export class NableProvider implements RmmProvider {
       : { Accept: 'application/json, application/xml' };
   }
   async validateCredentials(credentials: any) {
-    if (!credentials?.baseUrl || !credentials?.apiToken) return false;
-    try { return (await fetch(this.url(credentials), { headers: this.headers(credentials), signal: AbortSignal.timeout(10000) })).ok; } catch { return false; }
+    return (await this.testConnection(credentials)).valid;
+  }
+  async testConnection(credentials: any): Promise<RmmConnectionResult> {
+    if (!credentials?.baseUrl || !credentials?.apiToken) return { valid: false, message: 'N-able territory API server URL and API key are required.' };
+    try {
+      const response = await fetch(this.url(credentials), { headers: this.headers(credentials), signal: AbortSignal.timeout(10000) });
+      return response.ok
+        ? { valid: true, message: 'N-able N-sight accepted the territory URL and API key.' }
+        : { valid: false, statusCode: response.status, message: `N-able returned HTTP ${response.status}. Verify the territory server, API key, and optional devices path.` };
+    } catch (error: any) {
+      return { valid: false, message: `N-able N-sight could not be reached: ${error?.message || 'network error'}` };
+    }
   }
   async syncAllAssets(credentials: any): Promise<AssetMapping[]> {
     const response = await fetch(this.url(credentials), { headers: this.headers(credentials), signal: AbortSignal.timeout(30000) });
