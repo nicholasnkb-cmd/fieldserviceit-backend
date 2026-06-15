@@ -11,7 +11,6 @@ import { AteraProvider } from './providers/atera.provider';
 import { SyncroProvider } from './providers/syncro.provider';
 import { KaseyaProvider } from './providers/kaseya.provider';
 import { NableProvider } from './providers/nable.provider';
-import { PrismaService } from '../../database/prisma.service';
 import { TicketTimelineService } from '../tickets/services/ticket-timeline.service';
 import { NotificationsService } from '../notifications/services/notifications.service';
 import { TicketsGateway } from '../tickets/events/tickets.gateway';
@@ -32,7 +31,6 @@ import { TicketsModule } from '../tickets/tickets.module';
     SyncroProvider,
     KaseyaProvider,
     NableProvider,
-    PrismaService,
     TicketTimelineService,
   ],
   exports: [RmmIntegrationService, RmmSyncService, RmmProviderFactory],

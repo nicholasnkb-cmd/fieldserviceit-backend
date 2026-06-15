@@ -28,7 +28,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       password: parsed.password,
       database: parsed.database,
       waitForConnections: true,
-      connectionLimit: 10,
+      connectionLimit: 5,
+      maxIdle: 2,
+      idleTimeout: 60000,
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 0,
       queueLimit: 0,
     });
   }
