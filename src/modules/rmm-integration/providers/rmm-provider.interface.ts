@@ -28,7 +28,13 @@ export interface RmmProvider {
   name: string;
   label?: string;
   helpText?: string;
-  credentialFields?: { key: string; label: string; type?: string; required?: boolean }[];
+  credentialFields?: {
+    key: string;
+    label: string;
+    type?: string;
+    required?: boolean;
+    placeholder?: string;
+  }[];
   syncAsset(assetData: any): Promise<AssetMapping>;
   syncAllAssets(credentials: any): Promise<AssetMapping[]>;
   createAlert(alertData: any): Promise<AlertMapping>;

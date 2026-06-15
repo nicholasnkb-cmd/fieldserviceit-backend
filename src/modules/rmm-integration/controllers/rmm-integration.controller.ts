@@ -67,10 +67,12 @@ export class RmmIntegrationController {
   @Post('configs/test')
   @RequirePermissions('assets.edit')
   async testUnsavedConfig(@Body() body: { provider: string; credentials: any }, @CurrentUser() user: CurrentUserType) {
-    this.requireCompanyId(user);
+    const companyId = this.requireCompanyId(user);
     const provider = this.normalizeProvider(body.provider);
     const rmmProvider = this.providerFactory.getProvider(provider);
-    const valid = await rmmProvider.validateCredentials(body.credentials || {});
+    const existing = await this.prisma.rmmProviderConfig.findFirst({ where: { companyId, provider } });
+    const credentials = this.mergeCredentials(existing?.credentials, body.credentials || {});
+    const valid = await rmmProvider.validateCredentials(credentials);
     return { provider, status: valid ? 'PASS' : 'FAIL' };
   }
 
@@ -82,7 +84,7 @@ export class RmmIntegrationController {
     this.providerFactory.getProvider(provider);
 
     const existing = await this.prisma.rmmProviderConfig.findFirst({ where: { companyId, provider } });
-    const syncIntervalMin = Math.max(5, Number(body.syncIntervalMin) || 60);
+    const syncIntervalMin = Math.min(10080, Math.max(5, Number(body.syncIntervalMin) || 60));
     const credentials = this.encryptSecret(JSON.stringify(this.mergeCredentials(existing?.credentials, body.credentials || {})));
     const config = existing
       ? await this.prisma.rmmProviderConfig.update({
@@ -142,8 +144,9 @@ export class RmmIntegrationController {
   }
 
   private requireCompanyId(user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('Select a company context before using RMM integrations');
-    return user.companyId;
+    const companyId = user.effectiveCompanyId || user.companyId;
+    if (!companyId) throw new ForbiddenException('Select a company context before using RMM integrations');
+    return companyId;
   }
 
   private normalizeProvider(provider: string) {

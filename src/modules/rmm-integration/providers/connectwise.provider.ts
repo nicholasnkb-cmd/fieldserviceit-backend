@@ -5,11 +5,20 @@ import { LoggerService } from '../../../common/logger/logger.service';
 @Injectable()
 export class ConnectWiseProvider implements RmmProvider {
   name = 'connectwise';
+  label = 'ConnectWise Manage';
+  helpText = 'Use the Manage API URL for your region with your company ID, API keys, and ConnectWise client ID.';
+  credentialFields = [
+    { key: 'baseUrl', label: 'Manage API URL', required: true, placeholder: 'https://api-na.myconnectwise.net/v2024_1' },
+    { key: 'companyId', label: 'Company ID', required: true },
+    { key: 'publicKey', label: 'Public Key', required: true },
+    { key: 'privateKey', label: 'Private Key', type: 'password', required: true },
+    { key: 'clientId', label: 'Client ID', type: 'password', required: true },
+  ];
 
   constructor(private readonly logger: LoggerService) {}
 
   private baseUrl(credentials: any): string {
-    return `https://api-na.myconnectwise.net/v2024_1`;
+    return String(credentials.baseUrl || 'https://api-na.myconnectwise.net/v2024_1').replace(/\/+$/, '');
   }
 
   private headers(credentials: any): Record<string, string> {
@@ -22,7 +31,7 @@ export class ConnectWiseProvider implements RmmProvider {
   }
 
   async validateCredentials(credentials: any): Promise<boolean> {
-    if (!credentials?.companyId || !credentials?.publicKey || !credentials?.privateKey) return false;
+    if (!credentials?.companyId || !credentials?.publicKey || !credentials?.privateKey || !credentials?.clientId) return false;
     try {
       const res = await fetch(`${this.baseUrl(credentials)}/company/companies?pageSize=1`, {
         headers: this.headers(credentials),

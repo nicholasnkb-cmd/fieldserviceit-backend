@@ -5,6 +5,15 @@ import { LoggerService } from '../../../common/logger/logger.service';
 @Injectable()
 export class NinjaOneProvider implements RmmProvider {
   name = 'ninjaone';
+  label = 'NinjaOne';
+  helpText = 'Use an API Services application with the Client Credentials grant and Monitoring scope. Legacy bearer tokens remain supported.';
+  credentialFields = [
+    { key: 'instanceUrl', label: 'Instance URL', required: true, placeholder: 'https://app.ninjarmm.com' },
+    { key: 'clientId', label: 'OAuth Client ID', required: true },
+    { key: 'clientSecret', label: 'OAuth Client Secret', type: 'password', required: true },
+    { key: 'scope', label: 'OAuth Scope', placeholder: 'monitoring' },
+    { key: 'accessToken', label: 'Legacy Access Token', type: 'password' },
+  ];
 
   constructor(private readonly logger: LoggerService) {}
 
@@ -13,18 +22,43 @@ export class NinjaOneProvider implements RmmProvider {
     return instance || 'https://app.ninjarmm.com';
   }
 
-  private headers(credentials: any): Record<string, string> {
+  private async accessToken(credentials: any): Promise<string | null> {
+    const legacyToken = credentials.accessToken || credentials.apiKey;
+    if (legacyToken) return legacyToken;
+    if (!credentials.clientId || !credentials.clientSecret) return null;
+
+    const response = await fetch(`${this.baseUrl(credentials)}/ws/oauth/token`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${credentials.clientId}:${credentials.clientSecret}`).toString('base64')}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        scope: credentials.scope || 'monitoring',
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) return null;
+    const payload: any = await response.json();
+    return payload.access_token || null;
+  }
+
+  private headers(accessToken: string): Record<string, string> {
     return {
-      Authorization: `Bearer ${credentials.apiKey}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     };
   }
 
   async validateCredentials(credentials: any): Promise<boolean> {
-    if (!credentials?.apiKey) return false;
+    if (!credentials?.instanceUrl || (!credentials?.apiKey && !credentials?.accessToken && (!credentials?.clientId || !credentials?.clientSecret))) return false;
     try {
-      const res = await fetch(`${this.baseUrl(credentials)}/v2/devices?pageSize=1`, {
-        headers: this.headers(credentials),
+      const accessToken = await this.accessToken(credentials);
+      if (!accessToken) return false;
+      const res = await fetch(`${this.baseUrl(credentials)}/api/v2/devices?pageSize=1`, {
+        headers: this.headers(accessToken),
         signal: AbortSignal.timeout(10000),
       });
       return res.ok;
@@ -49,8 +83,10 @@ export class NinjaOneProvider implements RmmProvider {
 
   async syncAllAssets(credentials: any): Promise<AssetMapping[]> {
     try {
-      const res = await fetch(`${this.baseUrl(credentials)}/v2/devices?pageSize=500`, {
-        headers: this.headers(credentials),
+      const accessToken = await this.accessToken(credentials);
+      if (!accessToken) throw new Error('NinjaOne OAuth credentials are invalid');
+      const res = await fetch(`${this.baseUrl(credentials)}/api/v2/devices?pageSize=500`, {
+        headers: this.headers(accessToken),
         signal: AbortSignal.timeout(30000),
       });
 

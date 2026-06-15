@@ -65,7 +65,7 @@ export class RmmSyncService implements OnModuleInit {
     if (!valid) {
       this.logger.warn(`Invalid credentials for provider ${config.provider} (company ${config.companyId})`);
       await this.finishSyncRun(runId, config.id, 'FAILED', 0, 0, 0, 'Invalid credentials');
-      return;
+      return { synced: false, error: 'Invalid credentials' };
     }
 
     try {
@@ -102,6 +102,7 @@ export class RmmSyncService implements OnModuleInit {
 
       await this.finishSyncRun(runId, config.id, 'SUCCESS', assetsCreated, assetsUpdated, assetsSkipped);
       this.logger.log(`Synced ${assets.length} assets from ${config.provider} for company ${config.companyId}`);
+      return { synced: true, assetsCreated, assetsUpdated, assetsSkipped };
     } catch (err: any) {
       await this.finishSyncRun(runId, config.id, 'FAILED', 0, 0, 0, err?.message || 'Sync failed');
       throw err;
@@ -162,8 +163,8 @@ export class RmmSyncService implements OnModuleInit {
     if (!config.isActive) {
       return { synced: false, error: `${provider} configuration is inactive` };
     }
-    await this.syncProviderAssets(config as any);
-    return { synced: true, provider, companyId };
+    const result = await this.syncProviderAssets(config as any);
+    return { ...result, provider, companyId };
   }
 
   private encryptionKey() {

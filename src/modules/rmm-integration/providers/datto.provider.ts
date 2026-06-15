@@ -5,10 +5,19 @@ import { LoggerService } from '../../../common/logger/logger.service';
 @Injectable()
 export class DattoProvider implements RmmProvider {
   name = 'datto';
+  label = 'Datto RMM';
+  helpText = 'Connect with a Datto RMM API token. Add a site ID only when you want to limit synchronization to one site.';
+  credentialFields = [
+    { key: 'baseUrl', label: 'API Base URL', placeholder: 'https://api.datto.com/v1' },
+    { key: 'apiToken', label: 'API Token', type: 'password', required: true },
+    { key: 'siteId', label: 'Site ID (optional)' },
+  ];
 
   constructor(private readonly logger: LoggerService) {}
 
-  private baseUrl = 'https://api.datto.com/v1';
+  private baseUrl(credentials: any) {
+    return String(credentials.baseUrl || 'https://api.datto.com/v1').replace(/\/+$/, '');
+  }
 
   private headers(credentials: any): Record<string, string> {
     return {
@@ -18,9 +27,9 @@ export class DattoProvider implements RmmProvider {
   }
 
   async validateCredentials(credentials: any): Promise<boolean> {
-    if (!credentials?.apiToken && !credentials?.siteId) return false;
+    if (!credentials?.apiToken) return false;
     try {
-      const res = await fetch(`${this.baseUrl}/sites?limit=1`, {
+      const res = await fetch(`${this.baseUrl(credentials)}/sites?limit=1`, {
         headers: this.headers(credentials),
         signal: AbortSignal.timeout(10000),
       });
@@ -46,7 +55,9 @@ export class DattoProvider implements RmmProvider {
 
   async syncAllAssets(credentials: any): Promise<AssetMapping[]> {
     try {
-      const res = await fetch(`${this.baseUrl}/devices?limit=500&siteId=${credentials.siteId}`, {
+      const params = new URLSearchParams({ limit: '500' });
+      if (credentials.siteId) params.set('siteId', credentials.siteId);
+      const res = await fetch(`${this.baseUrl(credentials)}/devices?${params}`, {
         headers: this.headers(credentials),
         signal: AbortSignal.timeout(30000),
       });
