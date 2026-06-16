@@ -25,6 +25,12 @@ import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 export class CmdbController {
   constructor(private cmdbService: CmdbService) {}
 
+  private getCompanyId(user: CurrentUserType) {
+    const companyId = user.effectiveCompanyId || user.companyId;
+    if (!companyId) throw new ForbiddenException('No company context available');
+    return companyId;
+  }
+
   @Post()
   @RequirePermissions('assets.create')
   create(@Body() dto: CreateAssetDto, @CurrentUser() user: CurrentUserType) {
@@ -34,8 +40,7 @@ export class CmdbController {
 
   @Get()
   findAll(@Query() query: PaginationQueryDto, @CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.cmdbService.findAll(user.companyId, { ...query, permissionScopes: user.permissionScopes, user });
+    return this.cmdbService.findAll(this.getCompanyId(user), { ...query, permissionScopes: user.permissionScopes, user });
   }
 
   @Get('mdm/summary')
@@ -59,47 +64,40 @@ export class CmdbController {
 
   @Get('network/monitoring/summary')
   getNetworkMonitoringSummary(@CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.cmdbService.getNetworkMonitoringSummary(user.companyId);
+    return this.cmdbService.getNetworkMonitoringSummary(this.getCompanyId(user));
   }
 
   @Get('network/alert-events')
   listNetworkAlertEvents(@Query('status') status: string | undefined, @CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.cmdbService.listNetworkAlertEvents(user.companyId, status);
+    return this.cmdbService.listNetworkAlertEvents(this.getCompanyId(user), status);
   }
 
   @Patch('network/alert-events/:eventId')
   @RequirePermissions('assets.edit')
   updateNetworkAlertEvent(@Param('eventId') eventId: string, @Body('status') status: string, @CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.cmdbService.updateNetworkAlertEvent(user.companyId, eventId, status, user.id);
+    return this.cmdbService.updateNetworkAlertEvent(this.getCompanyId(user), eventId, status, user.id);
   }
 
   @Get('network/alert-rules')
   listNetworkAlertRules(@CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.cmdbService.listNetworkAlertRules(user.companyId);
+    return this.cmdbService.listNetworkAlertRules(this.getCompanyId(user));
   }
 
   @Post('network/alert-rules')
   @RequirePermissions('assets.edit')
   createNetworkAlertRule(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.cmdbService.createNetworkAlertRule(user.companyId, body);
+    return this.cmdbService.createNetworkAlertRule(this.getCompanyId(user), body);
   }
 
   @Get('network/maintenance-windows')
   listMaintenanceWindows(@CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.cmdbService.listMaintenanceWindows(user.companyId);
+    return this.cmdbService.listMaintenanceWindows(this.getCompanyId(user));
   }
 
   @Post('network/maintenance-windows')
   @RequirePermissions('assets.edit')
   createMaintenanceWindow(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.cmdbService.createMaintenanceWindow(user.companyId, body);
+    return this.cmdbService.createMaintenanceWindow(this.getCompanyId(user), body);
   }
 
   @Get('network/ip-reservations')
@@ -164,15 +162,13 @@ export class CmdbController {
 
   @Get('network/escalation-policies')
   listEscalationPolicies(@CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.cmdbService.listEscalationPolicies(user.companyId);
+    return this.cmdbService.listEscalationPolicies(this.getCompanyId(user));
   }
 
   @Post('network/escalation-policies')
   @RequirePermissions('assets.edit')
   createEscalationPolicy(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
-    if (!user.companyId) throw new ForbiddenException('No company context available');
-    return this.cmdbService.createEscalationPolicy(user.companyId, body, user.id);
+    return this.cmdbService.createEscalationPolicy(this.getCompanyId(user), body, user.id);
   }
 
   @Get('network/syslog-searches')

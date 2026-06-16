@@ -631,7 +631,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
 
   async listNetworkAlertEvents(companyId: string, status = 'ACTIVE') {
     const values: any[] = [companyId];
-    let where = `companyId = ?`;
+    let where = `e.companyId = ?`;
     if (status && status.toUpperCase() !== 'ALL') {
       where += ` AND status = ?`;
       values.push(status.toUpperCase());

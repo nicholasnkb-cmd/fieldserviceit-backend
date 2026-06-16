@@ -20,6 +20,9 @@ import { RequirePermissions } from '../../../common/decorators/permissions.decor
 import { StepUpGuard } from '../../../common/guards/step-up.guard';
 import { RequireStepUp } from '../../../common/decorators/step-up.decorator';
 import { AuthorizationExempt } from '../../../common/decorators/authorization-exempt.decorator';
+import { TicketsService } from '../../tickets/services/tickets.service';
+import { TicketTimelineService } from '../../tickets/services/ticket-timeline.service';
+import { EmailDeliveryService } from '../../notifications/services/email-delivery.service';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, BusinessOnlyGuard, RolesGuard, PermissionsGuard, StepUpGuard)
@@ -28,6 +31,9 @@ export class AdminController {
     private adminService: AdminService,
     private billingService: BillingService,
     private accessGovernance: AccessGovernanceService,
+    private ticketsService: TicketsService,
+    private ticketTimelineService: TicketTimelineService,
+    private emailDeliveryService: EmailDeliveryService,
   ) {}
 
   private getCompanyId(user: CurrentUserType): string {
@@ -590,6 +596,29 @@ export class AdminController {
   @Roles('SUPER_ADMIN')
   listTickets(@Query() query: PaginationQueryDto & { status?: string; priority?: string }) {
     return this.adminService.listTickets(query);
+  }
+
+  @RequirePermissions('tickets.view')
+  @Get('tickets/:id')
+  @Roles('SUPER_ADMIN')
+  getTicket(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.ticketsService.findOne(id, { ...user, companyId: null, effectiveCompanyId: null }, false);
+  }
+
+  @RequirePermissions('tickets.view')
+  @Get('tickets/:id/timeline')
+  @Roles('SUPER_ADMIN')
+  async getTicketTimeline(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    await this.ticketsService.findOne(id, { ...user, companyId: null, effectiveCompanyId: null }, false);
+    return this.ticketTimelineService.getTimeline(id, true);
+  }
+
+  @RequirePermissions('tickets.view')
+  @Get('tickets/:id/email-deliveries')
+  @Roles('SUPER_ADMIN')
+  async getTicketEmailDeliveries(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    await this.ticketsService.findOne(id, { ...user, companyId: null, effectiveCompanyId: null }, false);
+    return this.emailDeliveryService.ticketHistory(id);
   }
 
   @RequirePermissions('users.view')
