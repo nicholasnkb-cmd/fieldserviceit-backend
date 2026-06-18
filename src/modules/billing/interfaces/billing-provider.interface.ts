@@ -1,4 +1,4 @@
-export type BillingProviderKey = 'STRIPE' | 'PADDLE' | 'LEMON_SQUEEZY' | 'CHARGEBEE';
+export type BillingProviderKey = 'STRIPE' | 'PADDLE' | 'LEMON_SQUEEZY' | 'CHARGEBEE' | 'PAYPAL';
 export type BillingInterval = 'MONTH' | 'YEAR';
 export type BillingComponent = 'BASE' | 'SEAT';
 

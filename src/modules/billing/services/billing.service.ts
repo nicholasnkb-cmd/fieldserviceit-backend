@@ -39,7 +39,7 @@ export class BillingService {
 
     const lineItems: BillingLineItem[] = [{ priceId: basePrice, quantity: 1, component: 'BASE' }];
     const seatAmount = Number(interval === 'YEAR' ? plan.seatAnnualPrice : plan.seatMonthlyPrice);
-    if (seatAmount > 0 && seats > 1) {
+    if (seatAmount > 0 && seats > 1 && provider.key !== 'PAYPAL') {
       const seatPrice = prices.find((price) => price.component === 'SEAT')?.externalPriceId;
       if (!seatPrice) throw new BadRequestException(`${provider.displayName} seat price is not configured`);
       lineItems.push({ priceId: seatPrice, quantity: seats - 1, component: 'SEAT' as const });
@@ -203,8 +203,8 @@ export class BillingService {
 
   private async applyEvent(event: NormalizedBillingEvent) {
     const type = event.type.toLowerCase();
-    const isFailedPayment = type.includes('payment_failed') || type.includes('payment_failed') || type.includes('invoice_payment_failed') || type.includes('subscription_payment_failed');
-    const isPaid = type.includes('payment_succeeded') || type.includes('invoice_paid') || type.includes('invoice.payment_succeeded') || type.includes('transaction.completed');
+    const isFailedPayment = type.includes('payment_failed') || type.includes('payment.failed') || type.includes('invoice_payment_failed') || type.includes('subscription_payment_failed');
+    const isPaid = type.includes('payment_succeeded') || type.includes('payment.sale.completed') || type.includes('invoice_paid') || type.includes('invoice.payment_succeeded') || type.includes('transaction.completed');
     const isSubscription = type.includes('subscription') || type.includes('checkout') || type.includes('transaction.completed');
     if (!isFailedPayment && !isPaid && !isSubscription) return false;
 

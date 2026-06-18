@@ -5,7 +5,7 @@ export class CreateCheckoutDto {
   planId: string;
 
   @IsOptional()
-  @IsIn(['STRIPE', 'PADDLE', 'LEMON_SQUEEZY', 'CHARGEBEE'])
+  @IsIn(['STRIPE', 'PADDLE', 'LEMON_SQUEEZY', 'CHARGEBEE', 'PAYPAL'])
   provider?: string;
 
   @IsOptional()

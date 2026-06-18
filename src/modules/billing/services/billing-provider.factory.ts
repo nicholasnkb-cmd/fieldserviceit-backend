@@ -4,6 +4,7 @@ import { StripeBillingProvider } from '../providers/stripe.provider';
 import { PaddleBillingProvider } from '../providers/paddle.provider';
 import { LemonSqueezyBillingProvider } from '../providers/lemon-squeezy.provider';
 import { ChargebeeBillingProvider } from '../providers/chargebee.provider';
+import { PayPalBillingProvider } from '../providers/paypal.provider';
 
 @Injectable()
 export class BillingProviderFactory {
@@ -15,6 +16,7 @@ export class BillingProviderFactory {
       PADDLE: new PaddleBillingProvider(),
       LEMON_SQUEEZY: new LemonSqueezyBillingProvider(),
       CHARGEBEE: new ChargebeeBillingProvider(),
+      PAYPAL: new PayPalBillingProvider(),
     };
   }
 
@@ -33,6 +35,6 @@ export class BillingProviderFactory {
 
   private normalize(provider?: string | null): BillingProviderKey {
     const key = String(provider || 'STRIPE').toUpperCase().replace(/-/g, '_') as BillingProviderKey;
-    return ['STRIPE', 'PADDLE', 'LEMON_SQUEEZY', 'CHARGEBEE'].includes(key) ? key : 'STRIPE';
+    return ['STRIPE', 'PADDLE', 'LEMON_SQUEEZY', 'CHARGEBEE', 'PAYPAL'].includes(key) ? key : 'STRIPE';
   }
 }
