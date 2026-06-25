@@ -1,9 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { BillingProvider, BillingProviderKey } from '../interfaces/billing-provider.interface';
-import { StripeBillingProvider } from '../providers/stripe.provider';
-import { PaddleBillingProvider } from '../providers/paddle.provider';
-import { LemonSqueezyBillingProvider } from '../providers/lemon-squeezy.provider';
-import { ChargebeeBillingProvider } from '../providers/chargebee.provider';
 import { PayPalBillingProvider } from '../providers/paypal.provider';
 
 @Injectable()
@@ -12,17 +8,15 @@ export class BillingProviderFactory {
 
   constructor() {
     this.providers = {
-      STRIPE: new StripeBillingProvider(),
-      PADDLE: new PaddleBillingProvider(),
-      LEMON_SQUEEZY: new LemonSqueezyBillingProvider(),
-      CHARGEBEE: new ChargebeeBillingProvider(),
       PAYPAL: new PayPalBillingProvider(),
     };
   }
 
   get(provider?: string | null): BillingProvider {
-    const key = this.normalize(provider);
-    return this.providers[key] || this.providers.STRIPE;
+    if (provider && String(provider).toUpperCase() !== 'PAYPAL') {
+      throw new BadRequestException('PayPal is the only supported billing provider');
+    }
+    return this.providers.PAYPAL;
   }
 
   all() {
@@ -30,11 +24,7 @@ export class BillingProviderFactory {
   }
 
   defaultKey(): BillingProviderKey {
-    return this.normalize(process.env.BILLING_PROVIDER || 'STRIPE');
+    return 'PAYPAL';
   }
 
-  private normalize(provider?: string | null): BillingProviderKey {
-    const key = String(provider || 'STRIPE').toUpperCase().replace(/-/g, '_') as BillingProviderKey;
-    return ['STRIPE', 'PADDLE', 'LEMON_SQUEEZY', 'CHARGEBEE', 'PAYPAL'].includes(key) ? key : 'STRIPE';
-  }
 }

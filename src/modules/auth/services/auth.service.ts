@@ -9,6 +9,7 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { hashCredential } from '../../../common/security/credential-hash';
 import { SessionRepository } from '../../../database/repositories/session.repository';
+import { LegalConsentInput, PRIVACY_VERSION, TERMS_VERSION } from '../legal-consent';
 
 const BCRYPT_ROUNDS = 12;
 const LOGIN_LOCK_THRESHOLD = 5;
@@ -16,7 +17,7 @@ const LOGIN_LOCK_MS = 15 * 60 * 1000;
 
 const loginFailures = new Map<string, { count: number; lockedUntil?: number; lastFailureAt: number }>();
 
-type RegistrationProfile = {
+type RegistrationProfile = LegalConsentInput & {
   email: string;
   password: string;
   firstName: string;
@@ -147,7 +148,8 @@ export class AuthService {
     };
   }
 
-  async registerPublic(dto: RegistrationProfile) {
+  async registerPublic(dto: RegistrationProfile, context: SessionContext = {}) {
+    this.assertCurrentLegalConsent(dto);
     dto.email = dto.email.toLowerCase().trim();
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) {
@@ -166,6 +168,8 @@ export class AuthService {
       },
     });
 
+    await this.recordLegalConsent(user.id, context, dto);
+
     const tokens = await this.generateTokens(user);
 
     return {
@@ -174,7 +178,8 @@ export class AuthService {
     };
   }
 
-  async registerBusiness(dto: BusinessRegistrationProfile) {
+  async registerBusiness(dto: BusinessRegistrationProfile, context: SessionContext = {}) {
+    this.assertCurrentLegalConsent(dto);
     dto.email = dto.email.toLowerCase().trim();
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) {
@@ -238,12 +243,36 @@ export class AuthService {
       },
     });
 
+    await this.recordLegalConsent(user.id, context, dto);
+
     const tokens = await this.generateTokens(user);
 
     return {
       user: { ...this.responseUser(user) },
       ...tokens,
     };
+  }
+
+  private assertCurrentLegalConsent(dto: LegalConsentInput) {
+    if (!dto.termsAccepted || dto.termsVersion !== TERMS_VERSION || dto.privacyVersion !== PRIVACY_VERSION) {
+      throw new BadRequestException('Review and accept the current Terms of Service and Privacy Policy');
+    }
+  }
+
+  private async recordLegalConsent(userId: string, context: SessionContext, dto: LegalConsentInput) {
+    await this.prisma.execute(
+      `INSERT INTO UserLegalConsent
+       (id, userId, termsVersion, privacyVersion, ipAddress, userAgent, acceptedAt)
+       VALUES (?, ?, ?, ?, ?, ?, NOW(3))`,
+      [
+        crypto.randomUUID(),
+        userId,
+        dto.termsVersion,
+        dto.privacyVersion,
+        context.ipAddress || null,
+        context.userAgent?.slice(0, 500) || null,
+      ],
+    );
   }
 
   async verifyEmail(token: string) {

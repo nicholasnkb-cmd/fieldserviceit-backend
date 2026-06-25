@@ -25,4 +25,10 @@ describe('BillingProviderFactory', () => {
 
     expect(factory.defaultKey()).toBe('PAYPAL');
   });
+
+  it('rejects every non-PayPal provider', () => {
+    const factory = new BillingProviderFactory();
+
+    expect(() => factory.get('card-gateway')).toThrow('PayPal is the only supported billing provider');
+  });
 });

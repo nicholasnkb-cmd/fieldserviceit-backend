@@ -123,6 +123,34 @@ export class TicketsController {
   }
 
   @BusinessOnly()
+  @Get(':id/profitability')
+  @RequirePermissions('tickets.view')
+  profitability(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.ticketsService.profitability(id, user);
+  }
+
+  @BusinessOnly()
+  @Get(':id/approvals')
+  @RequirePermissions('tickets.view')
+  approvals(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.ticketsService.listApprovals(id, user);
+  }
+
+  @BusinessOnly()
+  @Post(':id/approvals')
+  @RequirePermissions('tickets.edit')
+  requestApproval(@Param('id') id: string, @Body() dto: any, @CurrentUser() user: CurrentUserType) {
+    return this.ticketsService.requestApproval(id, user, dto);
+  }
+
+  @BusinessOnly()
+  @Post(':id/approvals/:approvalId/decision')
+  @RequirePermissions('tickets.edit')
+  decideApproval(@Param('id') id: string, @Param('approvalId') approvalId: string, @Body() dto: any, @CurrentUser() user: CurrentUserType) {
+    return this.ticketsService.decideApproval(id, approvalId, user, dto);
+  }
+
+  @BusinessOnly()
   @Patch(':id')
   @RequirePermissions('tickets.edit')
   update(@Param('id') id: string, @Body() dto: UpdateTicketDto, @CurrentUser() user: CurrentUserType) {

@@ -1,6 +1,6 @@
-export type BillingProviderKey = 'STRIPE' | 'PADDLE' | 'LEMON_SQUEEZY' | 'CHARGEBEE' | 'PAYPAL';
+export type BillingProviderKey = 'PAYPAL';
 export type BillingInterval = 'MONTH' | 'YEAR';
-export type BillingComponent = 'BASE' | 'SEAT';
+export type BillingComponent = 'BASE';
 
 export interface BillingLineItem {
   priceId: string;

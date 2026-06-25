@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Post, Body, Headers, Req, UseGuards, Get, RawBodyRequest, HttpCode, Param } from '@nestjs/common';
+import { BadRequestException, Controller, Post, Body, Headers, Req, UseGuards, Get, RawBodyRequest, HttpCode } from '@nestjs/common';
 import { BillingService } from '../services/billing.service';
 import { PlansService } from '../services/plans.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -46,7 +46,10 @@ export class BillingController {
       body.successUrl || `${baseUrl}/billing?success=1`,
       body.cancelUrl || `${baseUrl}/billing?canceled=1`,
       {
-        provider: body.provider,
+        userId: user.id,
+        termsAccepted: body.termsAccepted,
+        termsVersion: body.termsVersion,
+        privacyVersion: body.privacyVersion,
         interval: body.interval,
         seats: body.seats,
         useTrial: body.useTrial,
@@ -89,20 +92,13 @@ export class BillingController {
     return this.billingService.createPortalSession(companyId, `${baseUrl}/billing`);
   }
 
-  @Post('webhook')
+  @Post('webhook/paypal')
   @HttpCode(200)
-  async stripeWebhook(@Req() req: RawBodyRequest<any>, @Headers() headers: Record<string, string | string[] | undefined>) {
-    return this.billingService.handleWebhook('STRIPE', req.rawBody || req.body, headers);
-  }
-
-  @Post('webhook/:provider')
-  @HttpCode(200)
-  async providerWebhook(
-    @Param('provider') provider: string,
+  async paypalWebhook(
     @Req() req: RawBodyRequest<any>,
     @Headers() headers: Record<string, string | string[] | undefined>,
   ) {
-    return this.billingService.handleWebhook(provider, req.rawBody || req.body, headers);
+    return this.billingService.handleWebhook(req.rawBody || req.body, headers);
   }
 
   private maskBilling(data: any, user: CurrentUserType) {

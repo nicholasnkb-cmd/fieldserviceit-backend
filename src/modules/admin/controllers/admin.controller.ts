@@ -440,10 +440,10 @@ export class AdminController {
   }
 
   @RequirePermissions('billing.manage')
-  @Post('billing/providers/:provider/test')
+  @Post('billing/paypal/test')
   @Roles('SUPER_ADMIN')
-  testBillingProvider(@Param('provider') provider: string) {
-    return this.billingService.testProvider(provider);
+  testPayPal() {
+    return this.billingService.testProvider();
   }
 
   @RequirePermissions('billing.view')
@@ -463,7 +463,7 @@ export class AdminController {
   @RequirePermissions('billing.manage')
   @Post('billing/prices')
   @Roles('SUPER_ADMIN')
-  upsertBillingPrice(@Body() body: { planId: string; provider: string; interval: string; component: string; externalPriceId: string; isActive?: boolean }) {
+  upsertBillingPrice(@Body() body: { planId: string; interval: string; component: string; externalPriceId: string; isActive?: boolean }) {
     return this.billingService.upsertPriceMapping(body);
   }
 

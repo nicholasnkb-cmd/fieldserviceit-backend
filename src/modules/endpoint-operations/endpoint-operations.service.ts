@@ -96,7 +96,8 @@ export class EndpointOperationsService {
     return (await this.db.query<any[]>('SELECT * FROM RemoteAccessEndpoint WHERE id = ? LIMIT 1', [id]))[0];
   }
 
-  async launchRemoteSession(user: CurrentUser, endpointId: string) {
+  async launchRemoteSession(user: CurrentUser, endpointId: string, authorizationConfirmed = false) {
+    if (!authorizationConfirmed) throw new BadRequestException('Confirm authorization before launching remote access');
     const companyId = this.companyId(user);
     await this.ensureSchema();
     const rows = await this.db.query<any[]>(

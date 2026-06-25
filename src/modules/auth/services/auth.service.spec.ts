@@ -161,7 +161,15 @@ describe('AuthService', () => {
       password: 'Test1234!',
       firstName: 'John',
       lastName: 'Doe',
+      termsAccepted: true,
+      termsVersion: '2026-06-21',
+      privacyVersion: '2026-06-21',
     };
+
+    it('rejects missing or stale legal consent', async () => {
+      await expect(service.registerBusiness({ ...baseDto, termsAccepted: false, companyName: 'Test Corp' })).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+    });
 
     it('should reject if email already exists', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'existing' });
@@ -190,6 +198,10 @@ describe('AuthService', () => {
       expect(mockPrisma.companyPlan.upsert).not.toHaveBeenCalled();
       expect(mockPrisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ companyId: 'company-1', email: 'new@company.com' }) }),
+      );
+      expect(mockPrisma.execute).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO UserLegalConsent'),
+        expect.arrayContaining(['user-1', '2026-06-21', '2026-06-21']),
       );
       expect(result.user.companyId).toBe('company-1');
       expect(result.user.email).toBe('new@company.com');

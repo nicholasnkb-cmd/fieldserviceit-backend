@@ -38,6 +38,12 @@ export class TopologyController {
     return this.service.listSites(user);
   }
 
+  @RequirePermissions('topology.view')
+  @Get('alerts/correlations')
+  correlateAlerts(@CurrentUser() user: CurrentUserType) {
+    return this.service.correlateAlerts(user);
+  }
+
   @RequirePermissions('topology.manage')
   @Post('sites')
   createSite(@CurrentUser() user: CurrentUserType, @Body() dto: any) {

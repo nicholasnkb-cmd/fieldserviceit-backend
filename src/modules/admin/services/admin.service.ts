@@ -96,7 +96,6 @@ export class AdminService {
     trialDays?: number;
     maxUsers?: number;
     maxTickets?: number;
-    stripePriceId?: string;
     isActive?: boolean;
     features?: Record<string, boolean>;
   }) {
@@ -112,7 +111,6 @@ export class AdminService {
     if (dto.trialDays !== undefined) data.trialDays = Math.max(0, Number(dto.trialDays));
     if (dto.maxUsers !== undefined) data.maxUsers = Number(dto.maxUsers);
     if (dto.maxTickets !== undefined) data.maxTickets = Number(dto.maxTickets);
-    if (dto.stripePriceId !== undefined) data.stripePriceId = dto.stripePriceId || null;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
     if (dto.features !== undefined) data.features = JSON.stringify(dto.features);
 
@@ -1698,13 +1696,20 @@ export class AdminService {
     const plans = await this.prisma.plan.findMany({ orderBy: { sortOrder: 'asc' } });
     const businessPlan = plans.find((plan: any) => String(plan.name).toLowerCase() === 'business');
     const starterPlan = plans.find((plan: any) => String(plan.name).toLowerCase() === 'starter');
-    const stripeConfigured = Boolean(process.env.STRIPE_SECRET_KEY);
-    const webhookConfigured = Boolean(process.env.STRIPE_WEBHOOK_SECRET);
+    const paypalClientConfigured = Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET);
+    const paypalWebhookConfigured = Boolean(process.env.PAYPAL_WEBHOOK_ID);
+    const paypalPrices = await this.prisma.query<any[]>(
+      `SELECT planId, billingInterval FROM BillingPrice WHERE provider = 'PAYPAL' AND component = 'BASE' AND isActive = 1`,
+    ).catch(() => []);
+    const paypalPriceKeys = new Set(paypalPrices.map((price) => `${price.planId}:${price.billingInterval}`));
 
-    add('Stripe secret key', stripeConfigured, stripeConfigured ? 'STRIPE_SECRET_KEY is configured.' : 'Set STRIPE_SECRET_KEY before taking paid signups.', 'critical');
-    add('Stripe webhook', webhookConfigured, webhookConfigured ? 'STRIPE_WEBHOOK_SECRET is configured.' : 'Configure Stripe webhook endpoint /v1/billing/webhook.', 'critical');
-    add('Business plan price', Boolean(businessPlan?.stripePriceId), businessPlan?.stripePriceId ? 'Business plan has a Stripe price ID.' : 'Add a Stripe price ID to the Business plan.', 'warning');
-    add('Starter plan price', Boolean(starterPlan?.stripePriceId), starterPlan?.stripePriceId ? 'Starter plan has a Stripe price ID.' : 'Add a Stripe price ID to the individual Starter plan.', 'warning');
+    add('PayPal API credentials', paypalClientConfigured, paypalClientConfigured ? 'PayPal client ID and secret are configured.' : 'Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET before taking paid signups.', 'critical');
+    add('PayPal webhook', paypalWebhookConfigured, paypalWebhookConfigured ? 'PAYPAL_WEBHOOK_ID is configured.' : 'Configure PayPal webhook endpoint /v1/billing/webhook/paypal.', 'critical');
+    add('Business monthly plan', Boolean(businessPlan && paypalPriceKeys.has(`${businessPlan.id}:MONTH`)), businessPlan && paypalPriceKeys.has(`${businessPlan.id}:MONTH`) ? 'Business monthly PayPal plan is mapped.' : 'Map the Business monthly PayPal plan ID.', 'warning');
+    add('Business annual plan', Boolean(businessPlan && paypalPriceKeys.has(`${businessPlan.id}:YEAR`)), businessPlan && paypalPriceKeys.has(`${businessPlan.id}:YEAR`) ? 'Business annual PayPal plan is mapped.' : 'Map the Business annual PayPal plan ID.', 'warning');
+    if (starterPlan && Number(starterPlan.monthlyPrice || 0) > 0) {
+      add('Starter monthly plan', paypalPriceKeys.has(`${starterPlan.id}:MONTH`), paypalPriceKeys.has(`${starterPlan.id}:MONTH`) ? 'Starter monthly PayPal plan is mapped.' : 'Map the Starter monthly PayPal plan ID.', 'warning');
+    }
     add('Frontend URL', Boolean(process.env.FRONTEND_URL), process.env.FRONTEND_URL ? `FRONTEND_URL is ${process.env.FRONTEND_URL}.` : 'Set FRONTEND_URL for checkout redirects.', 'warning');
     add('CORS origin', Boolean(process.env.CORS_ORIGIN), process.env.CORS_ORIGIN ? `CORS_ORIGIN is ${process.env.CORS_ORIGIN}.` : 'Set CORS_ORIGIN to the production frontend domain.', 'warning');
     add('JWT secret', Boolean(process.env.JWT_SECRET), process.env.JWT_SECRET ? 'JWT_SECRET is configured.' : 'Set a strong JWT_SECRET before launch.', 'critical');
@@ -1758,7 +1763,7 @@ export class AdminService {
       environment: process.env.NODE_ENV || 'development',
       databaseName: process.env.DB_NAME || 'configured',
       apiPrefix: '/v1',
-      stripeWebhookPath: '/v1/billing/webhook',
+      paypalWebhookPath: '/v1/billing/webhook/paypal',
       deployment: {
         frontendVersion: process.env.FRONTEND_VERSION || process.env.APP_VERSION || 'unknown',
         backendVersion: process.env.BACKEND_VERSION || process.env.APP_VERSION || process.env.npm_package_version || 'unknown',
@@ -1772,7 +1777,7 @@ export class AdminService {
         name: plan.name,
         isActive: Boolean(plan.isActive),
         monthlyPrice: Number(plan.monthlyPrice || 0),
-        stripePriceConfigured: Boolean(plan.stripePriceId),
+        paypalPriceConfigured: paypalPriceKeys.has(`${plan.id}:MONTH`) || paypalPriceKeys.has(`${plan.id}:YEAR`),
       })),
       mdm: { pendingCommands },
       checks,

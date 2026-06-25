@@ -1,4 +1,5 @@
 import { Injectable, ServiceUnavailableException, Logger } from '@nestjs/common';
+import { execFileSync } from 'node:child_process';
 import { PrismaService } from '../../database/prisma.service';
 import { StructuredLogger } from '../../common/logger/structured-logger.service';
 
@@ -6,6 +7,7 @@ export interface HealthCheckResponse {
   status: 'ok' | 'degraded' | 'error';
   timestamp: string;
   version: string;
+  commit: string;
   database: {
     status: 'ok' | 'error';
     latency?: number;
@@ -16,6 +18,7 @@ export interface HealthDashboard {
   status: 'ok' | 'degraded' | 'error';
   timestamp: string;
   version: string;
+  commit: string;
   uptime: {
     seconds: number;
     readable: string;
@@ -60,13 +63,25 @@ export interface HealthDashboard {
 @Injectable()
 export class HealthService {
   private readonly logger = new Logger(HealthService.name);
-  private readonly version = '1.0.0';
+  private readonly version = process.env.BACKEND_VERSION || process.env.APP_VERSION || process.env.npm_package_version || 'unknown';
+  private readonly commit = process.env.BACKEND_COMMIT || process.env.GITHUB_SHA || process.env.GIT_COMMIT || this.gitCommit();
   private startTime = new Date();
 
   constructor(
     private prisma: PrismaService,
     private structuredLogger: StructuredLogger,
   ) {}
+
+  private gitCommit() {
+    try {
+      return execFileSync('git', ['rev-parse', 'HEAD'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+    } catch {
+      return 'unknown';
+    }
+  }
 
   /**
    * Comprehensive health check with database verification
@@ -82,6 +97,7 @@ export class HealthService {
         status: 'ok',
         timestamp: new Date().toISOString(),
         version: this.version,
+        commit: this.commit,
         database: {
           status: 'ok',
           latency: dbLatency,
@@ -93,6 +109,7 @@ export class HealthService {
         status: 'error',
         timestamp: new Date().toISOString(),
         version: this.version,
+        commit: this.commit,
         database: {
           status: 'error',
         },
@@ -117,6 +134,7 @@ export class HealthService {
           status: 'degraded',
           timestamp: new Date().toISOString(),
           version: this.version,
+          commit: this.commit,
           database: {
             status: 'ok',
             latency: dbLatency,
@@ -128,6 +146,7 @@ export class HealthService {
         status: 'ok',
         timestamp: new Date().toISOString(),
         version: this.version,
+        commit: this.commit,
         database: {
           status: 'ok',
           latency: dbLatency,
@@ -139,6 +158,7 @@ export class HealthService {
         status: 'error',
         timestamp: new Date().toISOString(),
         version: this.version,
+        commit: this.commit,
         message: 'Service not ready',
       });
     }
@@ -153,6 +173,7 @@ export class HealthService {
       status: 'ok',
       timestamp: new Date().toISOString(),
       version: this.version,
+      commit: this.commit,
       database: {
         status: 'ok',
       },
@@ -210,6 +231,7 @@ export class HealthService {
         status,
         timestamp: new Date().toISOString(),
         version: this.version,
+        commit: this.commit,
         uptime: {
           seconds: uptimeSeconds,
           readable: readableUptime,
@@ -241,6 +263,7 @@ export class HealthService {
         status: 'error',
         timestamp: new Date().toISOString(),
         version: this.version,
+        commit: this.commit,
         message: 'Failed to generate health dashboard',
       });
     }

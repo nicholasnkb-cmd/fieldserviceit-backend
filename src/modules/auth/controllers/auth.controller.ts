@@ -41,7 +41,7 @@ export class AuthController {
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(@Body() body: RegisterDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.registerPublic(body);
+    const result = await this.authService.registerPublic(body, this.clientContext(req));
     setAuthCookies(res, result, req);
     return result;
   }
@@ -51,7 +51,7 @@ export class AuthController {
   @Post('register-business')
   @HttpCode(HttpStatus.CREATED)
   async registerBusiness(@Body() body: RegisterBusinessDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.registerBusiness(body);
+    const result = await this.authService.registerBusiness(body, this.clientContext(req));
     setAuthCookies(res, result, req);
     return result;
   }

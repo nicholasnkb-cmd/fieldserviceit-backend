@@ -1,5 +1,3 @@
-import * as crypto from 'crypto';
-
 export function asText(rawBody: string | Buffer) {
   return Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody || '');
 }
@@ -7,21 +5,6 @@ export function asText(rawBody: string | Buffer) {
 export function parseJsonBody(rawBody: string | Buffer) {
   const text = asText(rawBody);
   return text ? JSON.parse(text) : {};
-}
-
-export function hmacSha256Hex(secret: string, payload: string) {
-  return crypto.createHmac('sha256', secret).update(payload).digest('hex');
-}
-
-export function safeEqual(left: string, right: string) {
-  const a = Buffer.from(left || '', 'utf8');
-  const b = Buffer.from(right || '', 'utf8');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-
-export function fromSeconds(value?: number | string | null) {
-  const number = Number(value || 0);
-  return number ? new Date(number * 1000) : null;
 }
 
 export function fromIso(value?: string | null) {

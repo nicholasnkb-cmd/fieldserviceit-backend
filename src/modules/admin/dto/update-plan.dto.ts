@@ -34,10 +34,6 @@ export class UpdatePlanDto {
   maxTickets?: number;
 
   @IsOptional()
-  @IsString()
-  stripePriceId?: string;
-
-  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 }

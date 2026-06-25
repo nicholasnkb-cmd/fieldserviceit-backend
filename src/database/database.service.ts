@@ -307,7 +307,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         planId VARCHAR(191) NOT NULL,
         stripeSubscriptionId VARCHAR(191),
         stripeCustomerId VARCHAR(191),
-        billingProvider VARCHAR(32) NOT NULL DEFAULT 'STRIPE',
+        billingProvider VARCHAR(32) NOT NULL DEFAULT 'PAYPAL',
         providerCustomerId VARCHAR(191),
         providerSubscriptionId VARCHAR(191),
         billingInterval VARCHAR(16) NOT NULL DEFAULT 'MONTH',

@@ -233,6 +233,51 @@ export class MaintenanceService {
     return { plan: await this.getPlan(user, plan.id), run: (await this.db.query<any[]>('SELECT * FROM MaintenanceRun WHERE id = ? LIMIT 1', [runId]))[0] };
   }
 
+  async suggestPlans(user: CurrentUser) {
+    await this.ensureSchema();
+    const scope = this.scopeFor(user);
+    const companyClause = scope.companyId ? 't.companyId = ? AND ' : '';
+    const values = scope.companyId ? [scope.companyId] : [];
+    const rows = await this.db.query<any[]>(
+      `SELECT
+         t.assetId,
+         a.name as assetName,
+         a.assetType,
+         COALESCE(NULLIF(t.category, ''), 'General') as category,
+         COUNT(*) as ticketCount,
+         MAX(t.resolvedAt) as lastResolvedAt,
+         GROUP_CONCAT(t.ticketNumber ORDER BY t.resolvedAt DESC SEPARATOR ', ') as ticketNumbers
+       FROM Ticket t
+       LEFT JOIN Asset a ON a.id = t.assetId
+       WHERE ${companyClause}t.deletedAt IS NULL
+         AND t.status IN ('RESOLVED', 'CLOSED')
+         AND t.resolvedAt >= DATE_SUB(NOW(3), INTERVAL 180 DAY)
+       GROUP BY t.assetId, a.name, a.assetType, COALESCE(NULLIF(t.category, ''), 'General')
+       HAVING COUNT(*) >= 2
+       ORDER BY ticketCount DESC, lastResolvedAt DESC
+       LIMIT 25`,
+      values,
+    );
+
+    return rows.map((row) => ({
+      name: `${row.assetName || row.category} preventive maintenance`,
+      description: `${row.ticketCount} related resolved tickets in the last 180 days.`,
+      assetId: row.assetId,
+      assetName: row.assetName,
+      assetType: row.assetType,
+      category: row.category,
+      frequency: Number(row.ticketCount) >= 4 ? 'MONTHLY' : 'QUARTERLY',
+      checklist: [
+        `Review recent ${row.category} tickets: ${row.ticketNumbers}`,
+        'Inspect current asset health and configuration',
+        'Apply preventive fix or update runbook',
+        'Document follow-up recommendations',
+      ],
+      confidence: Math.min(95, 45 + Number(row.ticketCount) * 12),
+      lastResolvedAt: row.lastResolvedAt,
+    }));
+  }
+
   private async getPlan(user: CurrentUser, id: string) {
     const scope = this.scopeFor(user);
     const values: any[] = [id];

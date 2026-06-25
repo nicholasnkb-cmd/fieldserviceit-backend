@@ -169,6 +169,61 @@ export class TopologyService {
     return this.db.query<any[]>(`SELECT * FROM NetworkSite ${where} ORDER BY type ASC, name ASC`, values).catch(() => []);
   }
 
+  async correlateAlerts(user: CurrentUser) {
+    await this.ensureSchema();
+    const scope = this.scopeFor(user);
+    const companyClause = scope.companyId ? 'e.companyId = ? AND ' : '';
+    const values = scope.companyId ? [scope.companyId] : [];
+    const rows = await this.db.query<any[]>(
+      `SELECT
+         e.companyId,
+         e.assetId,
+         a.name as assetName,
+         a.location,
+         e.ruleId,
+         e.title,
+         COUNT(*) as alertCount,
+         MIN(e.triggeredAt) as firstTriggeredAt,
+         MAX(e.triggeredAt) as lastTriggeredAt,
+         GROUP_CONCAT(e.id ORDER BY e.triggeredAt DESC SEPARATOR ',') as alertIds,
+         MAX(e.ticketId) as linkedTicketId,
+         t.ticketNumber as linkedTicketNumber,
+         t.status as linkedTicketStatus
+       FROM NetworkAlertEvent e
+       LEFT JOIN Asset a ON a.id = e.assetId
+       LEFT JOIN Ticket t ON t.id = e.ticketId
+       WHERE ${companyClause}e.status = 'ACTIVE'
+       GROUP BY e.companyId, e.assetId, a.name, a.location, e.ruleId, e.title, t.ticketNumber, t.status
+       ORDER BY alertCount DESC, lastTriggeredAt DESC
+       LIMIT 50`,
+      values,
+    ).catch(() => []);
+
+    return rows.map((row) => ({
+      companyId: row.companyId,
+      assetId: row.assetId,
+      assetName: row.assetName,
+      location: row.location,
+      ruleId: row.ruleId,
+      title: row.title,
+      alertCount: Number(row.alertCount || 0),
+      firstTriggeredAt: row.firstTriggeredAt,
+      lastTriggeredAt: row.lastTriggeredAt,
+      alertIds: String(row.alertIds || '').split(',').filter(Boolean),
+      linkedTicket: row.linkedTicketId ? {
+        id: row.linkedTicketId,
+        ticketNumber: row.linkedTicketNumber,
+        status: row.linkedTicketStatus,
+      } : null,
+      recommendation: row.linkedTicketId
+        ? 'Append new alert evidence to the linked ticket timeline.'
+        : Number(row.alertCount || 0) > 1
+          ? 'Create one incident ticket for this correlated alert group.'
+          : 'Monitor or attach to an existing asset ticket.',
+      impactScore: Number(row.alertCount || 0) * 5 + (row.location ? 2 : 0),
+    }));
+  }
+
   async createSite(user: CurrentUser, dto: any) {
     await this.ensureSchema();
     const companyId = this.resolveWriteCompany(user, dto.companyId);

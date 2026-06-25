@@ -191,6 +191,19 @@ export class KnowledgeBaseService {
       throw new BadRequestException('Ticket needs a description or resolution before creating an article');
     }
 
+    const timeline = await this.db.query<any[]>(
+      `SELECT action, comment, createdAt
+       FROM TicketTimeline
+       WHERE ticketId = ? AND isInternal = 0
+       ORDER BY createdAt ASC
+       LIMIT 20`,
+      [ticket.id],
+    ).catch(() => []);
+    const timelineNotes = timeline
+      .filter((entry) => entry.comment)
+      .map((entry) => `- ${entry.action}: ${String(entry.comment).slice(0, 240)}`)
+      .slice(-8);
+
     return this.create({
       title: ticket.title,
       summary: `Created from ticket ${ticket.ticketNumber}.`,
@@ -198,8 +211,14 @@ export class KnowledgeBaseService {
         'Issue',
         ticket.description || 'No description provided.',
         '',
+        timelineNotes.length ? 'Observed timeline' : '',
+        ...timelineNotes,
+        timelineNotes.length ? '' : '',
         'Resolution',
         ticket.resolution || 'Add the verified resolution steps before publishing.',
+        '',
+        'Validation',
+        'Confirm the customer-visible symptoms are resolved and document any follow-up maintenance.',
       ].join('\n'),
       category: ticket.category || 'General',
       tags: [ticket.subcategory, ticket.ticketNumber].filter(Boolean),

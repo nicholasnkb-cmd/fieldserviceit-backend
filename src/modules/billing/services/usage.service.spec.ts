@@ -39,7 +39,6 @@ describe('UsageService', () => {
           features: '{}',
           monthlyPrice: 0,
           description: 'Free plan',
-          stripePriceId: null,
           sortOrder: 0,
           isActive: true,
           createdAt: new Date(),

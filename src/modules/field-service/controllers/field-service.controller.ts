@@ -31,9 +31,21 @@ export class FieldServiceController {
     return this.fieldService.mobileSummary(this.readCompanyId(user), user);
   }
 
+  @Get('recommendations/:ticketId')
+  @RequirePermissions('dispatch.view')
+  recommendations(@Param('ticketId') ticketId: string, @CurrentUser() user: CurrentUserType) {
+    return this.fieldService.recommendTechnicians(ticketId, this.companyId(user));
+  }
+
   @Get()
   getBoard(@CurrentUser() user: CurrentUserType) {
     return this.fieldService.getDispatchBoard(this.readCompanyId(user));
+  }
+
+  @Get(':id/offline-packet')
+  @RequirePermissions('dispatch.view')
+  offlinePacket(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.fieldService.offlineJobPacket(id, this.companyId(user));
   }
 
   @Patch(':id')

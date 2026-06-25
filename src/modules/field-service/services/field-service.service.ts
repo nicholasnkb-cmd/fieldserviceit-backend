@@ -30,6 +30,123 @@ export class FieldServiceService {
     };
   }
 
+  async recommendTechnicians(ticketId: string, companyId: string) {
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, companyId, deletedAt: null },
+      include: { asset: true, sla: true },
+    });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+
+    const technicians = await this.prisma.user.findMany({
+      where: {
+        companyId,
+        deletedAt: null,
+        isActive: true,
+        role: { in: ['TECHNICIAN', 'TENANT_ADMIN'] },
+      },
+      include: {
+        dispatches: {
+          where: { status: { in: ['DISPATCHED', 'EN_ROUTE', 'ON_SITE'] } },
+          include: { ticket: { select: { priority: true, location: true, asset: { select: { assetType: true } } } } },
+        },
+        assignedTickets: {
+          where: { deletedAt: null, status: { in: ['ASSIGNED', 'IN_PROGRESS', 'ON_HOLD'] } },
+          select: { id: true, priority: true, category: true, location: true, asset: { select: { assetType: true } } },
+        },
+      },
+    });
+
+    const recommendations = technicians.map((tech: any) => {
+      const activeDispatches = tech.dispatches.length;
+      const activeTickets = tech.assignedTickets.length;
+      const sameLocationJobs = [...tech.dispatches, ...tech.assignedTickets]
+        .filter((item: any) => item.ticket?.location === ticket.location || item.location === ticket.location).length;
+      const sameAssetTypeJobs = [...tech.dispatches, ...tech.assignedTickets]
+        .filter((item: any) => (item.ticket?.asset?.assetType || item.asset?.assetType) === ticket.asset?.assetType).length;
+      const workloadPenalty = activeDispatches * 12 + activeTickets * 6;
+      const slaUrgency = ticket.slaId || ['CRITICAL', 'HIGH'].includes(String(ticket.priority).toUpperCase()) ? 18 : 0;
+      const locationScore = ticket.location && sameLocationJobs ? 14 : 0;
+      const assetScore = ticket.asset?.assetType && sameAssetTypeJobs ? 12 : 0;
+      const score = Math.max(0, 70 + slaUrgency + locationScore + assetScore - workloadPenalty);
+      const reasons = [
+        slaUrgency ? 'SLA or high-priority work needs faster assignment' : null,
+        locationScore ? 'Already has nearby work' : null,
+        assetScore ? `Recent work on ${ticket.asset?.assetType} assets` : null,
+        activeDispatches || activeTickets ? `${activeDispatches + activeTickets} active job${activeDispatches + activeTickets === 1 ? '' : 's'}` : 'No active workload found',
+      ].filter(Boolean);
+      return {
+        technicianId: tech.id,
+        name: [tech.firstName, tech.lastName].filter(Boolean).join(' ') || tech.email,
+        role: tech.role,
+        score,
+        activeDispatches,
+        activeTickets,
+        reasons,
+      };
+    });
+
+    return {
+      ticket: {
+        id: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        priority: ticket.priority,
+        location: ticket.location,
+        assetType: ticket.asset?.assetType || null,
+      },
+      recommendations: recommendations.sort((a, b) => b.score - a.score),
+    };
+  }
+
+  async offlineJobPacket(id: string, companyId: string) {
+    const dispatch = await this.prisma.dispatch.findFirst({
+      where: { id, companyId },
+      include: {
+        technician: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+        ticket: {
+          include: {
+            asset: true,
+            sla: true,
+            attachments: true,
+            timeline: { orderBy: { createdAt: 'desc' }, take: 20 },
+          },
+        },
+      },
+    });
+    if (!dispatch) throw new NotFoundException('Dispatch not found');
+
+    const relatedArticles = await this.prisma.query<any[]>(
+      `SELECT id, title, summary, category, tags, updatedAt
+       FROM KbArticle
+       WHERE companyId = ?
+         AND status IN ('PUBLISHED', 'REVIEW')
+         AND (
+           category = ? OR tags LIKE ? OR title LIKE ?
+         )
+       ORDER BY updatedAt DESC
+       LIMIT 8`,
+      [
+        companyId,
+        dispatch.ticket.category || '',
+        `%${dispatch.ticket.subcategory || dispatch.ticket.category || dispatch.ticket.asset?.assetType || ''}%`,
+        `%${dispatch.ticket.asset?.assetType || dispatch.ticket.category || ''}%`,
+      ],
+    ).catch(() => []);
+
+    return {
+      generatedAt: new Date().toISOString(),
+      cacheHint: 'Store this packet for mobile offline use before the technician leaves service coverage.',
+      dispatch,
+      checklist: [
+        'Confirm customer contact and site access',
+        'Review asset history and recent ticket timeline',
+        'Capture before and after photos',
+        'Record labor, parts, and resolution notes',
+        'Collect customer signature when work is complete',
+      ],
+      relatedArticles,
+    };
+  }
+
   async dispatch(ticketId: string, technicianId: string, companyId: string, actorUserId?: string) {
     const ticket = await this.prisma.ticket.findFirst({ where: { id: ticketId, companyId } });
     if (!ticket) throw new NotFoundException('Ticket not found');

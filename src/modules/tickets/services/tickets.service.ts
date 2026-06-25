@@ -454,6 +454,122 @@ export class TicketsService {
     return updated;
   }
 
+  async profitability(id: string, user: any) {
+    const ticket = await this.findOne(id, user, false);
+    const [timeEntries, dispatches] = await Promise.all([
+      this.prisma.timeEntry.findMany({
+        where: { ticketId: id },
+        include: { user: { select: { id: true, firstName: true, lastName: true } } },
+      }),
+      this.prisma.dispatch.findMany({ where: { ticketId: id, companyId: ticket.companyId || undefined } }),
+    ]);
+
+    const defaultLaborRate = Number(process.env.DEFAULT_LABOR_RATE_USD || 125);
+    const defaultLaborCost = Number(process.env.DEFAULT_LABOR_COST_USD || 65);
+    const travelFlatCost = Number(process.env.DEFAULT_TRAVEL_COST_USD || 35);
+    const billableMinutes = timeEntries
+      .filter((entry: any) => entry.billable)
+      .reduce((sum: number, entry: any) => sum + this.timeEntryMinutes(entry), 0);
+    const nonBillableMinutes = timeEntries
+      .filter((entry: any) => !entry.billable)
+      .reduce((sum: number, entry: any) => sum + this.timeEntryMinutes(entry), 0);
+    const laborRevenue = Math.round((billableMinutes / 60) * defaultLaborRate * 100) / 100;
+    const laborCost = Math.round(((billableMinutes + nonBillableMinutes) / 60) * defaultLaborCost * 100) / 100;
+    const travelCost = dispatches.length * travelFlatCost;
+    const estimatedCost = Math.round((laborCost + travelCost) * 100) / 100;
+    const estimatedMargin = Math.round((laborRevenue - estimatedCost) * 100) / 100;
+
+    return {
+      ticket: {
+        id: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        title: ticket.title,
+        status: ticket.status,
+        contract: ticket.contract ? { id: ticket.contract.id, name: ticket.contract.name, status: ticket.contract.status } : null,
+      },
+      totals: {
+        billableMinutes,
+        nonBillableMinutes,
+        dispatchCount: dispatches.length,
+        laborRevenue,
+        laborCost,
+        travelCost,
+        estimatedCost,
+        estimatedMargin,
+        marginPct: laborRevenue ? Math.round((estimatedMargin / laborRevenue) * 1000) / 10 : 0,
+      },
+      assumptions: {
+        laborRateUsd: defaultLaborRate,
+        laborCostUsd: defaultLaborCost,
+        travelCostUsd: travelFlatCost,
+        partsCostUsd: 0,
+      },
+      timeEntries: timeEntries.map((entry: any) => ({
+        id: entry.id,
+        technician: entry.user ? [entry.user.firstName, entry.user.lastName].filter(Boolean).join(' ') : entry.userId,
+        minutes: this.timeEntryMinutes(entry),
+        billable: entry.billable,
+        description: entry.description,
+      })),
+    };
+  }
+
+  async requestApproval(id: string, user: any, dto: { checkpoint?: string; detail?: string; amount?: number }) {
+    const ticket = await this.findOne(id, user, false);
+    const checkpoint = String(dto.checkpoint || 'WORK_APPROVAL').toUpperCase();
+    const payload = {
+      approvalId: crypto.randomUUID(),
+      checkpoint,
+      detail: dto.detail?.trim() || 'Customer approval requested before work continues.',
+      amount: Number.isFinite(Number(dto.amount)) ? Number(dto.amount) : null,
+      status: 'PENDING',
+      requestedAt: new Date().toISOString(),
+    };
+    const entry = await this.timeline.addEntry(id, user.id, 'APPROVAL_REQUESTED', JSON.stringify(payload), undefined, 'PENDING', false);
+    if (ticket.companyId) this.gateway.notifyTicketUpdate(ticket.companyId, 'ticket:approval-requested', entry);
+    return { ...payload, timelineEntryId: entry.id };
+  }
+
+  async decideApproval(id: string, approvalId: string, user: any, dto: { decision?: string; comment?: string }) {
+    const ticket = await this.findOne(id, user, false);
+    const decision = String(dto.decision || '').toUpperCase();
+    if (!['APPROVED', 'REJECTED'].includes(decision)) {
+      throw new BadRequestException('decision must be APPROVED or REJECTED');
+    }
+    const approval = await this.findApprovalTimeline(id, approvalId);
+    const payload = {
+      approvalId,
+      decision,
+      comment: dto.comment?.trim() || null,
+      decidedAt: new Date().toISOString(),
+      requestedCheckpoint: approval?.checkpoint || null,
+    };
+    const entry = await this.timeline.addEntry(id, user.id, `APPROVAL_${decision}`, JSON.stringify(payload), 'PENDING', decision, false);
+    if (ticket.companyId) this.gateway.notifyTicketUpdate(ticket.companyId, 'ticket:approval-decided', entry);
+    return { ...payload, timelineEntryId: entry.id };
+  }
+
+  async listApprovals(id: string, user: any) {
+    await this.findOne(id, user, false);
+    const rows = await this.prisma.ticketTimeline.findMany({
+      where: { ticketId: id, action: { in: ['APPROVAL_REQUESTED', 'APPROVAL_APPROVED', 'APPROVAL_REJECTED'] } },
+      orderBy: { createdAt: 'asc' },
+      include: { actor: { select: { id: true, firstName: true, lastName: true } } },
+    });
+    const approvals = new Map<string, any>();
+    for (const row of rows as any[]) {
+      const payload = this.safeParse(row.comment);
+      const approvalId = payload.approvalId || row.id;
+      const current = approvals.get(approvalId) || {};
+      if (row.action === 'APPROVAL_REQUESTED') {
+        approvals.set(approvalId, { ...payload, timelineEntryId: row.id, requestedBy: row.actor, status: current.status || 'PENDING' });
+      } else {
+        approvals.set(approvalId, { ...current, status: payload.decision, decision: payload.decision, decidedAt: payload.decidedAt, decisionComment: payload.comment, decidedBy: row.actor });
+      }
+    }
+    return Array.from(approvals.values()).reverse();
+  }
+
   private async assertAssignableUser(companyId: string | null, userId: string) {
     if (!companyId) throw new BadRequestException('Ticket has no company context');
     const target = await this.prisma.user.findFirst({
@@ -467,6 +583,30 @@ export class TicketsService {
     });
     if (!target || !['TECHNICIAN', 'TENANT_ADMIN'].includes(String(target.role))) {
       throw new BadRequestException('Assignee must be an active user in the current tenant');
+    }
+  }
+
+  private timeEntryMinutes(entry: any) {
+    if (Number.isFinite(Number(entry.duration)) && Number(entry.duration) > 0) return Number(entry.duration);
+    if (entry.startTime && entry.endTime) {
+      return Math.max(0, Math.round((new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime()) / 60000));
+    }
+    return 0;
+  }
+
+  private async findApprovalTimeline(ticketId: string, approvalId: string) {
+    const rows = await this.prisma.ticketTimeline.findMany({
+      where: { ticketId, action: 'APPROVAL_REQUESTED' },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((row: any) => this.safeParse(row.comment)).find((payload) => payload.approvalId === approvalId) || null;
+  }
+
+  private safeParse(value: any) {
+    try {
+      return typeof value === 'string' ? JSON.parse(value) : value || {};
+    } catch {
+      return {};
     }
   }
 

@@ -31,6 +31,12 @@ export class MaintenanceController {
     return this.service.listPlans(user, query);
   }
 
+  @RequirePermissions('maintenance.view')
+  @Get('suggestions')
+  suggestions(@CurrentUser() user: CurrentUserType) {
+    return this.service.suggestPlans(user);
+  }
+
   @RequirePermissions('maintenance.manage')
   @Post('plans')
   createPlan(@CurrentUser() user: CurrentUserType, @Body() dto: any) {

@@ -38,8 +38,8 @@ export class EndpointOperationsController {
 
   @Post('remote-access/endpoints/:id/session')
   @RequirePermissions('remote-access.launch')
-  launchRemoteSession(@CurrentUser() user: CurrentUserType, @Param('id') id: string) {
-    return this.service.launchRemoteSession(user, id);
+  launchRemoteSession(@CurrentUser() user: CurrentUserType, @Param('id') id: string, @Body() body: { authorizationConfirmed?: boolean }) {
+    return this.service.launchRemoteSession(user, id, body?.authorizationConfirmed === true);
   }
 
   @Get('remote-access/sessions')
