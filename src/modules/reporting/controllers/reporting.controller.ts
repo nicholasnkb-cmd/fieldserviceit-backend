@@ -46,6 +46,11 @@ export class ReportingController {
     return this.reportingService.getTechnicianPerformance(this.getCompanyId(user));
   }
 
+  @Get('outcomes')
+  getServiceOutcomes(@CurrentUser() user: CurrentUserType) {
+    return this.reportingService.getServiceOutcomes(this.getCompanyId(user));
+  }
+
   @Get('assets')
   getAssetInventory(@CurrentUser() user: CurrentUserType) {
     return this.reportingService.getAssetInventory(this.getCompanyId(user));

@@ -175,6 +175,60 @@ export class ReportingService {
     });
   }
 
+  async getServiceOutcomes(companyId: string) {
+    const [visitRows, timeRows, responseRows] = await Promise.all([
+      this.prisma.query<any[]>(
+        `SELECT
+           COUNT(*) resolvedWithVisits,
+           SUM(CASE WHEN completedVisits = 1 THEN 1 ELSE 0 END) firstVisitResolved
+         FROM (
+           SELECT t.id, COUNT(d.id) completedVisits
+           FROM Ticket t
+           INNER JOIN Dispatch d ON d.ticketId = t.id AND d.status = 'COMPLETED'
+           WHERE t.companyId = ? AND t.deletedAt IS NULL AND t.resolvedAt IS NOT NULL
+           GROUP BY t.id
+         ) visits`,
+        [companyId],
+      ),
+      this.prisma.query<any[]>(
+        `SELECT
+           COALESCE(SUM(COALESCE(te.duration, TIMESTAMPDIFF(MINUTE, te.startTime, te.endTime))), 0) recordedMinutes,
+           COALESCE(SUM(CASE WHEN te.billable = 1 THEN COALESCE(te.duration, TIMESTAMPDIFF(MINUTE, te.startTime, te.endTime)) ELSE 0 END), 0) billableMinutes
+         FROM TimeEntry te
+         INNER JOIN Ticket t ON t.id = te.ticketId
+         WHERE t.companyId = ? AND t.deletedAt IS NULL AND te.endTime IS NOT NULL`,
+        [companyId],
+      ),
+      this.prisma.query<any[]>(
+        `SELECT AVG(firstResponseMinutes) averageFirstResponseMinutes
+         FROM (
+           SELECT t.id, TIMESTAMPDIFF(MINUTE, t.createdAt, MIN(tl.createdAt)) firstResponseMinutes
+           FROM Ticket t
+           INNER JOIN TicketTimeline tl ON tl.ticketId = t.id
+             AND tl.action IN ('ASSIGNED', 'STATUS_CHANGED', 'COMMENT')
+           WHERE t.companyId = ? AND t.deletedAt IS NULL
+           GROUP BY t.id, t.createdAt
+         ) responses`,
+        [companyId],
+      ),
+    ]);
+
+    const resolvedWithVisits = Number(visitRows[0]?.resolvedWithVisits || 0);
+    const firstVisitResolved = Number(visitRows[0]?.firstVisitResolved || 0);
+    const recordedMinutes = Number(timeRows[0]?.recordedMinutes || 0);
+    const billableMinutes = Number(timeRows[0]?.billableMinutes || 0);
+    return {
+      resolvedWithVisits,
+      firstVisitResolved,
+      firstVisitResolutionRate: resolvedWithVisits ? (firstVisitResolved / resolvedWithVisits) * 100 : 0,
+      recordedMinutes,
+      billableMinutes,
+      billableUtilizationRate: recordedMinutes ? (billableMinutes / recordedMinutes) * 100 : 0,
+      averageFirstResponseMinutes: Math.round(Number(responseRows[0]?.averageFirstResponseMinutes || 0)),
+      profitabilityStatus: 'Billable utilization is available; true profitability requires labor-cost and contract-rate configuration.',
+    };
+  }
+
   async createCustomReport(companyId: string, dto: CustomReportDto) {
     const where: any = { companyId, deletedAt: null };
     if (dto.statuses?.length) where.status = { in: dto.statuses };
