@@ -62,6 +62,11 @@ describe('HealthController', () => {
                 rss: '250 MB',
               },
               operations: {},
+              dependencies: {
+                email: { status: 'configured', provider: 'SMTP' },
+                queue: { status: 'ok', queued: 0, failed: 0, paused: false },
+                payments: { status: 'configured', provider: 'PAYPAL' },
+              },
             }),
           },
         },
@@ -108,6 +113,7 @@ describe('HealthController', () => {
       expect(result.database).toBeDefined();
       expect(result.requests).toBeDefined();
       expect(result.memory).toBeDefined();
+      expect(result.dependencies).toBeDefined();
       expect(service.dashboard).toHaveBeenCalled();
     });
   });

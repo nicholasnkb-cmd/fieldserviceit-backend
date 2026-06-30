@@ -6,6 +6,7 @@ import { EmailService } from '../../notifications/services/email.service';
 import { TicketParticipantNotifierService } from '../../tickets/services/ticket-participant-notifier.service';
 import * as crypto from 'crypto';
 import { credentialLookupValues, credentialMatches, hashCredential } from '../../../common/security/credential-hash';
+import { credentialEncryptionKeys } from '../../../common/security/encryption';
 import { AssetRepository } from '../../../database/repositories/asset.repository';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -1792,7 +1793,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
   }
 
   private secretKey() {
-    return crypto.createHash('sha256').update(process.env.CREDENTIAL_ENCRYPTION_KEY || process.env.JWT_SECRET || 'fieldserviceit-dev-key').digest();
+    return credentialEncryptionKeys()[0];
   }
 
   private encryptSecret(value: string) {
@@ -1806,14 +1807,13 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
   private decryptSecret(value?: string | null) {
     if (!value) return '';
     if (!value.startsWith('ENC:')) return value;
-    try {
+    for (const key of credentialEncryptionKeys()) try {
       const [, iv, tag, encrypted] = value.split(':');
-      const decipher = crypto.createDecipheriv('aes-256-gcm', this.secretKey(), Buffer.from(iv, 'base64'));
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64'));
       decipher.setAuthTag(Buffer.from(tag, 'base64'));
       return Buffer.concat([decipher.update(Buffer.from(encrypted, 'base64')), decipher.final()]).toString('utf8');
-    } catch {
-      return '';
-    }
+    } catch { /* try the previous key during rotation */ }
+    return '';
   }
 
   private parseSyslogMessage(raw: string) {

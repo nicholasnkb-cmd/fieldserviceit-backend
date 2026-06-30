@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import * as nodemailer from 'nodemailer';
 import { LoggerService } from '../../../common/logger/logger.service';
 import { PrismaService } from '../../../database/prisma.service';
+import { credentialEncryptionKeys } from '../../../common/security/encryption';
 
 export type NotificationEmailOptions = {
   text?: string;
@@ -399,9 +400,7 @@ export class EmailService {
   }
 
   private encryptionKey() {
-    return crypto.createHash('sha256')
-      .update(process.env.CREDENTIAL_ENCRYPTION_KEY || process.env.JWT_SECRET || 'fieldserviceit-dev-key')
-      .digest();
+    return credentialEncryptionKeys()[0];
   }
 
   private encryptSecret(value: string) {
@@ -415,14 +414,13 @@ export class EmailService {
   private decryptSecret(value?: string | null) {
     if (!value) return '';
     if (!value.startsWith('ENC:')) return value;
-    try {
+    for (const key of credentialEncryptionKeys()) try {
       const [, iv, tag, encrypted] = value.split(':');
-      const decipher = crypto.createDecipheriv('aes-256-gcm', this.encryptionKey(), Buffer.from(iv, 'base64'));
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64'));
       decipher.setAuthTag(Buffer.from(tag, 'base64'));
       return Buffer.concat([decipher.update(Buffer.from(encrypted, 'base64')), decipher.final()]).toString('utf8');
-    } catch {
-      return '';
-    }
+    } catch { /* try the previous key during rotation */ }
+    return '';
   }
 
   private isEmail(value: string) {

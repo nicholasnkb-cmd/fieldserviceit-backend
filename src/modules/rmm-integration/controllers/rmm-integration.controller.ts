@@ -13,6 +13,7 @@ import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard'
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import * as crypto from 'crypto';
+import { credentialEncryptionKeys } from '../../../common/security/encryption';
 
 @Controller('integrations/rmm')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
@@ -178,7 +179,7 @@ export class RmmIntegrationController {
   }
 
   private encryptionKey() {
-    return crypto.createHash('sha256').update(process.env.CREDENTIAL_ENCRYPTION_KEY || process.env.JWT_SECRET || 'fieldserviceit-dev-key').digest();
+    return credentialEncryptionKeys()[0];
   }
 
   private encryptSecret(value: string) {
@@ -192,9 +193,14 @@ export class RmmIntegrationController {
   private decryptSecret(value: string) {
     if (!value?.startsWith('ENC:')) return value;
     const [, iv, tag, encrypted] = value.split(':');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', this.encryptionKey(), Buffer.from(iv, 'base64'));
-    decipher.setAuthTag(Buffer.from(tag, 'base64'));
-    return Buffer.concat([decipher.update(Buffer.from(encrypted, 'base64')), decipher.final()]).toString('utf8');
+    for (const key of credentialEncryptionKeys()) {
+      try {
+        const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64'));
+        decipher.setAuthTag(Buffer.from(tag, 'base64'));
+        return Buffer.concat([decipher.update(Buffer.from(encrypted, 'base64')), decipher.final()]).toString('utf8');
+      } catch { /* try the previous key during rotation */ }
+    }
+    throw new Error('RMM credentials cannot be decrypted with the configured keys');
   }
 
   private parseCredentials(value: string) {

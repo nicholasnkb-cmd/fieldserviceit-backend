@@ -48,6 +48,11 @@ export interface HealthDashboard {
     slowCount: number;
     slowPercentage: string;
   }>;
+  dependencies: {
+    email: { status: 'configured' | 'unconfigured' | 'error'; provider?: string };
+    queue: { status: 'ok' | 'degraded' | 'error'; queued: number; failed: number; paused: boolean };
+    payments: { status: 'configured' | 'unconfigured'; provider: string };
+  };
 }
 
 /**
@@ -81,6 +86,38 @@ export class HealthService {
     } catch {
       return 'unknown';
     }
+  }
+
+  private async dependencyHealth(): Promise<HealthDashboard['dependencies']> {
+    const paymentsConfigured = Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET);
+    let email: HealthDashboard['dependencies']['email'] = {
+      status: process.env.SMTP_HOST && process.env.SMTP_USER ? 'configured' : 'unconfigured',
+      provider: process.env.SMTP_HOST ? 'SMTP' : undefined,
+    };
+    let queue: HealthDashboard['dependencies']['queue'] = { status: 'ok', queued: 0, failed: 0, paused: false };
+    try {
+      const providers = await this.prisma.query<any>('SELECT provider FROM EmailProviderConfig WHERE isActive = 1 LIMIT 1');
+      if (providers[0]) email = { status: 'configured', provider: providers[0].provider };
+      const counts = await this.prisma.query<any>(
+        `SELECT
+           SUM(CASE WHEN status = 'QUEUED' THEN 1 ELSE 0 END) AS queued,
+           SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END) AS failed
+         FROM EmailDelivery`,
+      );
+      const controls = await this.prisma.query<any>("SELECT paused FROM EmailQueueControl WHERE id = 'global-email-queue' LIMIT 1");
+      const queued = Number(counts[0]?.queued || 0);
+      const failed = Number(counts[0]?.failed || 0);
+      const paused = Boolean(controls[0]?.paused);
+      queue = { status: paused || failed > 25 ? 'degraded' : 'ok', queued, failed, paused };
+    } catch {
+      queue = { status: 'error', queued: 0, failed: 0, paused: false };
+      if (email.status === 'unconfigured') email = { status: 'error' };
+    }
+    return {
+      email,
+      queue,
+      payments: { status: paymentsConfigured ? 'configured' : 'unconfigured', provider: 'PAYPAL' },
+    };
   }
 
   /**
@@ -216,6 +253,7 @@ export class HealthService {
 
       // Get memory usage
       const memUsage = process.memoryUsage();
+      const dependencies = await this.dependencyHealth();
 
       // Determine overall health status
       let status: 'ok' | 'degraded' | 'error' = 'ok';
@@ -226,6 +264,7 @@ export class HealthService {
       if (dbLatency > 5000 || errorRate > 10) {
         status = 'degraded';
       }
+      if (dependencies.queue.status !== 'ok') status = 'degraded';
 
       return {
         status,
@@ -256,6 +295,7 @@ export class HealthService {
           rss: `${Math.round(memUsage.rss / 1024 / 1024)} MB`,
         },
         operations: metrics.operations,
+        dependencies,
       };
     } catch (error) {
       this.logger.error('Dashboard health check failed:', error);
