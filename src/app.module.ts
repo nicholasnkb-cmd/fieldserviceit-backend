@@ -84,6 +84,8 @@ import { EndpointOperationsModule } from './modules/endpoint-operations/endpoint
         CLAMAV_REQUIRED: Joi.boolean().optional().default(false),
         OIDC_ALLOW_PRIVATE_ISSUERS: Joi.boolean().optional().default(false),
         MONITORING_API_KEY: Joi.string().min(24).optional(),
+        SENTRY_DSN: Joi.string().uri().optional(),
+        SENTRY_TRACES_SAMPLE_RATE: Joi.number().min(0).max(1).optional().default(0.05),
       }),
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),

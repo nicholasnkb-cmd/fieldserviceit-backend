@@ -1,3 +1,5 @@
+import './instrument';
+import * as Sentry from '@sentry/nestjs';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -85,6 +87,7 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err) => {
+  Sentry.captureException(err);
   console.error('FATAL:', err?.message || err);
   process.exit(1);
 });

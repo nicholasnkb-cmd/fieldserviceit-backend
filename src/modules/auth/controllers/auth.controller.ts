@@ -103,6 +103,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Get('verify-email/:token')
   @HttpCode(HttpStatus.OK)
   async verifyEmail(@Param('token') token: string) {
@@ -118,6 +119,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Get('sso/providers')
   ssoProviders(@Query('email') email?: string) {
     return this.oidcAuthService.providers(email);
