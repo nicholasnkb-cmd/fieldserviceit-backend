@@ -1,4 +1,4 @@
-import './instrument';
+import { initializeSentry } from './instrument';
 import * as Sentry from '@sentry/nestjs';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
@@ -84,6 +84,7 @@ async function bootstrap() {
 
   await app.listen(port, '0.0.0.0');
   logger.log(`Server running on port ${port}`);
+  setImmediate(initializeSentry);
 }
 
 bootstrap().catch((err) => {
