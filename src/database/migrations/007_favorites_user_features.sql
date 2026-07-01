@@ -1,0 +1,11 @@
+ALTER TABLE `User` ADD COLUMN IF NOT EXISTS `featureOverrides` TEXT;
+
+CREATE TABLE IF NOT EXISTS `UserPageFavorite` (
+  `id` VARCHAR(191) PRIMARY KEY,
+  `userId` VARCHAR(191) NOT NULL,
+  `label` VARCHAR(191) NOT NULL,
+  `path` VARCHAR(191) NOT NULL,
+  `createdAt` DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE(`userId`, `path`),
+  INDEX(`userId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

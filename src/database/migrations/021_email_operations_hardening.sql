@@ -1,0 +1,40 @@
+ALTER TABLE EmailDelivery ADD COLUMN IF NOT EXISTS deliveredAt DATETIME(3);
+ALTER TABLE EmailDelivery ADD COLUMN IF NOT EXISTS openedAt DATETIME(3);
+ALTER TABLE EmailDelivery ADD COLUMN IF NOT EXISTS firstClickedAt DATETIME(3);
+ALTER TABLE EmailDelivery ADD COLUMN IF NOT EXISTS complainedAt DATETIME(3);
+ALTER TABLE EmailDelivery ADD COLUMN IF NOT EXISTS cancelledAt DATETIME(3);
+ALTER TABLE EmailDelivery ADD COLUMN IF NOT EXISTS cancelledById VARCHAR(191);
+ALTER TABLE EmailDelivery ADD COLUMN IF NOT EXISTS resentFromId VARCHAR(191);
+ALTER TABLE EmailDelivery ADD COLUMN IF NOT EXISTS openCount INT NOT NULL DEFAULT 0;
+ALTER TABLE EmailDelivery ADD COLUMN IF NOT EXISTS clickCount INT NOT NULL DEFAULT 0;
+ALTER TABLE EmailDelivery ADD COLUMN IF NOT EXISTS failureNotifiedAt DATETIME(3);
+ALTER TABLE EmailDelivery ADD INDEX IF NOT EXISTS EmailDelivery_resentFromId_idx (resentFromId);
+
+CREATE TABLE IF NOT EXISTS EmailTrackingEvent (
+  id VARCHAR(191) PRIMARY KEY,
+  deliveryId VARCHAR(191) NOT NULL,
+  eventType VARCHAR(32) NOT NULL,
+  targetUrl TEXT,
+  ipHash VARCHAR(64),
+  userAgent VARCHAR(500),
+  createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX(deliveryId, createdAt),
+  INDEX(eventType, createdAt)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS EmailQueueControl (
+  id VARCHAR(191) PRIMARY KEY,
+  paused TINYINT(1) NOT NULL DEFAULT 0,
+  reason VARCHAR(500),
+  pausedAt DATETIME(3),
+  pausedById VARCHAR(191),
+  updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO EmailQueueControl (id, paused, updatedAt)
+VALUES ('global-email-queue', 0, NOW(3));
+
+ALTER TABLE EmailProviderConfig ADD COLUMN IF NOT EXISTS encryptedWebhookSecret TEXT;
+ALTER TABLE EmailProviderConfig ADD COLUMN IF NOT EXISTS webhookSecretUpdatedAt DATETIME(3);
+
+ALTER TABLE Notification MODIFY companyId VARCHAR(191) NULL;
