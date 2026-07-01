@@ -70,6 +70,22 @@ describe('UploadsService', () => {
       await expect(service.saveFile(null as any, 'test')).rejects.toThrow('No file provided');
     });
 
+    it('rejects a MIME type that does not match the extension', async () => {
+      await expect(service.saveFile({ ...mockFile, mimetype: 'application/pdf' }, 'test'))
+        .rejects.toThrow('File MIME type does not match its extension');
+    });
+
+    it('rejects content whose magic bytes do not match the extension', async () => {
+      await expect(service.saveFile({ ...mockFile, buffer: Buffer.from('not an image') }, 'test'))
+        .rejects.toThrow('File content does not match its extension');
+    });
+
+    it('uses a server-generated filename for traversal-style names', async () => {
+      const result = await service.saveFile({ ...mockFile, originalname: '../../avatar.jpg' }, 'avatars');
+      expect(result).toBe('/uploads/avatars/mocked-uuid.jpg');
+      expect(fs.existsSync(path.join(uploadDir, 'avatars', 'mocked-uuid.jpg'))).toBe(true);
+    });
+
     it('should return a local URL path', async () => {
       const result = await service.saveFile(mockFile, 'avatars');
       expect(result).toMatch(/^\/uploads\/avatars\/.+\.jpg$/);
@@ -79,6 +95,14 @@ describe('UploadsService', () => {
       const results = await service.saveFiles([mockFile, mockFile], 'photos/test');
       expect(results).toHaveLength(2);
       results.forEach((r) => expect(r).toMatch(/^\/uploads\/photos\/test\/.+\.jpg$/));
+    });
+
+    it('denies protected-file access from another tenant', async () => {
+      const [url] = await service.saveProtectedFiles([mockFile], 'tickets/company-a', 'company-a');
+      const token = url.split('/').pop()!;
+
+      await expect(service.readProtectedFile(token, { role: 'ADMIN', companyId: 'company-b' }))
+        .rejects.toThrow('Protected file is outside your tenant');
     });
 
     it('should automatically format company logos as bounded WebP images', async () => {

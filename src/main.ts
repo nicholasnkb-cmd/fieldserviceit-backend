@@ -15,6 +15,11 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
+  const nodeEnv = configService.get('NODE_ENV', 'development');
+
+  if (nodeEnv === 'production') {
+    app.set('trust proxy', configService.get('TRUST_PROXY_HOPS', 1));
+  }
 
   app.use(json({ verify: (req: any, _res, buf) => { req.rawBody = buf.toString(); } }));
 
@@ -47,7 +52,6 @@ async function bootstrap() {
     res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=(), payment=(), fullscreen=(self)');
     next();
   });
-  const nodeEnv = configService.get('NODE_ENV', 'development');
   const corsOrigin = configService.get<string>('CORS_ORIGIN');
   if (!corsOrigin && nodeEnv === 'production') {
     logger.warn('CORS_ORIGIN not set — defaulting to localhost. Set CORS_ORIGIN env var for production.');

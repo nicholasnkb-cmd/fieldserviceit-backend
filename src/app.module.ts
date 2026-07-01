@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerStorage } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import * as Joi from 'joi';
@@ -41,6 +41,7 @@ import { TopologyModule } from './modules/topology/topology.module';
 import { CatalogRequestsModule } from './modules/catalog-requests/catalog-requests.module';
 import { PlatformSecurityModule } from './modules/platform-security/platform-security.module';
 import { EndpointOperationsModule } from './modules/endpoint-operations/endpoint-operations.module';
+import { DatabaseThrottlerStorage } from './common/services/database-throttler-storage.service';
 
 @Module({
   imports: [
@@ -48,11 +49,16 @@ import { EndpointOperationsModule } from './modules/endpoint-operations/endpoint
       isGlobal: true,
       validationSchema: Joi.object({
         DATABASE_URL: Joi.string().required().pattern(/^mysql:\/\//),
-        JWT_SECRET: Joi.string().required().min(16),
-        JWT_REFRESH_SECRET: Joi.string().optional(),
+        JWT_SECRET: Joi.string().required().min(32),
+        JWT_REFRESH_SECRET: Joi.string().min(32).when('NODE_ENV', {
+          is: 'production',
+          then: Joi.required(),
+          otherwise: Joi.optional(),
+        }),
         CORS_ORIGIN: Joi.string().optional(),
         PORT: Joi.number().port().default(4000),
         NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
+        TRUST_PROXY_HOPS: Joi.number().integer().min(1).max(5).default(1),
         SMTP_HOST: Joi.string().optional(),
         SMTP_PORT: Joi.number().port().optional(),
         SMTP_USER: Joi.string().optional(),
@@ -77,12 +83,31 @@ import { EndpointOperationsModule } from './modules/endpoint-operations/endpoint
         THROTTLE_LIMIT_LONG: Joi.number().default(600),
         NETWORK_SYSLOG_ENABLED: Joi.boolean().optional().default(true),
         NETWORK_SYSLOG_PORT: Joi.number().port().optional().default(5514),
-        CREDENTIAL_ENCRYPTION_KEY: Joi.string().optional(),
+        CREDENTIAL_ENCRYPTION_KEY: Joi.string().min(32).invalid(Joi.ref('JWT_SECRET')).when('NODE_ENV', {
+          is: 'production',
+          then: Joi.required(),
+          otherwise: Joi.optional(),
+        }).messages({
+          'any.invalid': 'CREDENTIAL_ENCRYPTION_KEY must be different from JWT_SECRET',
+        }),
         CREDENTIAL_ENCRYPTION_KEY_PREVIOUS: Joi.string().optional(),
         BACKUP_DIR: Joi.string().optional(),
-        CLAMAV_HOST: Joi.string().optional(),
+        BACKUP_S3_ENDPOINT: Joi.string().uri().when('NODE_ENV', { is: 'production', then: Joi.required(), otherwise: Joi.optional() }),
+        BACKUP_S3_REGION: Joi.string().default('us-east-1'),
+        BACKUP_S3_BUCKET: Joi.string().min(3).when('NODE_ENV', { is: 'production', then: Joi.required(), otherwise: Joi.optional() }),
+        BACKUP_S3_ACCESS_KEY_ID: Joi.string().when('NODE_ENV', { is: 'production', then: Joi.required(), otherwise: Joi.optional() }),
+        BACKUP_S3_SECRET_ACCESS_KEY: Joi.string().when('NODE_ENV', { is: 'production', then: Joi.required(), otherwise: Joi.optional() }),
+        CLAMAV_HOST: Joi.string().hostname().when('NODE_ENV', {
+          is: 'production',
+          then: Joi.required(),
+          otherwise: Joi.optional(),
+        }),
         CLAMAV_PORT: Joi.number().port().optional().default(3310),
-        CLAMAV_REQUIRED: Joi.boolean().optional().default(false),
+        CLAMAV_REQUIRED: Joi.boolean().when('NODE_ENV', {
+          is: 'production',
+          then: Joi.valid(true).required(),
+          otherwise: Joi.optional().default(false),
+        }),
         OIDC_ALLOW_PRIVATE_ISSUERS: Joi.boolean().optional().default(false),
         MONITORING_API_KEY: Joi.string().min(24).optional(),
         SENTRY_DSN: Joi.string().uri().optional(),
@@ -134,6 +159,7 @@ import { EndpointOperationsModule } from './modules/endpoint-operations/endpoint
     EndpointOperationsModule,
   ],
   providers: [
+    { provide: ThrottlerStorage, useClass: DatabaseThrottlerStorage },
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor },
