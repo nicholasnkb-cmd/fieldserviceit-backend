@@ -49,6 +49,11 @@ import { DatabaseThrottlerStorage } from './common/services/database-throttler-s
       isGlobal: true,
       validationSchema: Joi.object({
         DATABASE_URL: Joi.string().required().pattern(/^mysql:\/\//),
+        DB_POOL_SIZE: Joi.number().integer().min(1).max(100).default(5),
+        DB_POOL_MAX_IDLE: Joi.number().integer().min(1).max(100).default(2),
+        DB_POOL_QUEUE_LIMIT: Joi.number().integer().min(1).max(10000).default(100),
+        DB_CONNECT_TIMEOUT_MS: Joi.number().integer().min(1000).max(60000).default(10000),
+        DB_QUERY_TIMEOUT_MS: Joi.number().integer().min(1000).max(120000).default(30000),
         JWT_SECRET: Joi.string().required().min(32),
         JWT_REFRESH_SECRET: Joi.string().min(32).when('NODE_ENV', {
           is: 'production',

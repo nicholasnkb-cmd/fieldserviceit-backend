@@ -3,6 +3,7 @@ import { createPool, Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise
 import { randomUUID } from 'crypto';
 import { MigrationsService } from './migrations/migrations.service';
 import { StructuredLogger } from '../common/logger/structured-logger.service';
+import { escapeSqlIdentifier } from '../common/security/sql-identifier';
 
 interface QueryOptions {
   nestTables?: boolean;
@@ -13,6 +14,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   private readonly logger = new Logger(DatabaseService.name);
   private pool: Pool;
   private poolClosed = false;
+  private readonly queryTimeoutMs: number;
 
   constructor(
     @Optional() private readonly migrationsService?: MigrationsService,
@@ -20,6 +22,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   ) {
     const databaseUrl = process.env.DATABASE_URL || '';
     const parsed = this.parseDatabaseUrl(databaseUrl);
+    const connectionLimit = this.positiveInteger('DB_POOL_SIZE', 5);
+    const maxIdle = Math.min(this.positiveInteger('DB_POOL_MAX_IDLE', 2), connectionLimit);
+    this.queryTimeoutMs = this.positiveInteger('DB_QUERY_TIMEOUT_MS', 30000);
 
     this.pool = createPool({
       host: parsed.host,
@@ -28,12 +33,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       password: parsed.password,
       database: parsed.database,
       waitForConnections: true,
-      connectionLimit: 5,
-      maxIdle: 2,
+      connectionLimit,
+      maxIdle,
       idleTimeout: 60000,
+      connectTimeout: this.positiveInteger('DB_CONNECT_TIMEOUT_MS', 10000),
       enableKeepAlive: true,
       keepAliveInitialDelay: 0,
-      queueLimit: 0,
+      queueLimit: this.positiveInteger('DB_POOL_QUEUE_LIMIT', 100),
     });
   }
 
@@ -45,7 +51,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       await this.ensureTables();
       await this.migrationsService?.run();
     } catch (err) {
-      this.logger.warn('Database unavailable: ' + (err instanceof Error ? err.message : String(err)));
+      this.logger.error('Database initialization failed: ' + (err instanceof Error ? err.message : String(err)));
+      throw err;
     }
   }
 
@@ -837,9 +844,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     }
   }
 
+  private positiveInteger(name: string, fallback: number): number {
+    const value = Number(process.env[name] ?? fallback);
+    return Number.isInteger(value) && value > 0 ? value : fallback;
+  }
+
   async query<T = RowDataPacket[]>(sql: string, values?: any[]): Promise<T> {
     const start = Date.now();
-    const [rows] = await this.pool.query(sql, values || []);
+    const [rows] = await this.pool.query({ sql, timeout: this.queryTimeoutMs }, values || []);
     const latency = Date.now() - start;
 
     // Track performance metrics
@@ -852,7 +864,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
   async execute(sql: string, values?: any[]): Promise<ResultSetHeader> {
     const start = Date.now();
-    const [result] = await this.pool.execute(sql, values || []);
+    const [result] = await this.pool.execute({ sql, timeout: this.queryTimeoutMs }, values || []);
     const latency = Date.now() - start;
 
     // Track performance metrics
@@ -1940,7 +1952,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         const cols = Object.keys(item);
         const values = Object.values(item);
         const placeholders = cols.map(() => '?').join(', ');
-        const sql = `INSERT INTO RolePermission (${cols.map(c => `\`${c.replace(/`/g, '')}\``).join(', ')}) VALUES (${placeholders})`;
+        const sql = `INSERT INTO RolePermission (${cols.map(escapeSqlIdentifier).join(', ')}) VALUES (${placeholders})`;
         await this.query(sql, values);
       }
       return { count: data.length };
@@ -2704,10 +2716,23 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   };
 
   private escapeColumn(col: string): string {
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(col)) {
-      throw new BadRequestException(`Invalid column name: ${col}`);
+    return escapeSqlIdentifier(col);
+  }
+
+  async readOnlyTransaction<T>(fn: (tx: TransactionClient) => Promise<T>): Promise<T> {
+    const conn = await this.pool.getConnection();
+    try {
+      await conn.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+      await conn.query('START TRANSACTION READ ONLY WITH CONSISTENT SNAPSHOT');
+      const result = await fn(new TransactionClient(conn));
+      await conn.commit();
+      return result;
+    } catch (error) {
+      await conn.rollback();
+      throw error;
+    } finally {
+      conn.release();
     }
-    return `\`${col}\``;
   }
 
   private normalizeColumn(table: string, col: string): string {

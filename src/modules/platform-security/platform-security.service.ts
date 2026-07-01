@@ -349,18 +349,22 @@ export class PlatformSecurityService {
       [runId, requestedById || null, startedAt],
     );
     try {
-      const tables = await this.databaseTables();
-      const payload: Record<string, any> = {
-        format: 'fieldserviceit-encrypted-json-v1',
-        createdAt: new Date().toISOString(),
-        tables: {},
-      };
-      let rowCount = 0;
-      for (const table of tables) {
-        const rows = await this.db.query<any[]>(`SELECT * FROM \`${table}\``);
-        payload.tables[table] = rows;
-        rowCount += rows.length;
-      }
+      const { tables, payload, rowCount } = await this.db.readOnlyTransaction(async (tx) => {
+        const tables = await this.databaseTables(tx);
+        const payload: Record<string, any> = {
+          format: 'fieldserviceit-encrypted-json-v1',
+          createdAt: new Date().toISOString(),
+          consistency: 'mysql-repeatable-read-consistent-snapshot',
+          tables: {},
+        };
+        let rowCount = 0;
+        for (const table of tables) {
+          const rows = await tx.query<any[]>(`SELECT * FROM \`${table}\``);
+          payload.tables[table] = rows;
+          rowCount += rows.length;
+        }
+        return { tables, payload, rowCount };
+      });
       const compressed = zlib.gzipSync(Buffer.from(JSON.stringify(payload, this.jsonReplacer)));
       const encrypted = encryptBuffer(compressed);
       const checksum = crypto.createHash('sha256').update(encrypted).digest('hex');
@@ -639,8 +643,8 @@ export class PlatformSecurityService {
       || (a === 100 && b >= 64 && b <= 127);
   }
 
-  private async databaseTables() {
-    const rows = await this.db.query<any[]>(
+  private async databaseTables(client: Pick<DatabaseService, 'query'> = this.db) {
+    const rows = await client.query<any[]>(
       `SELECT TABLE_NAME tableName FROM information_schema.TABLES
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
        ORDER BY TABLE_NAME`,

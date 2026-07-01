@@ -5,6 +5,7 @@ import { NotificationsService } from '../../notifications/services/notifications
 import { EmailService } from '../../notifications/services/email.service';
 import { TicketParticipantNotifierService } from '../../tickets/services/ticket-participant-notifier.service';
 import * as crypto from 'crypto';
+import { escapeSqlIdentifier } from '../../../common/security/sql-identifier';
 import { credentialLookupValues, credentialMatches, hashCredential } from '../../../common/security/credential-hash';
 import { credentialEncryptionKeys } from '../../../common/security/encryption';
 import { AssetRepository } from '../../../database/repositories/asset.repository';
@@ -620,7 +621,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     const data = this.normalizeAlertRule(dto, true);
     const keys = Object.keys(data);
     if (keys.length === 0) throw new BadRequestException('No alert rule fields provided');
-    const set = [...keys.map((key) => `${key} = ?`), 'updatedAt = ?'].join(', ');
+    const set = [...keys.map((key) => `${escapeSqlIdentifier(key)} = ?`), '`updatedAt` = ?'].join(', ');
     await this.prisma.execute(
       `UPDATE NetworkAlertRule SET ${set} WHERE id = ? AND companyId = ? AND (assetId = ? OR assetId IS NULL)`,
       [...keys.map((key) => data[key]), new Date(), ruleId, companyId, assetId],
@@ -660,7 +661,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     if (normalized !== 'RESOLVED') data.resolvedAt = null;
     const keys = Object.keys(data);
     await this.prisma.execute(
-      `UPDATE NetworkAlertEvent SET ${keys.map((key) => `${key} = ?`).join(', ')} WHERE id = ? AND companyId = ?`,
+      `UPDATE NetworkAlertEvent SET ${keys.map((key) => `${escapeSqlIdentifier(key)} = ?`).join(', ')} WHERE id = ? AND companyId = ?`,
       [...keys.map((key) => data[key]), eventId, companyId],
     );
     await this.auditNetworkChange(companyId, actorId, `network.alert.${normalized.toLowerCase()}`, 'NetworkAlertEvent', eventId);
