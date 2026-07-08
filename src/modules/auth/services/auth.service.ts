@@ -434,6 +434,19 @@ export class AuthService {
     return { user: this.responseUser(user), ...tokens, ...setup };
   }
 
+  async confirmChallengeLogin(challengeToken: string, code: string, context: SessionContext = {}) {
+    const payload = this.verifyMfaChallenge(challengeToken, 'login');
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user || !user.isActive) throw new UnauthorizedException('MFA challenge is invalid');
+    await this.mfaService.verifyUserCode(user.id, code);
+    context.mfaVerifiedAt = new Date();
+    await this.clearLoginFailures(user.email);
+    const tokens = await this.generateTokens(user, context);
+    await this.recordLoginSecuritySignals(user, context);
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    return { user: this.responseUser(user), ...tokens };
+  }
+
   async beginMfaSetup(user: any) {
     return this.mfaService.beginSetup(user.id, user.email);
   }

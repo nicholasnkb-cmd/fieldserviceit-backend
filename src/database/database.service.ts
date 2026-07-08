@@ -798,7 +798,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       }
       if (column.index) {
         try {
-          await this.execute(`ALTER TABLE Asset ADD ${column.index}`);
+          await this.ensureIndex('Asset', column.name, column.index);
         } catch (err: any) {
           if (!String(err?.message || '').includes('Duplicate key name')) {
             this.logger.warn(`Asset index skipped (${column.name}): ${err?.message || err}`);
@@ -806,6 +806,17 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         }
       }
     }
+  }
+
+  private async ensureIndex(table: string, indexName: string, definition: string) {
+    const rows = await this.query<RowDataPacket[]>(
+      `SELECT INDEX_NAME FROM information_schema.STATISTICS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?
+       LIMIT 1`,
+      [table, indexName],
+    );
+    if (rows[0]) return;
+    await this.execute(`ALTER TABLE ${this.escapeColumn(table)} ADD ${definition}`);
   }
 
   async onModuleDestroy() {
