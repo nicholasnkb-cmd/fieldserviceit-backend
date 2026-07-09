@@ -1,7 +1,7 @@
 import { initializeSentry } from './instrument';
 import * as Sentry from '@sentry/nestjs';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { RequestMethod, ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -26,7 +26,9 @@ async function bootstrap() {
   // Add correlation ID middleware early in the chain for request tracing
   app.use(CorrelationIdMiddleware.prototype.use.bind(new CorrelationIdMiddleware()));
 
-  app.setGlobalPrefix('v1');
+  app.setGlobalPrefix('v1', {
+    exclude: [{ path: '/', method: RequestMethod.GET }],
+  });
   app.enableShutdownHooks();
   app.use(helmet({
     contentSecurityPolicy: {

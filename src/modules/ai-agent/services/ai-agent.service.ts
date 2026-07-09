@@ -19,6 +19,16 @@ type AgentTool = {
   risk: 'read' | 'write';
 };
 
+type AgentRecommendation = {
+  id: string;
+  label: string;
+  prompt: string;
+  reason: string;
+  actionType: 'ask' | 'plan' | 'navigate';
+  confidence: 'high' | 'review';
+  href?: string;
+};
+
 type AgentIntent = {
   primary: string;
   secondary: string[];
@@ -56,8 +66,8 @@ export class AiAgentService {
     return { data: tools };
   }
 
-  async plan(goal: string, user: any, history: AgentHistoryItem[] = []) {
-    const cleanGoal = this.cleanGoal(goal);
+  async plan(goal: string, user: any, history: AgentHistoryItem[] = [], currentPage?: string) {
+    const cleanGoal = this.contextualizeGoal(this.enrichGoalWithPage(this.cleanGoal(goal), currentPage), history);
     const snapshot = await this.workspaceSnapshot(user);
     const modelAnalysis = await this.aiModel.analyze(cleanGoal, snapshot, history);
     const intent = modelAnalysis ? this.intentFromModel(modelAnalysis.data) : this.classifyIntent(cleanGoal);
@@ -78,12 +88,13 @@ export class AiAgentService {
       steps,
       requiredApprovals: [...new Set(steps.filter((step) => step.requiresApproval).map((step) => step.tool).filter(Boolean))],
       suggestedActions: modelAnalysis?.data.suggestedActions?.length ? modelAnalysis.data.suggestedActions : this.suggestedActions(intent),
+      recommendations: this.buildRecommendations(intent, snapshot, [], currentPage),
       riskSummary: this.riskSummary(steps),
     };
   }
 
-  async ask(question: string, user: any, history: AgentHistoryItem[] = []) {
-    const cleanQuestion = this.cleanGoal(question);
+  async ask(question: string, user: any, history: AgentHistoryItem[] = [], currentPage?: string) {
+    const cleanQuestion = this.contextualizeGoal(this.enrichGoalWithPage(this.cleanGoal(question), currentPage), history);
     const snapshot = await this.workspaceSnapshot(user);
     const modelAnalysis = await this.aiModel.analyze(cleanQuestion, snapshot, history);
     const intent = modelAnalysis ? this.intentFromModel(modelAnalysis.data) : this.classifyIntent(cleanQuestion);
@@ -112,14 +123,15 @@ export class AiAgentService {
         : modelAnalysis?.data.suggestedActions?.length
           ? modelAnalysis.data.suggestedActions
           : this.suggestedActions(intent),
+      recommendations: this.buildRecommendations(intent, snapshot, results, currentPage),
       contextNotes: this.contextNotes(user),
       snapshot,
       results,
     };
   }
 
-  async execute(goal: string, user: any, approvedActions: string[], history: AgentHistoryItem[] = []) {
-    const planned = await this.plan(goal, user, history);
+  async execute(goal: string, user: any, approvedActions: string[], history: AgentHistoryItem[] = [], currentPage?: string) {
+    const planned = await this.plan(goal, user, history, currentPage);
     const approved = new Set(approvedActions);
     const results: any[] = [];
 
@@ -137,6 +149,7 @@ export class AiAgentService {
     return {
       ...planned,
       results,
+      recommendations: this.buildRecommendations(planned.intent, planned.snapshot, results, currentPage),
       finalAnswer: this.finalAnswer(planned.goal, results),
     };
   }
@@ -148,15 +161,57 @@ export class AiAgentService {
     return cleanGoal;
   }
 
+  private contextualizeGoal(goal: string, history: AgentHistoryItem[]) {
+    const previousUserGoal = [...(Array.isArray(history) ? history : [])]
+      .reverse()
+      .find((item) => item?.role === 'user' && typeof item.content === 'string')?.content?.trim();
+    if (!previousUserGoal) return goal;
+
+    const normalized = goal.toLowerCase();
+    const looksLikeFollowUp = (
+      goal.length < 120
+      || /^(what about|show me|summarize|then|also|and|which|who|why|how about)\b/i.test(goal)
+      || /\b(those|that|them|it|same|oldest|newest|highest|critical ones|open ones)\b/i.test(goal)
+    );
+    const hasExplicitDomain = this.matches(normalized, [
+      'ticket', 'asset', 'device', 'network', 'rmm', 'sync', 'compliance', 'enroll', 'mdm', 'alert',
+    ]);
+    if (!looksLikeFollowUp || hasExplicitDomain) return goal;
+
+    return `${goal}\n\nConversation context: the previous user request was "${previousUserGoal.slice(0, 300)}".`;
+  }
+
+  private enrichGoalWithPage(goal: string, currentPage?: string) {
+    if (!currentPage || !this.matches(goal.toLowerCase(), ['this page', 'this board', 'this list', 'current page', 'current board', 'here'])) {
+      return goal;
+    }
+
+    const page = currentPage.toLowerCase();
+    const context = page.includes('/tickets/board')
+      ? 'Current page context: ticket board.'
+      : page.includes('/tickets')
+        ? 'Current page context: tickets list.'
+        : page.includes('/assets')
+          ? 'Current page context: asset inventory.'
+          : page.includes('/network')
+            ? 'Current page context: network monitoring.'
+            : page.includes('/rmm')
+              ? 'Current page context: RMM integrations.'
+              : page.includes('/ai-agent')
+                ? 'Current page context: AI operations assistant.'
+                : '';
+    return context ? `${goal}\n\n${context}` : goal;
+  }
+
   private classifyIntent(goal: string): AgentIntent {
     const normalized = goal.toLowerCase();
     const scores: Record<string, number> = {
-      ticket: this.score(normalized, ['ticket', 'incident', 'request', 'case', 'issue', 'backlog']),
-      asset: this.score(normalized, ['asset', 'device', 'laptop', 'desktop', 'phone', 'serial', 'inventory']),
-      compliance: this.score(normalized, ['compliance', 'non-compliant', 'stale', 'security', 'unmanaged', 'fleet']),
-      network: this.score(normalized, ['network', 'router', 'switch', 'firewall', 'ap', 'wan', 'port', 'syslog', 'snmp', 'latency', 'packet loss']),
-      rmm: this.score(normalized, ['rmm', 'sync', 'ninja', 'datto', 'connectwise', 'integration', 'provider']),
-      enrollment: this.score(normalized, ['enroll', 'mdm', 'token', 'onboard']),
+      ticket: this.score(normalized, ['ticket', 'incident', 'request', 'case', 'issue', 'backlog', 'sla', 'board']),
+      asset: this.score(normalized, ['asset', 'device', 'laptop', 'desktop', 'phone', 'serial', 'inventory', 'workstation', 'endpoint']),
+      compliance: this.score(normalized, ['compliance', 'non-compliant', 'stale', 'security', 'unmanaged', 'fleet', 'risk', 'missing', 'outdated']),
+      network: this.score(normalized, ['network', 'router', 'switch', 'firewall', 'ap', 'wan', 'port', 'syslog', 'snmp', 'latency', 'packet loss', 'offline', 'down', 'outage']),
+      rmm: this.score(normalized, ['rmm', 'sync', 'ninja', 'datto', 'connectwise', 'integration', 'provider', 'atera', 'nable', 'kaseya', 'syncro']),
+      enrollment: this.score(normalized, ['enroll', 'mdm', 'token', 'onboard', 'provision', 'join']),
     };
     const priority = ['network', 'rmm', 'compliance', 'enrollment', 'ticket', 'asset'];
     const ranked = Object.entries(scores).sort((a, b) => b[1] - a[1] || priority.indexOf(a[0]) - priority.indexOf(b[0]));
@@ -196,7 +251,7 @@ export class AiAgentService {
 
   private extractPriority(value: string) {
     if (value.includes('critical')) return 'CRITICAL';
-    if (value.includes('high')) return 'HIGH';
+    if (value.includes('high') || value.includes('urgent') || value.includes('asap') || value.includes('priority')) return 'HIGH';
     if (value.includes('medium')) return 'MEDIUM';
     if (value.includes('low')) return 'LOW';
     return undefined;
@@ -207,6 +262,7 @@ export class AiAgentService {
     if (email) return email;
     return goal
       .replace(/\b(show|find|search|list|summarize|summary|what|which|are|the|all|my|for|about|please|ticket|tickets|asset|assets|device|devices)\b/gi, ' ')
+      .replace(/conversation context:.*$/is, ' ')
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 120);
@@ -282,8 +338,9 @@ export class AiAgentService {
     if (['compliance', 'asset', 'enrollment'].some((name) => intents.has(name))) {
       toolIds.add('device_compliance_report');
     }
-    if (intents.has('network')) toolIds.add('network_health_report');
-    if (intents.has('rmm')) toolIds.add('rmm_summary');
+    if (intents.has('network') || intents.has('general')) toolIds.add('network_health_report');
+    if (intents.has('rmm') || intents.has('general')) toolIds.add('rmm_summary');
+    if (intents.has('general')) toolIds.add('device_compliance_report');
     return [...toolIds];
   }
 
@@ -638,10 +695,10 @@ export class AiAgentService {
     const skipped = results.filter((result) => result.status === 'skipped');
     const normalized = question.toLowerCase();
     if (this.matches(normalized, ['hello', 'hi ', 'hey', 'good morning', 'good afternoon'])) {
-      return 'Hello. I can inspect tickets, assets, device compliance, network health, RMM syncs, and enrollment state. I can also prepare approved actions such as creating a ticket or enrollment token.';
+      return 'Hi. I can help triage the day: tickets, assets, device compliance, network health, RMM syncs, and enrollment work. I can also prepare approved actions such as creating a ticket or enrollment token.';
     }
     if (this.matches(normalized, ['what can you do', 'help me', 'capabilities', 'how do i use', 'what do you do'])) {
-      return 'I can search and summarize tickets, locate assets, report device compliance, inspect network alerts and health snapshots, review RMM sync status, and prepare service tickets or MDM enrollment tokens for your approval.';
+      return 'I can search and summarize tickets, find assets, report device compliance, inspect network health, review RMM syncs, and prepare service tickets or MDM enrollment tokens for approval. A good starting point is “Give me a morning briefing” or “Which open tickets need attention first?”';
     }
 
     const parts: string[] = [];
@@ -652,12 +709,17 @@ export class AiAgentService {
     const network = completed.find((result) => result.tool === 'network_health_report');
     const rmm = completed.find((result) => result.tool === 'rmm_summary');
 
-    if (intent.primary === 'ticket' || intent.secondary.includes('ticket')) {
+    if (intent.primary === 'ticket' || intent.secondary.includes('ticket') || backlog) {
       if (ticketSearch?.data.count) {
         const items = ticketSearch.data.items.slice(0, 3).map((item: any) => `${item.ticketNumber}: ${item.title} (${item.status}, ${item.priority})`);
         parts.push(`I found ${ticketSearch.data.count} matching ticket${ticketSearch.data.count === 1 ? '' : 's'}: ${items.join('; ')}.`);
-      } else {
+      } else if (intent.primary === 'ticket' || intent.secondary.includes('ticket')) {
         parts.push(`I found no tickets matching "${intent.entities.query || question}".`);
+      }
+      if (backlog?.data.byStatus?.length) {
+        const statusText = backlog.data.byStatus.map((row: any) => `${row.status || 'UNKNOWN'} ${row.count}`).join(', ');
+        const priorityText = backlog.data.byPriority?.map((row: any) => `${row.priority || 'UNKNOWN'} ${row.count}`).join(', ');
+        parts.push(`Backlog by status: ${statusText || 'none'}. Priority mix: ${priorityText || 'none'}.`);
       }
       if (backlog?.data.oldestOpen?.length) {
         const oldest = backlog.data.oldestOpen[0];
@@ -665,16 +727,16 @@ export class AiAgentService {
       }
     }
 
-    if (intent.primary === 'asset' || intent.secondary.includes('asset')) {
+    if (intent.primary === 'asset' || intent.secondary.includes('asset') || assetSearch) {
       if (assetSearch?.data.count) {
         const items = assetSearch.data.items.slice(0, 3).map((item: any) => `${item.name} (${item.assetType}, ${item.status})`);
         parts.push(`I found ${assetSearch.data.count} matching asset${assetSearch.data.count === 1 ? '' : 's'}: ${items.join('; ')}.`);
-      } else {
+      } else if (intent.primary === 'asset' || intent.secondary.includes('asset')) {
         parts.push(`I found no assets matching "${intent.entities.query || question}".`);
       }
     }
 
-    if (intent.primary === 'compliance' || intent.secondary.includes('compliance')) {
+    if (intent.primary === 'compliance' || intent.secondary.includes('compliance') || intent.primary === 'general') {
       if (compliance) {
         parts.push(
           `Device compliance is ${compliance.data.complianceRate}% across ${compliance.data.enrolled} enrolled devices. ` +
@@ -683,7 +745,7 @@ export class AiAgentService {
       }
     }
 
-    if (intent.primary === 'network' || intent.secondary.includes('network')) {
+    if (intent.primary === 'network' || intent.secondary.includes('network') || intent.primary === 'general') {
       if (network?.status === 'completed') {
         parts.push(
           `The current scope has ${network.data.networkDevices} network devices, ${network.data.activeAlerts} active alerts, ` +
@@ -694,7 +756,7 @@ export class AiAgentService {
       }
     }
 
-    if (intent.primary === 'rmm' || intent.secondary.includes('rmm')) {
+    if (intent.primary === 'rmm' || intent.secondary.includes('rmm') || intent.primary === 'general') {
       if (rmm?.status === 'completed') {
         parts.push(`I found ${rmm.data.providers.length} RMM provider configurations and ${rmm.data.recentSyncs.length} recent sync runs.`);
       } else {
@@ -708,13 +770,132 @@ export class AiAgentService {
 
     if (intent.primary === 'general' && parts.length === 0) {
       parts.push(
-        'Model reasoning is not configured, so I cannot reliably answer this open-ended question yet. ' +
-        'I can still answer questions about tickets, assets, compliance, network health, RMM syncs, and device enrollment.',
+        `I found ${snapshot.openTickets || 0} open tickets, ${snapshot.assets || 0} assets, ` +
+        `${snapshot.enrolledDevices} enrolled devices, ${snapshot.activeNetworkAlerts} active network alerts, and ${snapshot.rmmProviders} active RMM providers. ` +
+        'I would start with open work, stale or unmanaged devices, and any active network alerts.',
       );
     }
 
     if (skipped.length) parts.push(`${skipped.length} tool${skipped.length === 1 ? '' : 's'} could not run because context or tables were unavailable.`);
     return parts.join(' ');
+  }
+
+  private buildRecommendations(intent: AgentIntent, snapshot: Record<string, number>, results: any[] = [], currentPage?: string): AgentRecommendation[] {
+    const recommendations: AgentRecommendation[] = [];
+    const ticketSearch = results.find((result) => result.tool === 'search_tickets' && result.status === 'completed');
+    const backlog = results.find((result) => result.tool === 'summarize_ticket_backlog' && result.status === 'completed');
+    const assetSearch = results.find((result) => result.tool === 'search_assets' && result.status === 'completed');
+    const compliance = results.find((result) => result.tool === 'device_compliance_report' && result.status === 'completed');
+    const network = results.find((result) => result.tool === 'network_health_report' && result.status === 'completed');
+    const firstTicket = ticketSearch?.data?.items?.[0] || backlog?.data?.oldestOpen?.[0];
+    const firstAsset = assetSearch?.data?.items?.[0];
+    const page = String(currentPage || '').toLowerCase();
+
+    const add = (item: AgentRecommendation) => {
+      if (!recommendations.some((existing) => existing.id === item.id)) recommendations.push(item);
+    };
+
+    if (snapshot.openTickets > 0 || firstTicket || page.includes('/tickets')) {
+      add({
+        id: 'review-open-tickets',
+        label: 'Review ticket risks',
+        prompt: 'Which open tickets need attention first, and why?',
+        reason: `${snapshot.openTickets || 0} open ticket${snapshot.openTickets === 1 ? '' : 's'} ${snapshot.openTickets === 1 ? 'is' : 'are'} in scope.`,
+        actionType: 'ask',
+        confidence: 'high',
+        href: '/tickets/board',
+      });
+    }
+
+    if (firstTicket?.id) {
+      add({
+        id: 'open-ticket',
+        label: 'Open top ticket',
+        prompt: `Open ticket ${firstTicket.ticketNumber}`,
+        reason: `${firstTicket.ticketNumber} is the most relevant ticket from the latest evidence.`,
+        actionType: 'navigate',
+        confidence: 'high',
+        href: `/tickets/${firstTicket.id}`,
+      });
+      add({
+        id: 'escalate-ticket',
+        label: 'Escalate priority',
+        prompt: `Create a plan to escalate ${firstTicket.ticketNumber} if the evidence supports it`,
+        reason: `Priority changes should be reviewed against ticket detail before writing.`,
+        actionType: 'plan',
+        confidence: 'review',
+      });
+      add({
+        id: 'assign-technician',
+        label: 'Assign technician',
+        prompt: `Create a plan to assign a technician to ${firstTicket.ticketNumber}`,
+        reason: `Assignment needs technician availability and ownership review.`,
+        actionType: 'plan',
+        confidence: 'review',
+      });
+      add({
+        id: 'draft-customer-reply',
+        label: 'Draft customer reply',
+        prompt: `Draft a customer update for ${firstTicket.ticketNumber} using the ticket evidence`,
+        reason: `A quick customer update can reduce follow-up on active work.`,
+        actionType: 'ask',
+        confidence: 'review',
+      });
+    } else if (['general', 'ticket', 'network', 'compliance'].includes(intent.primary) || page.includes('/tickets')) {
+      add({
+        id: 'create-ticket',
+        label: 'Create ticket',
+        prompt: 'Create a ticket for the highest-risk issue from this AI review',
+        reason: 'Use this when the finding needs tracked service work.',
+        actionType: 'plan',
+        confidence: 'review',
+      });
+    }
+
+    if (firstAsset?.id) {
+      add({
+        id: 'open-asset',
+        label: 'Open asset',
+        prompt: `Open asset ${firstAsset.name}`,
+        reason: `${firstAsset.name} matched the latest device evidence.`,
+        actionType: 'navigate',
+        confidence: 'high',
+        href: `/assets/${firstAsset.id}`,
+      });
+    }
+
+    if (compliance?.data?.stale || compliance?.data?.unmanaged || intent.primary === 'compliance') {
+      add({
+        id: 'remediate-devices',
+        label: 'Plan device remediation',
+        prompt: 'Create a remediation plan for stale, unmanaged, and non-compliant devices',
+        reason: `${compliance?.data?.stale || 0} stale and ${compliance?.data?.unmanaged || 0} unmanaged device${(compliance?.data?.unmanaged || 0) === 1 ? '' : 's'} were reported.`,
+        actionType: 'plan',
+        confidence: 'high',
+      });
+    }
+
+    if ((network?.data?.activeAlerts || snapshot.activeNetworkAlerts) > 0 || intent.primary === 'network') {
+      add({
+        id: 'network-alerts',
+        label: 'Review network alerts',
+        prompt: 'Summarize active network alerts and recommend the next technician action',
+        reason: `${network?.data?.activeAlerts || snapshot.activeNetworkAlerts || 0} active network alert${(network?.data?.activeAlerts || snapshot.activeNetworkAlerts) === 1 ? '' : 's'} are in scope.`,
+        actionType: 'ask',
+        confidence: 'high',
+      });
+    }
+
+    add({
+      id: 'morning-briefing',
+      label: 'Morning briefing',
+      prompt: 'Give me a morning briefing',
+      reason: 'Combines the main operational risk areas into one scan.',
+      actionType: 'ask',
+      confidence: 'high',
+    });
+
+    return recommendations.slice(0, 6);
   }
 
   private factsFromResults(snapshot: Record<string, number>, results: any[]) {

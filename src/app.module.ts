@@ -42,6 +42,7 @@ import { CatalogRequestsModule } from './modules/catalog-requests/catalog-reques
 import { PlatformSecurityModule } from './modules/platform-security/platform-security.module';
 import { EndpointOperationsModule } from './modules/endpoint-operations/endpoint-operations.module';
 import { DatabaseThrottlerStorage } from './common/services/database-throttler-storage.service';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -163,6 +164,7 @@ import { DatabaseThrottlerStorage } from './common/services/database-throttler-s
     PlatformSecurityModule,
     EndpointOperationsModule,
   ],
+  controllers: [AppController],
   providers: [
     { provide: ThrottlerStorage, useClass: DatabaseThrottlerStorage },
     { provide: APP_GUARD, useClass: RateLimitGuard },
