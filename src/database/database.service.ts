@@ -2730,6 +2730,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     return escapeSqlIdentifier(col);
   }
 
+  private escapeTable(table: string): string {
+    return escapeSqlIdentifier(table);
+  }
+
   async readOnlyTransaction<T>(fn: (tx: TransactionClient) => Promise<T>): Promise<T> {
     const conn = await this.pool.getConnection();
     try {
@@ -2757,7 +2761,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
   private resolveSelectCols(select?: Record<string, any> | null): string[] {
     if (!select) return ['*'];
-    return Object.keys(select).filter(k => select[k] === true);
+    return Object.keys(select).filter(k => select[k] === true).map(k => this.escapeColumn(k));
   }
 
   private buildWhereClauses(table: string, where: Record<string, any>, values: any[]): string[] {
@@ -2815,6 +2819,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   }
 
   private async genericGroupBy(table: string, params: { by: string[]; where?: Record<string, any>; _count?: any; _sum?: any; _avg?: any; _min?: any; _max?: any }): Promise<RowDataPacket[]> {
+    const tableName = this.escapeTable(table);
     const byCols = params.by.map(c => this.escapeColumn(c)).join(', ');
     let sql = `SELECT ${byCols}`;
     if (params._count) sql += `, COUNT(*) as _count`;
@@ -2824,11 +2829,12 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       const clauses = this.buildWhereClauses(table, params.where, values);
       whereClause = ` WHERE ${clauses.join(' AND ')}`;
     }
-    sql += ` FROM ${table}${whereClause} GROUP BY ${byCols}`;
+    sql += ` FROM ${tableName}${whereClause} GROUP BY ${byCols}`;
     return this.query<RowDataPacket[]>(sql, values);
   }
 
   private async genericFindFirst(table: string, { where, select, include }: { where: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) {
+    const tableName = this.escapeTable(table);
     const cols = this.resolveSelectCols(select);
     const whereClauses = Object.entries(where).map(([k, v]) => {
       if (v === null) return `${this.escapeColumn(k)} IS NULL`;
@@ -2836,35 +2842,37 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     }).filter(Boolean);
     const values = Object.values(where).filter(v => v !== null);
     const rows = await this.query<RowDataPacket[]>(
-      `SELECT ${cols.join(', ')} FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
+      `SELECT ${cols.join(', ')} FROM ${tableName} WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
       values,
     );
     return rows[0] || null;
   }
 
   private async genericCreate(table: string, { data }: { data: Record<string, any> }) {
+    const tableName = this.escapeTable(table);
     const now = new Date();
     const cleanData = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
     const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...cleanData };
     const cols = Object.keys(insertData);
     const values = Object.values(insertData);
     const placeholders = cols.map(() => '?').join(', ');
-    await this.execute(`INSERT INTO ${table} (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`, values);
-    const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE id = ? LIMIT 1`, [insertData.id]);
+    await this.execute(`INSERT INTO ${tableName} (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`, values);
+    const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${tableName} WHERE id = ? LIMIT 1`, [insertData.id]);
     return rows[0];
   }
 
   private async genericUpdate(table: string, { where, data }: { where: Record<string, any>; data: Record<string, any> }) {
+    const tableName = this.escapeTable(table);
     const cleanData = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
     const setClauses = Object.keys(cleanData).map(k => `${this.escapeColumn(k)} = ?`);
     const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
     const values = [...Object.values(cleanData), ...Object.values(where)];
     if (!setClauses.length) {
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${tableName} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
       return rows[0];
     }
-    await this.execute(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
-    const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
+    await this.execute(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
+    const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${tableName} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
     return rows[0];
   }
 
@@ -2884,7 +2892,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   }
 
   private async genericCount(table: string, { where }: { where?: Record<string, any> }) {
-    let sql = `SELECT COUNT(*) as count FROM ${table}`;
+    let sql = `SELECT COUNT(*) as count FROM ${this.escapeTable(table)}`;
     const values: any[] = [];
     if (where && Object.keys(where).length > 0) {
       const clauses = this.buildWhereClauses(table, where, values);
