@@ -90,12 +90,12 @@ export class RequestDeduplicationMiddleware implements NestMiddleware {
 
     // Wrap the send method to cache the response
     const originalSend = res.send;
-    const self = this;
+    const cacheResponse = this.cacheResponse.bind(this);
 
     res.send = function (data: any) {
       // Cache successful responses
       if (res.statusCode >= 200 && res.statusCode < 300) {
-        self.cacheResponse(cacheKey, data, res.statusCode);
+        cacheResponse(cacheKey, data, res.statusCode);
       }
       return originalSend.call(this, data);
     };

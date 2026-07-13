@@ -521,9 +521,10 @@ export class PlatformSecurityService {
   async scheduledOperations() {
     await this.runRetention().catch(() => undefined);
     const policy = await this.backupPolicy().catch(() => null);
-    if (!policy?.enabled) return;
+    const dailyBackups = this.config.get('BACKUP_SCHEDULE_DAILY', 'true') !== 'false';
+    if (!policy?.enabled && !dailyBackups) return;
     const now = new Date();
-    if (Number(policy.scheduleDay) !== now.getDay() || Number(policy.scheduleHour) !== now.getHours()) return;
+    if (!dailyBackups && (Number(policy.scheduleDay) !== now.getDay() || Number(policy.scheduleHour) !== now.getHours())) return;
     const lastRun = policy.lastRunAt ? new Date(policy.lastRunAt) : null;
     if (lastRun && Date.now() - lastRun.getTime() < 20 * 60 * 60 * 1000) return;
     await this.runBackup().catch(() => undefined);
@@ -634,10 +635,12 @@ export class PlatformSecurityService {
 
   private async pruneBackups() {
     const policy = await this.backupPolicy();
+    const configuredRetention = Number(this.config.get('BACKUP_RETENTION_COUNT', 14));
+    const retentionCount = Math.min(30, Math.max(Number(policy.retentionCount || 4), configuredRetention || 14));
     const runs = await this.db.query<any[]>(
       `SELECT id, artifactPath FROM BackupRun WHERE status = 'COMPLETED' ORDER BY startedAt DESC`,
     );
-    for (const run of runs.slice(Number(policy.retentionCount || 4))) {
+    for (const run of runs.slice(retentionCount)) {
       if (run.artifactPath) await fs.promises.unlink(run.artifactPath).catch(() => undefined);
       await this.db.execute(`DELETE FROM BackupRun WHERE id = ?`, [run.id]);
     }
