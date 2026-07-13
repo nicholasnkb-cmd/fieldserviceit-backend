@@ -41,7 +41,6 @@ import { TopologyModule } from './modules/topology/topology.module';
 import { CatalogRequestsModule } from './modules/catalog-requests/catalog-requests.module';
 import { PlatformSecurityModule } from './modules/platform-security/platform-security.module';
 import { EndpointOperationsModule } from './modules/endpoint-operations/endpoint-operations.module';
-import { EducationModule } from './modules/education/education.module';
 
 @Module({
   imports: [
@@ -133,7 +132,6 @@ import { EducationModule } from './modules/education/education.module';
     CatalogRequestsModule,
     PlatformSecurityModule,
     EndpointOperationsModule,
-    EducationModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },

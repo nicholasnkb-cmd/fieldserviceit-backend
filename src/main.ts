@@ -48,12 +48,16 @@ async function bootstrap() {
     next();
   });
   const nodeEnv = configService.get('NODE_ENV', 'development');
-  const corsOrigin = configService.get<string>('CORS_ORIGIN');
-  if (!corsOrigin && nodeEnv === 'production') {
-    logger.warn('CORS_ORIGIN not set — defaulting to localhost. Set CORS_ORIGIN env var for production.');
+  const fieldserviceOrigin = 'https://fieldserviceit.com';
+  const corsOrigin = configService.get<string>('CORS_ORIGIN') || 'http://localhost:3000';
+  if (nodeEnv === 'production' && corsOrigin !== fieldserviceOrigin) {
+    throw new Error(
+      `Invalid production CORS_ORIGIN: expected ${fieldserviceOrigin}. ` +
+      'The FieldserviceIT API must not serve another application origin.',
+    );
   }
   app.enableCors({
-    origin: corsOrigin || 'http://localhost:3000',
+    origin: corsOrigin,
     credentials: true,
   });
 
