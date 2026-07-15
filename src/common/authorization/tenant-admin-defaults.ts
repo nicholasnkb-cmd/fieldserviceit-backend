@@ -3,6 +3,7 @@ export const TENANT_ADMIN_DEFAULT_PERMISSIONS = new Set([
   'access-requests.manage',
   'ai-agent.use',
   'assets.create',
+  'assets.delete',
   'assets.edit',
   'assets.export',
   'assets.view',
