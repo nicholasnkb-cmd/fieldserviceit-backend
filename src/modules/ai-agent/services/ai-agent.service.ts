@@ -701,6 +701,10 @@ export class AiAgentService {
       return 'I can search and summarize tickets, find assets, report device compliance, inspect network health, review RMM syncs, and prepare service tickets or MDM enrollment tokens for approval. A good starting point is “Give me a morning briefing” or “Which open tickets need attention first?”';
     }
 
+    if (intent.primary === 'general' && results.length === 0) {
+      return 'Model reasoning is not configured, so I cannot answer unsupported open-ended questions. I can still help with tickets, assets, device compliance, network health, RMM syncs, and enrollment work.';
+    }
+
     const parts: string[] = [];
     const ticketSearch = completed.find((result) => result.tool === 'search_tickets');
     const backlog = completed.find((result) => result.tool === 'summarize_ticket_backlog');

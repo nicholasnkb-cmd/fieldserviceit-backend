@@ -66,7 +66,7 @@ export interface BillingProvider {
   displayName: string;
   configured(): boolean;
   readiness(): { configured: boolean; checks: { name: string; ok: boolean; detail: string }[] };
-  createCheckout(input: BillingCheckoutInput): Promise<{ url: string; sessionId?: string; customerId?: string | null }>;
+  createCheckout(input: BillingCheckoutInput): Promise<{ url: string; sessionId?: string; customerId?: string | null; subscriptionId?: string | null }>;
   createPortal(input: BillingPortalInput): Promise<{ url: string }>;
   listInvoices(input: { customerId?: string | null; subscriptionId?: string | null }): Promise<BillingInvoice[]>;
   verifyAndParseWebhook(rawBody: string | Buffer, headers: Record<string, string | string[] | undefined>): Promise<NormalizedBillingEvent>;
