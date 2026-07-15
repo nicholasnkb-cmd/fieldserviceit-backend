@@ -356,6 +356,7 @@ export class CmdbController {
   }
 
   @Delete(':id')
+  @RequirePermissions('assets.delete')
   remove(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
     return this.cmdbService.remove(id, user.companyId);
