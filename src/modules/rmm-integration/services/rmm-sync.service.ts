@@ -73,7 +73,7 @@ export class RmmSyncService implements OnModuleInit {
       const assets = await provider.syncAllAssets(credentials);
       let assetsCreated = 0;
       let assetsUpdated = 0;
-      let assetsSkipped = 0;
+      const assetsSkipped = 0;
 
       for (const asset of assets) {
         const name = asset.name || 'Unknown Asset';
