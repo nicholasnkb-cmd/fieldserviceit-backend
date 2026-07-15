@@ -605,7 +605,7 @@ export class AiAgentService {
 
     try {
       const [networkDevices, activeAlerts, recentSnapshots, syslogEvents] = await Promise.all([
-        this.countSql(`SELECT COUNT(*) as count FROM Asset a WHERE a.deletedAt IS NULL AND a.assetType = 'NETWORK_DEVICE' AND ${deviceScope}`, deviceValues),
+        this.countSql(`SELECT COUNT(*) as count FROM Asset a WHERE a.deletedAt IS NULL AND a.deviceCategory = 'NETWORK_DEVICE' AND ${deviceScope}`, deviceValues),
         this.countSql(`SELECT COUNT(*) as count FROM NetworkAlertEvent e WHERE e.status = 'ACTIVE' AND ${alertScope}`, alertValues),
         this.prisma.query<any[]>(
           `SELECT s.status, s.latencyMs, s.packetLossPct, s.cpuPct, s.memoryPct, s.source, s.createdAt
