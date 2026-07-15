@@ -2,7 +2,6 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
 import { CurrentUser } from '../../common/types';
-import { escapeSqlIdentifier } from '../../common/security/sql-identifier';
 
 const STATUSES = ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'];
 const VISIBILITIES = ['INTERNAL', 'CUSTOMER', 'PUBLIC'];
@@ -309,6 +308,6 @@ export class KnowledgeBaseService {
   }
 
   private escapeColumn(column: string) {
-    return escapeSqlIdentifier(column);
+    return `\`${column.replace(/`/g, '``')}\``;
   }
 }

@@ -6,9 +6,9 @@ import { BusinessOnlyGuard } from '../../../common/guards/business-only.guard';
 import { BusinessOnly } from '../../../common/decorators/business-only.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
+import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
 import { CreateAssetDto } from '../dto/create-asset.dto';
 import { UpdateAssetDto } from '../dto/update-asset.dto';
-import { AssetQueryDto } from '../dto/asset-query.dto';
 import { CreateEnrollmentTokenDto } from '../dto/create-enrollment-token.dto';
 import { CreateNetworkCredentialDto } from '../dto/create-network-credential.dto';
 import { RotateNetworkCredentialDto } from '../dto/rotate-network-credential.dto';
@@ -39,7 +39,7 @@ export class CmdbController {
   }
 
   @Get()
-  findAll(@Query() query: AssetQueryDto, @CurrentUser() user: CurrentUserType) {
+  findAll(@Query() query: PaginationQueryDto, @CurrentUser() user: CurrentUserType) {
     return this.cmdbService.findAll(this.getCompanyId(user), { ...query, permissionScopes: user.permissionScopes, user });
   }
 

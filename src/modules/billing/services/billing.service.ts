@@ -73,39 +73,16 @@ export class BillingService {
       lineItems,
     });
 
-    await this.prisma.companyPlan.upsert({
-      where: { companyId },
-      update: {
-        planId,
-        billingProvider: provider.key,
-        providerCustomerId: result.customerId || customerId || null,
-        providerSubscriptionId: result.subscriptionId || result.sessionId || subscriptionId || null,
-        billingInterval: interval,
-        seatQuantity: seats,
-        status: 'INCOMPLETE',
-        cancelAtPeriodEnd: false,
-        trialEndsAt: null,
-        currentPeriodStart: null,
-        currentPeriodEnd: null,
-        gracePeriodEndsAt: null,
-        updatedAt: new Date(),
-      },
-      create: {
-        companyId,
-        planId,
-        billingProvider: provider.key,
-        providerCustomerId: result.customerId || customerId || null,
-        providerSubscriptionId: result.subscriptionId || result.sessionId || subscriptionId || null,
-        billingInterval: interval,
-        seatQuantity: seats,
-        status: 'INCOMPLETE',
-        cancelAtPeriodEnd: false,
-        trialEndsAt: null,
-        currentPeriodStart: null,
-        currentPeriodEnd: null,
-        gracePeriodEndsAt: null,
-      },
-    });
+    if (result.customerId && cp) {
+      await this.prisma.companyPlan.update({
+        where: { companyId },
+        data: {
+          billingProvider: provider.key,
+          providerCustomerId: result.customerId,
+          updatedAt: new Date(),
+        },
+      });
+    }
     return { ...result, provider: provider.key };
   }
 
@@ -263,7 +240,7 @@ export class BillingService {
       return true;
     }
 
-    const status = isPaid ? 'ACTIVE' : this.mapStatusFromEvent(event);
+    const status = isPaid ? 'ACTIVE' : this.mapStatus(event.status);
     const planId = event.planId || current?.planId;
     if (!planId) throw new BadRequestException('Billing event is missing plan metadata');
     const data: any = {
@@ -332,22 +309,11 @@ export class BillingService {
       case 'cancelled':
       case 'canceled':
         return 'CANCELED';
-      case 'suspended':
-        return 'PAST_DUE';
       case 'unpaid':
         return 'UNPAID';
       default:
         return 'INCOMPLETE';
     }
-  }
-
-  private mapStatusFromEvent(event: NormalizedBillingEvent) {
-    const type = String(event.type || '').toLowerCase();
-    if (type.includes('activated')) return 'ACTIVE';
-    if (type.includes('cancelled') || type.includes('canceled')) return 'CANCELED';
-    if (type.includes('suspended')) return 'PAST_DUE';
-    if (type.includes('expired')) return 'CANCELED';
-    return this.mapStatus(event.status);
   }
 
   private graceDays() {
