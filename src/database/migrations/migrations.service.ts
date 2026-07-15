@@ -70,14 +70,12 @@ export class MigrationsService {
   private async executeStatement(statement: string) {
     const compatibleStatement = statement
       .replace(/\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b/gi, 'ADD COLUMN')
-      .replace(/\bADD\s+(UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b/gi, (_match, unique) => `ADD ${unique || ''}INDEX`)
-      .replace(/\bCREATE\s+(UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b/gi, (_match, unique) => `CREATE ${unique || ''}INDEX`);
+      .replace(/\bADD\s+(UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b/gi, (_match, unique) => `ADD ${unique || ''}INDEX`);
     try {
       await this.db.query(compatibleStatement);
     } catch (error: any) {
       // MySQL reports these when an idempotent ALTER has already been applied.
       if ([1060, 1061].includes(Number(error?.errno))) return;
-      if (Number(error?.errno) === 1072 && /^\s*CREATE\s+(UNIQUE\s+)?INDEX\b/i.test(compatibleStatement)) return;
       throw error;
     }
   }
