@@ -1,7 +1,12 @@
 import * as crypto from 'crypto';
 
 export function credentialEncryptionKeys(): Buffer[] {
-  const current = process.env.CREDENTIAL_ENCRYPTION_KEY || process.env.JWT_SECRET || 'fieldserviceit-dev-key';
+  const configured = process.env.CREDENTIAL_ENCRYPTION_KEY;
+  if (process.env.NODE_ENV === 'production' && !configured) {
+    throw new Error('CREDENTIAL_ENCRYPTION_KEY is required in production');
+  }
+
+  const current = configured || process.env.JWT_SECRET || 'fieldserviceit-dev-key';
   const previous = process.env.CREDENTIAL_ENCRYPTION_KEY_PREVIOUS;
   return [...new Set([current, previous].filter(Boolean) as string[])]
     .map((key) => crypto.createHash('sha256').update(key).digest());

@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../../../database/prisma.service';
 import { CurrentUser } from '../../../common/types';
 import { decryptSecret, encryptSecret } from '../../../common/security/encryption';
+import { escapeSqlIdentifier } from '../../../common/security/sql-identifier';
 import { Cron } from '@nestjs/schedule';
 
 const SENSITIVE_ACTIONS = new Set([
@@ -771,7 +772,7 @@ export class AccessGovernanceService {
   private async getScopedRow(table: string, id: string, actor: CurrentUser) {
     const allowed = new Set(['AccessElevationRequest', 'DualApprovalRequest', 'AuthorizationRelationship', 'ScimProvisioningToken', 'SecurityEventDestination', 'ContextualAccessPolicy', 'ScimGroupRoleMapping', 'AccessRequest']);
     if (!allowed.has(table)) throw new BadRequestException();
-    const rows = await this.prisma.query<any[]>(`SELECT * FROM ${table} WHERE id = ? LIMIT 1`, [id]);
+    const rows = await this.prisma.query<any[]>(`SELECT * FROM ${escapeSqlIdentifier(table)} WHERE id = ? LIMIT 1`, [id]);
     const row = rows[0];
     if (!row) throw new NotFoundException('Governance record not found');
     if (actor.role !== 'SUPER_ADMIN' && row.companyId !== actor.companyId) throw new ForbiddenException('Record is outside your tenant');
