@@ -63,42 +63,6 @@ export class CustomerPortalService {
     return rows.map((row) => ({ ...row, approved: Boolean(row.approved), rating: Number(row.rating || 0) }));
   }
 
-  async overview(user: CurrentUser) {
-    const { clauses, values } = this.ticketScope(user, 't');
-    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    const [visits, documents, invoices, quotes] = await Promise.all([
-      this.db.query<any[]>(
-        `SELECT d.id, d.status, d.scheduledAt, d.arrivedAt, d.completedAt,
-           t.id ticketId, t.ticketNumber, t.title,
-           CONCAT(u.firstName, ' ', u.lastName) technicianName
-         FROM Dispatch d INNER JOIN Ticket t ON t.id = d.ticketId
-         LEFT JOIN User u ON u.id = d.technicianId
-         ${where} AND d.status NOT IN ('COMPLETED', 'CANCELLED')
-         ORDER BY COALESCE(d.scheduledAt, d.createdAt) ASC LIMIT 20`,
-        values,
-      ),
-      this.db.query<any[]>(
-        `SELECT a.id, a.ticketId, a.fileName, a.fileUrl, a.mimeType, a.fileSize, a.createdAt, t.ticketNumber
-         FROM TicketAttachment a INNER JOIN Ticket t ON t.id = a.ticketId
-         ${where} ORDER BY a.createdAt DESC LIMIT 50`,
-        values,
-      ),
-      this.db.query<any[]>(
-        `SELECT i.id, i.invoiceNumber, i.ticketId, i.title, i.status, i.currency, i.total, i.balanceDue, i.dueAt, i.paidAt, t.ticketNumber
-         FROM ServiceInvoice i INNER JOIN Ticket t ON t.id = i.ticketId
-         ${where} AND i.status <> 'DRAFT' ORDER BY i.createdAt DESC LIMIT 50`,
-        values,
-      ),
-      this.db.query<any[]>(
-        `SELECT q.id, q.quoteNumber, q.ticketId, q.title, q.status, q.currency, q.total, q.validUntil, q.approvedAt, t.ticketNumber
-         FROM ServiceQuote q INNER JOIN Ticket t ON t.id = q.ticketId
-         ${where} AND q.status IN ('SENT', 'APPROVED', 'REJECTED') ORDER BY q.createdAt DESC LIMIT 50`,
-        values,
-      ),
-    ]);
-    return { upcomingVisits: visits, documents, invoices, quotes };
-  }
-
   async addCustomerMessage(ticketId: string, dto: any, user: CurrentUser) {
     await this.ensureSchema();
     const ticket = await this.assertTicketAccess(ticketId, user);

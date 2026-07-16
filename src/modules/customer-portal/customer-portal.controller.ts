@@ -20,12 +20,6 @@ export class CustomerPortalController {
     return this.service.summary(user);
   }
 
-  @AuthorizationExempt('Customer portal overview is restricted to requester-owned tickets and related records', 'customer-experience', '2026-09-30')
-  @Get('overview')
-  overview(@CurrentUser() user: CurrentUserType) {
-    return this.service.overview(user);
-  }
-
   @AuthorizationExempt('Customer portal service enforces requester ownership and tenant scope', 'customer-experience', '2026-09-30')
   @Get('feedback')
   listFeedback(@CurrentUser() user: CurrentUserType) {

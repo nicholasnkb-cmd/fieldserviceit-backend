@@ -39,27 +39,6 @@ const MAGIC_BYTES: Record<string, Uint8Array[]> = {
   '.xlsx': [new Uint8Array([0x50, 0x4B, 0x03, 0x04])],
 };
 
-const EXTENSION_MIMES: Record<string, Set<string>> = {
-  '.jpg': new Set(['image/jpeg']),
-  '.jpeg': new Set(['image/jpeg']),
-  '.png': new Set(['image/png']),
-  '.gif': new Set(['image/gif']),
-  '.webp': new Set(['image/webp']),
-  '.pdf': new Set(['application/pdf']),
-  '.txt': new Set(['text/plain']),
-  '.csv': new Set(['text/csv', 'application/csv', 'text/plain']),
-  '.doc': new Set(['application/msword']),
-  '.docx': new Set(['application/vnd.openxmlformats-officedocument.wordprocessingml.document']),
-  '.xls': new Set(['application/vnd.ms-excel']),
-  '.xlsx': new Set(['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']),
-};
-
-function validateMimeType(mimeType: string, ext: string): void {
-  if (!EXTENSION_MIMES[ext]?.has(String(mimeType || '').toLowerCase())) {
-    throw new BadRequestException('File MIME type does not match its extension');
-  }
-}
-
 function validateMagicBytes(buffer: Buffer, ext: string): void {
   const signatures = MAGIC_BYTES[ext];
   if (!signatures) return;
@@ -68,15 +47,6 @@ function validateMagicBytes(buffer: Buffer, ext: string): void {
   );
   if (!match) {
     throw new BadRequestException('File content does not match its extension');
-  }
-  if (ext === '.webp' && buffer.subarray(8, 12).toString('ascii') !== 'WEBP') {
-    throw new BadRequestException('File content does not match its extension');
-  }
-  if (ext === '.docx' && !buffer.includes(Buffer.from('word/'))) {
-    throw new BadRequestException('File content is not a valid Word document');
-  }
-  if (ext === '.xlsx' && !buffer.includes(Buffer.from('xl/'))) {
-    throw new BadRequestException('File content is not a valid Excel workbook');
   }
 }
 
@@ -116,7 +86,6 @@ export class UploadsService {
     const sanitized = sanitizeFilename(file.originalname);
     validateExtension(sanitized);
     const ext = path.extname(sanitized) || '.bin';
-    validateMimeType(file.mimetype, ext);
     validateMagicBytes(file.buffer, ext);
     scanForKnownMalwareMarkers(file.buffer);
     await this.malwareScanner.scan(file);
@@ -211,7 +180,6 @@ export class UploadsService {
     const sanitized = sanitizeFilename(file.originalname);
     validateExtension(sanitized);
     const ext = path.extname(sanitized) || '.bin';
-    validateMimeType(file.mimetype, ext);
     validateMagicBytes(file.buffer, ext);
     scanForKnownMalwareMarkers(file.buffer);
     await this.malwareScanner.scan(file);
@@ -239,9 +207,7 @@ export class UploadsService {
     if (!file) throw new BadRequestException('No file provided');
     const sanitized = sanitizeFilename(file.originalname);
     validateExtension(sanitized);
-    const ext = path.extname(sanitized).toLowerCase();
-    validateMimeType(file.mimetype, ext);
-    validateMagicBytes(file.buffer, ext);
+    validateMagicBytes(file.buffer, path.extname(sanitized).toLowerCase());
     scanForKnownMalwareMarkers(file.buffer);
     await this.malwareScanner.scan(file);
   }
