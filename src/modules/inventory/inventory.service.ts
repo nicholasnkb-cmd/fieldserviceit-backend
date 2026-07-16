@@ -215,7 +215,7 @@ export class InventoryService {
     const has = (key: string) => Object.prototype.hasOwnProperty.call(dto, key);
     const name = dto.name?.trim();
     if (required && !name) throw new BadRequestException('Part name is required');
-    const locationId = has('locationId') ? dto.locationId || null : required ? await this.defaultLocation(companyId) : undefined;
+    let locationId = has('locationId') ? dto.locationId || null : required ? await this.defaultLocation(companyId) : undefined;
     if (locationId) await this.assertLocation(companyId, locationId);
     return {
       sku: has('sku') ? dto.sku?.trim() || null : undefined,

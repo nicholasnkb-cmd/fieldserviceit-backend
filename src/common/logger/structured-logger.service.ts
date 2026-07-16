@@ -45,7 +45,7 @@ export class StructuredLogger {
   private requestCount = 0;
   private errorCount = 0;
   private slowQueryCount = 0;
-  private totalLatency = 0;
+  private totalRequestLatency = 0;
   private performanceMetrics: Map<string, { count: number; totalTime: number; slowCount: number }> = new Map();
   private readonly METRICS_INTERVAL = 300000; // Report every 5 minutes
   private readonly SLOW_QUERY_THRESHOLD = 1000; // 1 second
@@ -150,14 +150,16 @@ export class StructuredLogger {
     request?: Request | any,
     metadata?: Record<string, any>,
   ) {
-    this.requestCount++;
     const log = this.buildLog(message, 'info', context, request, metadata);
     console.log(JSON.stringify(log));
-    
-    // Report metrics every 100 requests to avoid log spam
-    if (this.requestCount % 100 === 0) {
-      this.reportMetrics();
-    }
+  }
+
+  trackRequest(latencyMs: number, statusCode: number) {
+    this.requestCount++;
+    this.totalRequestLatency += latencyMs;
+    if (statusCode >= 500) this.errorCount++;
+    this.trackPerformance('http.request', latencyMs, 'api');
+    if (this.requestCount % 100 === 0) this.reportMetrics();
   }
 
   /**
@@ -182,8 +184,6 @@ export class StructuredLogger {
    * @param type - Type of operation ('query', 'api', 'cache', etc.)
    */
   trackPerformance(operation: string, latencyMs: number, type: string = 'operation') {
-    this.totalLatency += latencyMs;
-
     // Track slow queries
     if (latencyMs > this.SLOW_QUERY_THRESHOLD) {
       this.slowQueryCount++;
@@ -219,7 +219,7 @@ export class StructuredLogger {
    * Get current metrics for monitoring
    */
   getMetrics() {
-    const avgLatency = this.requestCount > 0 ? (this.totalLatency / this.requestCount).toFixed(2) : '0';
+    const avgLatency = this.requestCount > 0 ? (this.totalRequestLatency / this.requestCount).toFixed(2) : '0';
     const errorRate = this.requestCount > 0 ? ((this.errorCount / this.requestCount) * 100).toFixed(2) : '0';
 
     const operationMetrics: any = {};
@@ -272,7 +272,7 @@ export class StructuredLogger {
     this.requestCount = 0;
     this.errorCount = 0;
     this.slowQueryCount = 0;
-    this.totalLatency = 0;
+    this.totalRequestLatency = 0;
     this.performanceMetrics.clear();
   }
 }
