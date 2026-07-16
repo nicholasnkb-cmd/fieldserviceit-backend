@@ -59,7 +59,12 @@ export class PayPalBillingProvider implements BillingProvider {
     });
     const approval = (data.links || []).find((link: any) => link.rel === 'approve')?.href;
     if (!approval) throw new BadRequestException('PayPal did not return an approval URL');
-    return { url: approval, sessionId: data.id, customerId: data.subscriber?.payer_id || null };
+    return {
+      url: approval,
+      sessionId: data.id,
+      subscriptionId: data.id,
+      customerId: data.subscriber?.payer_id || null,
+    };
   }
 
   async createPortal(input: BillingPortalInput) {
