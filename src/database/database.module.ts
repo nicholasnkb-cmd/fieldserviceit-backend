@@ -5,10 +5,19 @@ import { MigrationsService } from './migrations/migrations.service';
 import { AuthorizationRepository } from './repositories/authorization.repository';
 import { SessionRepository } from './repositories/session.repository';
 import { AssetRepository } from './repositories/asset.repository';
+import { QueryMetricsContext } from '../common/observability/query-metrics.context';
 
 @Global()
 @Module({
-  providers: [PrismaService, DatabaseService, MigrationsService, AuthorizationRepository, SessionRepository, AssetRepository],
-  exports: [PrismaService, DatabaseService, MigrationsService, AuthorizationRepository, SessionRepository, AssetRepository],
+  providers: [
+    DatabaseService,
+    { provide: PrismaService, useExisting: DatabaseService },
+    MigrationsService,
+    AuthorizationRepository,
+    SessionRepository,
+    AssetRepository,
+    QueryMetricsContext,
+  ],
+  exports: [PrismaService, DatabaseService, MigrationsService, AuthorizationRepository, SessionRepository, AssetRepository, QueryMetricsContext],
 })
 export class DatabaseModule {}

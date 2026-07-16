@@ -1,7 +1,7 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as crypto from 'crypto';
 import * as dns from 'dns';
 import * as fs from 'fs';
@@ -19,14 +19,29 @@ const DISRUPTIVE_ACTIONS = new Set(['RESTART', 'DISABLE_PORT', 'BOUNCE_POE']);
 
 @Injectable()
 export class PlatformSecurityService {
+  private readonly logger = new Logger(PlatformSecurityService.name);
   private backupRunning = false;
   private retentionRunning = false;
-  private backupS3Client: S3Client | null = null;
+  private readonly backupS3: S3Client | null;
+  private readonly backupBucket: string;
 
   constructor(
     private readonly db: DatabaseService,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    const endpoint = this.config.get<string>('BACKUP_S3_ENDPOINT');
+    const accessKeyId = this.config.get<string>('BACKUP_S3_ACCESS_KEY_ID');
+    const secretAccessKey = this.config.get<string>('BACKUP_S3_SECRET_ACCESS_KEY');
+    this.backupBucket = this.config.get<string>('BACKUP_S3_BUCKET', 'fieldserviceit-backups');
+    this.backupS3 = endpoint && accessKeyId && secretAccessKey
+      ? new S3Client({
+          endpoint,
+          region: this.config.get('BACKUP_S3_REGION', 'us-east-1'),
+          credentials: { accessKeyId, secretAccessKey },
+          forcePathStyle: true,
+        })
+      : null;
+  }
 
   async dashboard() {
     const [
@@ -79,8 +94,6 @@ export class PlatformSecurityService {
         nodeEnv: this.config.get('NODE_ENV', 'development'),
         clamAvConfigured: Boolean(this.config.get('CLAMAV_HOST')),
         encryptedBackupKeyConfigured: Boolean(this.config.get('CREDENTIAL_ENCRYPTION_KEY')),
-        offsiteBackupConfigured: this.configBoolean('BACKUP_OFFSITE_S3_ENABLED', false),
-        sentryConfigured: Boolean(this.config.get('SENTRY_DSN')),
         oidcProviders: await this.count(`SELECT COUNT(*) count FROM OidcProviderConfig WHERE enabled = 1`),
       },
     };
@@ -332,22 +345,26 @@ export class PlatformSecurityService {
     const startedAt = new Date();
     await this.db.execute(
       `INSERT INTO BackupRun (id, status, destination, requestedById, startedAt)
-       VALUES (?, 'RUNNING', 'LOCAL_ENCRYPTED', ?, ?)`,
+       VALUES (?, 'RUNNING', 'OFFSITE_ENCRYPTED', ?, ?)`,
       [runId, requestedById || null, startedAt],
     );
     try {
-      const tables = await this.databaseTables();
-      const payload: Record<string, any> = {
-        format: 'fieldserviceit-encrypted-json-v1',
-        createdAt: new Date().toISOString(),
-        tables: {},
-      };
-      let rowCount = 0;
-      for (const table of tables) {
-        const rows = await this.db.query<any[]>(`SELECT * FROM \`${table}\``);
-        payload.tables[table] = rows;
-        rowCount += rows.length;
-      }
+      const { tables, payload, rowCount } = await this.db.readOnlyTransaction(async (tx) => {
+        const tables = await this.databaseTables(tx);
+        const payload: Record<string, any> = {
+          format: 'fieldserviceit-encrypted-json-v1',
+          createdAt: new Date().toISOString(),
+          consistency: 'mysql-repeatable-read-consistent-snapshot',
+          tables: {},
+        };
+        let rowCount = 0;
+        for (const table of tables) {
+          const rows = await tx.query<any[]>(`SELECT * FROM \`${table}\``);
+          payload.tables[table] = rows;
+          rowCount += rows.length;
+        }
+        return { tables, payload, rowCount };
+      });
       const compressed = zlib.gzipSync(Buffer.from(JSON.stringify(payload, this.jsonReplacer)));
       const encrypted = encryptBuffer(compressed);
       const checksum = crypto.createHash('sha256').update(encrypted).digest('hex');
@@ -358,24 +375,20 @@ export class PlatformSecurityService {
       const temporaryPath = `${artifactPath}.tmp`;
       await fs.promises.writeFile(temporaryPath, encrypted, { mode: 0o600 });
       await fs.promises.rename(temporaryPath, artifactPath);
-      let destination = 'LOCAL_ENCRYPTED';
-      if (this.configBoolean('BACKUP_OFFSITE_S3_ENABLED', false)) {
-        try {
-          await this.uploadOffsiteBackup(filename, encrypted, checksum);
-          destination = 'LOCAL_ENCRYPTED+S3';
-          await this.recordJob('offsite-backup-upload', 'PASS', { runId, filename, bytes: encrypted.length }, startedAt);
-        } catch (error: any) {
-          await this.recordJob('offsite-backup-upload', 'FAIL', {
-            runId,
-            error: String(error?.message || error).slice(0, 1000),
-          }, startedAt);
-        }
-      }
+      if (!this.backupS3) throw new Error('Off-site backup storage is not configured');
+      const offsiteKey = `database/${filename}`;
+      await this.backupS3.send(new PutObjectCommand({
+        Bucket: this.backupBucket,
+        Key: offsiteKey,
+        Body: encrypted,
+        ContentType: 'application/octet-stream',
+        Metadata: { checksum, format: 'fieldserviceit-encrypted-json-v1' },
+      }));
       await this.db.execute(
-        `UPDATE BackupRun SET status = 'COMPLETED', destination = ?, artifactPath = ?, bytes = ?, checksum = ?,
+        `UPDATE BackupRun SET status = 'COMPLETED', artifactPath = ?, offsiteKey = ?, bytes = ?, checksum = ?,
          tableCount = ?, rowCount = ?, encryption = 'AES-256-GCM', completedAt = NOW(3)
          WHERE id = ?`,
-        [destination, artifactPath, encrypted.length, checksum, tables.length, rowCount, runId],
+        [artifactPath, offsiteKey, encrypted.length, checksum, tables.length, rowCount, runId],
       );
       await this.db.execute(`UPDATE BackupPolicy SET lastRunAt = NOW(3) WHERE id = ?`, [BACKUP_POLICY_ID]);
       await this.pruneBackups();
@@ -396,9 +409,9 @@ export class PlatformSecurityService {
 
   async testBackup(id: string) {
     const run = await this.getBackupRun(id);
-    if (!run.artifactPath || run.status !== 'COMPLETED') throw new BadRequestException('Backup artifact is not available');
+    if ((!run.artifactPath && !run.offsiteKey) || run.status !== 'COMPLETED') throw new BadRequestException('Backup artifact is not available');
     try {
-      const encrypted = await fs.promises.readFile(run.artifactPath);
+      const encrypted = await this.readBackupArtifact(run);
       const checksum = crypto.createHash('sha256').update(encrypted).digest('hex');
       if (checksum !== run.checksum) throw new Error('Backup checksum does not match');
       const parsed = JSON.parse(zlib.gunzipSync(decryptBuffer(encrypted)).toString('utf8'));
@@ -538,35 +551,13 @@ export class PlatformSecurityService {
   async scheduledOperations() {
     await this.runRetention().catch(() => undefined);
     const policy = await this.backupPolicy().catch(() => null);
-    const dailyBackups = this.configBoolean('BACKUP_SCHEDULE_DAILY', true);
-    if (!policy?.enabled && !dailyBackups) return;
-    const now = new Date();
-    if (!dailyBackups && (Number(policy.scheduleDay) !== now.getDay() || Number(policy.scheduleHour) !== now.getHours())) return;
+    if (!policy?.enabled) return;
+    if (Number(policy.scheduleHour) !== new Date().getHours()) return;
     const lastRun = policy.lastRunAt ? new Date(policy.lastRunAt) : null;
     if (lastRun && Date.now() - lastRun.getTime() < 20 * 60 * 60 * 1000) return;
-    await this.runBackup().catch(() => undefined);
-  }
-
-  @Cron('0 45 4 1 * *')
-  async scheduledBackupRestoreTest() {
-    const startedAt = new Date();
-    const rows = await this.db.query<any[]>(
-      `SELECT id FROM BackupRun WHERE status = 'COMPLETED' ORDER BY startedAt DESC LIMIT 1`,
-    ).catch(() => []);
-    const id = rows[0]?.id;
-    if (!id) {
-      await this.recordJob('monthly-backup-restore-test', 'FAIL', { error: 'No completed backup is available' }, startedAt);
-      return;
-    }
-    try {
-      const result = await this.testBackup(id);
-      await this.recordJob('monthly-backup-restore-test', 'PASS', { backupId: id, ...result }, startedAt);
-    } catch (error: any) {
-      await this.recordJob('monthly-backup-restore-test', 'FAIL', {
-        backupId: id,
-        error: String(error?.message || error).slice(0, 1000),
-      }, startedAt);
-    }
+    await this.runBackup().catch((error) => {
+      this.logger.error(`Scheduled off-site backup failed: ${String(error?.message || error)}`);
+    });
   }
 
   private async assertOidcAccess(user: CurrentUser, id: string) {
@@ -652,8 +643,8 @@ export class PlatformSecurityService {
       || (a === 100 && b >= 64 && b <= 127);
   }
 
-  private async databaseTables() {
-    const rows = await this.db.query<any[]>(
+  private async databaseTables(client: Pick<DatabaseService, 'query'> = this.db) {
+    const rows = await client.query<any[]>(
       `SELECT TABLE_NAME tableName FROM information_schema.TABLES
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
        ORDER BY TABLE_NAME`,
@@ -668,60 +659,32 @@ export class PlatformSecurityService {
   }
 
   private publicBackupRun(run: any) {
-    const { artifactPath: _artifactPath, ...safe } = run;
+    const { artifactPath: _artifactPath, offsiteKey: _offsiteKey, ...safe } = run;
     return safe;
+  }
+
+  private async readBackupArtifact(run: any): Promise<Buffer> {
+    if (this.backupS3 && run.offsiteKey) {
+      const result = await this.backupS3.send(new GetObjectCommand({ Bucket: this.backupBucket, Key: run.offsiteKey }));
+      const bytes = result.Body?.transformToByteArray ? await result.Body.transformToByteArray() : [];
+      return Buffer.from(bytes);
+    }
+    if (run.artifactPath && fs.existsSync(run.artifactPath)) return fs.promises.readFile(run.artifactPath);
+    throw new Error('Backup artifact is unavailable locally and off-site');
   }
 
   private async pruneBackups() {
     const policy = await this.backupPolicy();
-    const configuredRetention = Number(this.config.get('BACKUP_RETENTION_COUNT', 14));
-    const retentionCount = Math.min(30, Math.max(Number(policy.retentionCount || 4), configuredRetention || 14));
     const runs = await this.db.query<any[]>(
-      `SELECT id, artifactPath FROM BackupRun WHERE status = 'COMPLETED' ORDER BY startedAt DESC`,
+      `SELECT id, artifactPath, offsiteKey FROM BackupRun WHERE status = 'COMPLETED' ORDER BY startedAt DESC`,
     );
-    for (const run of runs.slice(retentionCount)) {
-      if (run.artifactPath) await this.deleteOffsiteBackup(path.basename(run.artifactPath)).catch(() => undefined);
+    for (const run of runs.slice(Number(policy.retentionCount || 4))) {
       if (run.artifactPath) await fs.promises.unlink(run.artifactPath).catch(() => undefined);
+      if (run.offsiteKey && this.backupS3) {
+        await this.backupS3.send(new DeleteObjectCommand({ Bucket: this.backupBucket, Key: run.offsiteKey }));
+      }
       await this.db.execute(`DELETE FROM BackupRun WHERE id = ?`, [run.id]);
     }
-  }
-
-  private async uploadOffsiteBackup(filename: string, encrypted: Buffer, checksum: string) {
-    const { client, bucket, key } = this.offsiteBackupTarget(filename);
-    await client.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: encrypted,
-      ContentType: 'application/octet-stream',
-      ServerSideEncryption: 'AES256',
-      Metadata: { sha256: checksum, format: 'fieldserviceit-encrypted-json-v1' },
-    }));
-  }
-
-  private async deleteOffsiteBackup(filename: string) {
-    if (!this.configBoolean('BACKUP_OFFSITE_S3_ENABLED', false)) return;
-    const { client, bucket, key } = this.offsiteBackupTarget(filename);
-    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-  }
-
-  private offsiteBackupTarget(filename: string) {
-    const bucket = String(this.config.get('BACKUP_OFFSITE_S3_BUCKET') || '').trim();
-    const accessKeyId = String(this.config.get('BACKUP_OFFSITE_S3_ACCESS_KEY_ID') || '').trim();
-    const secretAccessKey = String(this.config.get('BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY') || '').trim();
-    if (!bucket || !accessKeyId || !secretAccessKey) {
-      throw new Error('Off-site backup storage is enabled but its bucket credentials are incomplete');
-    }
-    if (!this.backupS3Client) {
-      const endpoint = String(this.config.get('BACKUP_OFFSITE_S3_ENDPOINT') || '').trim();
-      this.backupS3Client = new S3Client({
-        ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
-        region: this.config.get('BACKUP_OFFSITE_S3_REGION', 'us-east-1'),
-        credentials: { accessKeyId, secretAccessKey },
-      });
-    }
-    const prefix = String(this.config.get('BACKUP_OFFSITE_S3_PREFIX', 'fieldserviceit/database'))
-      .replace(/^\/+|\/+$/g, '');
-    return { client: this.backupS3Client, bucket, key: `${prefix}/${filename}` };
   }
 
   private async recordJob(jobName: string, status: 'PASS' | 'FAIL', detail: any, startedAt: Date) {
@@ -730,12 +693,6 @@ export class PlatformSecurityService {
        VALUES (?, ?, ?, ?, ?, ?, NOW(3))`,
       [crypto.randomUUID(), jobName, status, JSON.stringify(detail || {}), Date.now() - startedAt.getTime(), startedAt],
     ).catch(() => undefined);
-  }
-
-  private configBoolean(key: string, fallback: boolean) {
-    const value = this.config.get(key);
-    if (value === undefined || value === null || value === '') return fallback;
-    return value === true || value === 1 || String(value).toLowerCase() === 'true';
   }
 
   private jsonReplacer(_key: string, value: any) {
