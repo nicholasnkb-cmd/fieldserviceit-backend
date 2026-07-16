@@ -29,7 +29,7 @@ describe('BillingService', () => {
       displayName: 'PayPal',
       configured: jest.fn().mockReturnValue(true),
       readiness: jest.fn().mockReturnValue({ configured: true, checks: [] }),
-      createCheckout: jest.fn().mockResolvedValue({ url: 'https://www.paypal.com/checkoutnow?token=test', sessionId: 'sub_1', customerId: null }),
+      createCheckout: jest.fn().mockResolvedValue({ url: 'https://www.paypal.com/checkoutnow?token=test', sessionId: 'sub_1', subscriptionId: 'sub_1', customerId: null }),
       createPortal: jest.fn(),
       listInvoices: jest.fn(),
       verifyAndParseWebhook: jest.fn(),
@@ -81,6 +81,17 @@ describe('BillingService', () => {
         { priceId: 'price_annual', quantity: 1, component: 'BASE' },
       ],
     }));
+    expect(prisma.companyPlan.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { companyId: 'company-1' },
+      update: expect.objectContaining({
+        planId: 'business',
+        billingProvider: 'PAYPAL',
+        providerSubscriptionId: 'sub_1',
+        billingInterval: 'YEAR',
+        seatQuantity: 5,
+        status: 'INCOMPLETE',
+      }),
+    }));
   });
 
   it('uses the mapped monthly PayPal plan', async () => {
@@ -124,6 +135,36 @@ describe('BillingService', () => {
       },
     });
     expect(prisma.execute).toHaveBeenLastCalledWith(expect.stringContaining("status = ?"), expect.arrayContaining(['PROCESSED']));
+  });
+
+  it('activates subscriptions from PayPal subscription webhooks', async () => {
+    provider.verifyAndParseWebhook.mockResolvedValue({
+      provider: 'PAYPAL',
+      id: 'evt_active',
+      type: 'BILLING.SUBSCRIPTION.ACTIVATED',
+      companyId: 'company-1',
+      planId: 'business',
+      subscriptionId: 'sub-1',
+      status: 'ACTIVE',
+      interval: 'MONTH',
+      seats: 3,
+      raw: { id: 'evt_active' },
+    });
+    prisma.query.mockResolvedValue([]);
+    prisma.execute.mockResolvedValue({});
+    prisma.companyPlan.findUnique.mockResolvedValue({ companyId: 'company-1', planId: 'business' });
+
+    await service.handleWebhook('raw', {});
+
+    expect(prisma.companyPlan.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { companyId: 'company-1' },
+      update: expect.objectContaining({
+        providerSubscriptionId: 'sub-1',
+        billingInterval: 'MONTH',
+        seatQuantity: 3,
+        status: 'ACTIVE',
+      }),
+    }));
   });
 
   it('skips webhook events already processed', async () => {
