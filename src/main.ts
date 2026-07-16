@@ -1,7 +1,7 @@
 import { initializeSentry } from './instrument';
 import * as Sentry from '@sentry/nestjs';
 import { NestFactory } from '@nestjs/core';
-import { RequestMethod, ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -15,20 +15,13 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
-  const nodeEnv = configService.get('NODE_ENV', 'development');
-
-  if (nodeEnv === 'production') {
-    app.set('trust proxy', configService.get('TRUST_PROXY_HOPS', 1));
-  }
 
   app.use(json({ verify: (req: any, _res, buf) => { req.rawBody = buf.toString(); } }));
 
   // Add correlation ID middleware early in the chain for request tracing
   app.use(CorrelationIdMiddleware.prototype.use.bind(new CorrelationIdMiddleware()));
 
-  app.setGlobalPrefix('v1', {
-    exclude: [{ path: '/', method: RequestMethod.GET }],
-  });
+  app.setGlobalPrefix('v1');
   app.enableShutdownHooks();
   app.use(helmet({
     contentSecurityPolicy: {
@@ -54,12 +47,17 @@ async function bootstrap() {
     res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=(), payment=(), fullscreen=(self)');
     next();
   });
-  const corsOrigin = configService.get<string>('CORS_ORIGIN');
-  if (!corsOrigin && nodeEnv === 'production') {
-    logger.warn('CORS_ORIGIN not set — defaulting to localhost. Set CORS_ORIGIN env var for production.');
+  const nodeEnv = configService.get('NODE_ENV', 'development');
+  const fieldserviceOrigin = 'https://fieldserviceit.com';
+  const corsOrigin = configService.get<string>('CORS_ORIGIN') || 'http://localhost:3000';
+  if (nodeEnv === 'production' && corsOrigin !== fieldserviceOrigin) {
+    throw new Error(
+      `Invalid production CORS_ORIGIN: expected ${fieldserviceOrigin}. ` +
+      'The FieldserviceIT API must not serve another application origin.',
+    );
   }
   app.enableCors({
-    origin: corsOrigin || 'http://localhost:3000',
+    origin: corsOrigin,
     credentials: true,
   });
 

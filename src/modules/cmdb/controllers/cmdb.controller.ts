@@ -16,7 +16,6 @@ import { RequirePermissions } from '../../../common/decorators/permissions.decor
 import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
-import { NetworkInventoryService } from '../services/network-inventory.service';
 
 @Controller('assets')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
@@ -24,7 +23,7 @@ import { NetworkInventoryService } from '../services/network-inventory.service';
 @RequireFeature('assets')
 @RequirePermissions('assets.view')
 export class CmdbController {
-  constructor(private cmdbService: CmdbService, private networkInventory: NetworkInventoryService) {}
+  constructor(private cmdbService: CmdbService) {}
 
   private getCompanyId(user: CurrentUserType) {
     const companyId = user.effectiveCompanyId || user.companyId;
@@ -35,36 +34,8 @@ export class CmdbController {
   @Post()
   @RequirePermissions('assets.create')
   create(@Body() dto: CreateAssetDto, @CurrentUser() user: CurrentUserType) {
-    return this.cmdbService.create(dto, this.getCompanyId(user), user.id);
-  }
-
-  @Get('retired')
-  listRetired(@Query('deviceCategory') deviceCategory: string | undefined, @CurrentUser() user: CurrentUserType) {
-    return this.cmdbService.listRetired(this.getCompanyId(user), deviceCategory);
-  }
-
-  @Post('retired/:id/restore')
-  @RequirePermissions('assets.delete')
-  restore(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
-    return this.cmdbService.restore(id, this.getCompanyId(user), user.id);
-  }
-
-  @Post('network/bulk/retire')
-  @RequirePermissions('assets.delete')
-  bulkRetire(@Body('ids') ids: string[], @CurrentUser() user: CurrentUserType) {
-    return this.networkInventory.bulkRetire(ids, this.getCompanyId(user), user.id);
-  }
-
-  @Post('network/bulk/restore')
-  @RequirePermissions('assets.delete')
-  bulkRestore(@Body('ids') ids: string[], @CurrentUser() user: CurrentUserType) {
-    return this.networkInventory.bulkRestore(ids, this.getCompanyId(user), user.id);
-  }
-
-  @Post('network/import')
-  @RequirePermissions('assets.create')
-  importNetworkDevices(@Body('devices') devices: Record<string, any>[], @CurrentUser() user: CurrentUserType) {
-    return this.networkInventory.importDevices(devices, this.getCompanyId(user), user.id);
+    if (!user.companyId) throw new ForbiddenException('No company context available');
+    return this.cmdbService.create(dto, user.companyId);
   }
 
   @Get()
@@ -155,17 +126,6 @@ export class CmdbController {
     return this.cmdbService.scanSubnet(user.companyId, body);
   }
 
-  @Get('network/discovery/schedule')
-  getDiscoverySchedule(@CurrentUser() user: CurrentUserType) {
-    return this.networkInventory.getDiscoverySchedule(this.getCompanyId(user));
-  }
-
-  @Put('network/discovery/schedule')
-  @RequirePermissions('assets.edit')
-  updateDiscoverySchedule(@Body() body: Record<string, any>, @CurrentUser() user: CurrentUserType) {
-    return this.networkInventory.updateDiscoverySchedule(this.getCompanyId(user), body, user.id);
-  }
-
   @Get('network/vendor-mappings')
   listVendorMappings(@CurrentUser() user: CurrentUserType) {
     if (!user.companyId) throw new ForbiddenException('No company context available');
@@ -243,20 +203,11 @@ export class CmdbController {
     return this.cmdbService.findOne(id, user.companyId);
   }
 
-  @Get(':id/removal-impact')
-  removalImpact(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
-    return this.networkInventory.removalImpact(id, this.getCompanyId(user));
-  }
-
-  @Get(':id/history')
-  assetHistory(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
-    return this.networkInventory.history(id, this.getCompanyId(user));
-  }
-
   @Patch(':id')
   @RequirePermissions('assets.edit')
   update(@Param('id') id: string, @Body() dto: UpdateAssetDto, @CurrentUser() user: CurrentUserType) {
-    return this.cmdbService.update(id, dto, this.getCompanyId(user), user.id);
+    if (!user.companyId) throw new ForbiddenException('No company context available');
+    return this.cmdbService.update(id, dto, user.companyId);
   }
 
   @Post(':id/check-in')
@@ -407,6 +358,7 @@ export class CmdbController {
   @Delete(':id')
   @RequirePermissions('assets.delete')
   remove(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
-    return this.cmdbService.remove(id, this.getCompanyId(user), user.id);
+    if (!user.companyId) throw new ForbiddenException('No company context available');
+    return this.cmdbService.remove(id, user.companyId);
   }
 }
