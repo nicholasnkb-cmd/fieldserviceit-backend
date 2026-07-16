@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, NotFoundException, UnauthorizedException, Headers } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Res, Header, NotFoundException, UnauthorizedException, Headers, HttpCode, HttpStatus } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { TicketsService } from '../services/tickets.service';
@@ -243,6 +243,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Post('bulk/status')
+  @HttpCode(HttpStatus.OK)
   @RequirePermissions('tickets.edit')
   async bulkStatus(@Body() body: { ids: string[]; status: string }, @CurrentUser() user: CurrentUserType) {
     const results = [];
@@ -257,6 +258,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Post('bulk/assign')
+  @HttpCode(HttpStatus.OK)
   @RequirePermissions('tickets.edit')
   async bulkAssign(@Body() body: { ids: string[]; userId: string }, @CurrentUser() user: CurrentUserType) {
     const results = [];
@@ -271,6 +273,7 @@ export class TicketsController {
 
   @BusinessOnly()
   @Post('bulk/delete')
+  @HttpCode(HttpStatus.OK)
   @RequirePermissions('tickets.delete')
   async bulkDelete(@Body() body: { ids: string[] }, @CurrentUser() user: CurrentUserType) {
     const results = [];
