@@ -12,10 +12,10 @@ import { TicketParticipantNotifierService } from './ticket-participant-notifier.
 import * as crypto from 'crypto';
 
 const validTransitions: Record<string, string[]> = {
-  OPEN: ['ASSIGNED', 'IN_PROGRESS', 'RESOLVED'],
-  ASSIGNED: ['IN_PROGRESS', 'RESOLVED', 'OPEN', 'ON_HOLD'],
-  IN_PROGRESS: ['RESOLVED', 'ASSIGNED', 'OPEN', 'ON_HOLD'],
-  ON_HOLD: ['ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'OPEN'],
+  OPEN: ['ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'],
+  ASSIGNED: ['IN_PROGRESS', 'RESOLVED', 'CLOSED', 'OPEN', 'ON_HOLD'],
+  IN_PROGRESS: ['RESOLVED', 'CLOSED', 'ASSIGNED', 'OPEN', 'ON_HOLD'],
+  ON_HOLD: ['ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'OPEN'],
   RESOLVED: ['CLOSED', 'OPEN'],
   CLOSED: ['OPEN'],
 };

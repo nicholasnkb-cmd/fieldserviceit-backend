@@ -182,19 +182,6 @@ export class AuthController {
     return result;
   }
 
-  @Public()
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @Post('mfa/challenge/login')
-  async confirmChallengeLogin(
-    @Body() body: { challengeToken: string; code: string },
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const result = await this.authService.confirmChallengeLogin(body.challengeToken, body.code, this.clientContext(req));
-    setAuthCookies(res, result, req);
-    return result;
-  }
-
   @Get('mfa/status')
   @UseGuards(JwtAuthGuard)
   @AuthorizationExempt('Authenticated users may inspect their own MFA status', 'identity-team', '2026-09-30')

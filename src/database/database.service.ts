@@ -3,8 +3,6 @@ import { createPool, Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise
 import { randomUUID } from 'crypto';
 import { MigrationsService } from './migrations/migrations.service';
 import { StructuredLogger } from '../common/logger/structured-logger.service';
-import { escapeSqlIdentifier } from '../common/security/sql-identifier';
-import { QueryMetricsContext } from '../common/observability/query-metrics.context';
 
 interface QueryOptions {
   nestTables?: boolean;
@@ -15,18 +13,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   private readonly logger = new Logger(DatabaseService.name);
   private pool: Pool;
   private poolClosed = false;
-  private readonly queryTimeoutMs: number;
 
   constructor(
     @Optional() private readonly migrationsService?: MigrationsService,
     @Optional() private readonly structuredLogger?: StructuredLogger,
-    @Optional() private readonly queryMetrics?: QueryMetricsContext,
   ) {
     const databaseUrl = process.env.DATABASE_URL || '';
     const parsed = this.parseDatabaseUrl(databaseUrl);
-    const connectionLimit = this.positiveInteger('DB_POOL_SIZE', 5);
-    const maxIdle = Math.min(this.positiveInteger('DB_POOL_MAX_IDLE', 2), connectionLimit);
-    this.queryTimeoutMs = this.positiveInteger('DB_QUERY_TIMEOUT_MS', 30000);
 
     this.pool = createPool({
       host: parsed.host,
@@ -35,14 +28,12 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       password: parsed.password,
       database: parsed.database,
       waitForConnections: true,
-      connectionLimit,
-      maxIdle,
+      connectionLimit: 5,
+      maxIdle: 2,
       idleTimeout: 60000,
-      connectTimeout: this.positiveInteger('DB_CONNECT_TIMEOUT_MS', 10000),
       enableKeepAlive: true,
       keepAliveInitialDelay: 0,
-      queueLimit: this.positiveInteger('DB_POOL_QUEUE_LIMIT', 100),
-      typeCast: (field, next) => field.type === 'TINY' && field.length === 1 ? field.string() === '1' : next(),
+      queueLimit: 0,
     });
   }
 
@@ -54,8 +45,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       await this.ensureTables();
       await this.migrationsService?.run();
     } catch (err) {
-      this.logger.error('Database initialization failed: ' + (err instanceof Error ? err.message : String(err)));
-      throw err;
+      this.logger.warn('Database unavailable: ' + (err instanceof Error ? err.message : String(err)));
     }
   }
 
@@ -284,7 +274,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         completedAt DATETIME(3),
         notes TEXT,
         customerSignature VARCHAR(191),
-        photoUrls TEXT,
+        photoUrls TEXT DEFAULT '[]',
         latitude FLOAT,
         longitude FLOAT,
         createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
@@ -801,7 +791,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       }
       if (column.index) {
         try {
-          await this.ensureIndex('Asset', column.name, column.index);
+          await this.execute(`ALTER TABLE Asset ADD ${column.index}`);
         } catch (err: any) {
           if (!String(err?.message || '').includes('Duplicate key name')) {
             this.logger.warn(`Asset index skipped (${column.name}): ${err?.message || err}`);
@@ -809,17 +799,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         }
       }
     }
-  }
-
-  private async ensureIndex(table: string, indexName: string, definition: string) {
-    const rows = await this.query<RowDataPacket[]>(
-      `SELECT INDEX_NAME FROM information_schema.STATISTICS
-       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?
-       LIMIT 1`,
-      [table, indexName],
-    );
-    if (rows[0]) return;
-    await this.execute(`ALTER TABLE ${this.escapeColumn(table)} ADD ${definition}`);
   }
 
   async onModuleDestroy() {
@@ -858,16 +837,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     }
   }
 
-  private positiveInteger(name: string, fallback: number): number {
-    const value = Number(process.env[name] ?? fallback);
-    return Number.isInteger(value) && value > 0 ? value : fallback;
-  }
-
   async query<T = RowDataPacket[]>(sql: string, values?: any[]): Promise<T> {
     const start = Date.now();
-    const [rows] = await this.pool.query({ sql, timeout: this.queryTimeoutMs }, values || []);
+    const [rows] = await this.pool.query(sql, values || []);
     const latency = Date.now() - start;
-    this.queryMetrics?.record(latency);
 
     // Track performance metrics
     if (this.structuredLogger) {
@@ -879,9 +852,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
   async execute(sql: string, values?: any[]): Promise<ResultSetHeader> {
     const start = Date.now();
-    const [result] = await this.pool.execute({ sql, timeout: this.queryTimeoutMs }, values || []);
+    const [result] = await this.pool.execute(sql, values || []);
     const latency = Date.now() - start;
-    this.queryMetrics?.record(latency);
 
     // Track performance metrics
     if (this.structuredLogger) {
@@ -1968,7 +1940,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
         const cols = Object.keys(item);
         const values = Object.values(item);
         const placeholders = cols.map(() => '?').join(', ');
-        const sql = `INSERT INTO RolePermission (${cols.map(escapeSqlIdentifier).join(', ')}) VALUES (${placeholders})`;
+        const sql = `INSERT INTO RolePermission (${cols.map(c => `\`${c.replace(/`/g, '')}\``).join(', ')}) VALUES (${placeholders})`;
         await this.query(sql, values);
       }
       return { count: data.length };
@@ -1979,7 +1951,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     findMany: async ({ where, include }: { where?: Record<string, any>; include?: Record<string, any> }) => {
       let sql = 'SELECT * FROM UserRole';
       const values: any[] = [];
-      where = where?.userId_roleId || where;
       if (where && Object.keys(where).length > 0) {
         const clauses = Object.entries(where).map(([k, v]) => {
           if (v === null) return `${this.escapeColumn(k)} IS NULL`;
@@ -2016,7 +1987,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     },
 
     delete: async ({ where }: { where: Record<string, any> }) => {
-      where = where.userId_roleId || where;
       const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
       const values = Object.values(where);
       const sql = `DELETE FROM UserRole WHERE ${whereClauses.join(' AND ')}`;
@@ -2041,13 +2011,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     },
 
     upsert: async ({ where, update, create, include }: { where: Record<string, any>; update: Record<string, any>; create: Record<string, any>; include?: Record<string, any> }) => {
-      const normalizedWhere = where.userId_roleId || where;
-      const rows = await this.userRole.findMany({ where: normalizedWhere, include } as any);
+      const rows = await this.userRole.findMany({ where } as any);
       if (rows.length > 0) {
+        await this.userRole.delete({ where });
+        await this.userRole.create({ data: { ...update } } as any);
         return { ...rows[0], ...update };
       }
-      await this.userRole.create({ data: create } as any);
-      return this.userRole.findUnique({ where: normalizedWhere, include } as any);
+      return this.userRole.create({ data: create } as any);
     },
   };
 
@@ -2734,27 +2704,10 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   };
 
   private escapeColumn(col: string): string {
-    return escapeSqlIdentifier(col);
-  }
-
-  private escapeTable(table: string): string {
-    return escapeSqlIdentifier(table);
-  }
-
-  async readOnlyTransaction<T>(fn: (tx: TransactionClient) => Promise<T>): Promise<T> {
-    const conn = await this.pool.getConnection();
-    try {
-      await conn.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
-      await conn.query('START TRANSACTION READ ONLY WITH CONSISTENT SNAPSHOT');
-      const result = await fn(new TransactionClient(conn));
-      await conn.commit();
-      return result;
-    } catch (error) {
-      await conn.rollback();
-      throw error;
-    } finally {
-      conn.release();
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(col)) {
+      throw new BadRequestException(`Invalid column name: ${col}`);
     }
+    return `\`${col}\``;
   }
 
   private normalizeColumn(table: string, col: string): string {
@@ -2768,7 +2721,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
 
   private resolveSelectCols(select?: Record<string, any> | null): string[] {
     if (!select) return ['*'];
-    return Object.keys(select).filter(k => select[k] === true).map(k => this.escapeColumn(k));
+    return Object.keys(select).filter(k => select[k] === true);
   }
 
   private buildWhereClauses(table: string, where: Record<string, any>, values: any[]): string[] {
@@ -2826,7 +2779,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   }
 
   private async genericGroupBy(table: string, params: { by: string[]; where?: Record<string, any>; _count?: any; _sum?: any; _avg?: any; _min?: any; _max?: any }): Promise<RowDataPacket[]> {
-    const tableName = this.escapeTable(table);
     const byCols = params.by.map(c => this.escapeColumn(c)).join(', ');
     let sql = `SELECT ${byCols}`;
     if (params._count) sql += `, COUNT(*) as _count`;
@@ -2836,12 +2788,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
       const clauses = this.buildWhereClauses(table, params.where, values);
       whereClause = ` WHERE ${clauses.join(' AND ')}`;
     }
-    sql += ` FROM ${tableName}${whereClause} GROUP BY ${byCols}`;
+    sql += ` FROM ${table}${whereClause} GROUP BY ${byCols}`;
     return this.query<RowDataPacket[]>(sql, values);
   }
 
   private async genericFindFirst(table: string, { where, select, include }: { where: Record<string, any>; select?: Record<string, any>; include?: Record<string, any> }) {
-    const tableName = this.escapeTable(table);
     const cols = this.resolveSelectCols(select);
     const whereClauses = Object.entries(where).map(([k, v]) => {
       if (v === null) return `${this.escapeColumn(k)} IS NULL`;
@@ -2849,37 +2800,35 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     }).filter(Boolean);
     const values = Object.values(where).filter(v => v !== null);
     const rows = await this.query<RowDataPacket[]>(
-      `SELECT ${cols.join(', ')} FROM ${tableName} WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
+      `SELECT ${cols.join(', ')} FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`,
       values,
     );
     return rows[0] || null;
   }
 
   private async genericCreate(table: string, { data }: { data: Record<string, any> }) {
-    const tableName = this.escapeTable(table);
     const now = new Date();
     const cleanData = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
     const insertData: Record<string, any> = { id: this.generateUuid(), createdAt: now, updatedAt: now, ...cleanData };
     const cols = Object.keys(insertData);
     const values = Object.values(insertData);
     const placeholders = cols.map(() => '?').join(', ');
-    await this.execute(`INSERT INTO ${tableName} (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`, values);
-    const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${tableName} WHERE id = ? LIMIT 1`, [insertData.id]);
+    await this.execute(`INSERT INTO ${table} (${cols.map(c => this.escapeColumn(c)).join(', ')}) VALUES (${placeholders})`, values);
+    const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE id = ? LIMIT 1`, [insertData.id]);
     return rows[0];
   }
 
   private async genericUpdate(table: string, { where, data }: { where: Record<string, any>; data: Record<string, any> }) {
-    const tableName = this.escapeTable(table);
     const cleanData = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
     const setClauses = Object.keys(cleanData).map(k => `${this.escapeColumn(k)} = ?`);
     const whereClauses = Object.entries(where).map(([k, v]) => `${this.escapeColumn(k)} = ?`);
     const values = [...Object.values(cleanData), ...Object.values(where)];
     if (!setClauses.length) {
-      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${tableName} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
+      const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
       return rows[0];
     }
-    await this.execute(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
-    const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${tableName} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
+    await this.execute(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')}`, values);
+    const rows = await this.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE ${whereClauses.join(' AND ')} LIMIT 1`, Object.values(where));
     return rows[0];
   }
 
@@ -2899,7 +2848,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
   }
 
   private async genericCount(table: string, { where }: { where?: Record<string, any> }) {
-    let sql = `SELECT COUNT(*) as count FROM ${this.escapeTable(table)}`;
+    let sql = `SELECT COUNT(*) as count FROM ${table}`;
     const values: any[] = [];
     if (where && Object.keys(where).length > 0) {
       const clauses = this.buildWhereClauses(table, where, values);

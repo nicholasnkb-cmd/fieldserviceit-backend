@@ -38,17 +38,6 @@ export class CmdbController {
     return this.cmdbService.create(dto, user.companyId);
   }
 
-  @Get('retired')
-  listRetired(@Query('deviceCategory') deviceCategory: string | undefined, @CurrentUser() user: CurrentUserType) {
-    return this.cmdbService.listRetired(this.getCompanyId(user), deviceCategory);
-  }
-
-  @Post('retired/:id/restore')
-  @RequirePermissions('assets.delete')
-  restore(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
-    return this.cmdbService.restore(id, this.getCompanyId(user));
-  }
-
   @Get()
   findAll(@Query() query: AssetQueryDto, @CurrentUser() user: CurrentUserType) {
     return this.cmdbService.findAll(this.getCompanyId(user), { ...query, permissionScopes: user.permissionScopes, user });
