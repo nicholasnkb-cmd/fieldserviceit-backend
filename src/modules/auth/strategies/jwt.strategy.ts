@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -7,7 +7,6 @@ import { readAccessCookie } from '../auth-cookies';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  private readonly logger = new Logger(JwtStrategy.name);
   constructor(
     private config: ConfigService,
     private prisma: PrismaService,
@@ -33,9 +32,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (!sessions[0]) throw new UnauthorizedException();
       const lastSeen = sessions[0].lastSeenAt ? new Date(sessions[0].lastSeenAt).getTime() : 0;
       if (Date.now() - lastSeen > 5 * 60 * 1000) {
-        this.prisma.execute(`UPDATE Session SET lastSeenAt = NOW(3) WHERE id = ?`, [payload.sid]).catch((error) => {
-          this.logger.warn(`Failed to update session activity for ${payload.sid}: ${error?.message || error}`);
-        });
+        this.prisma.execute(`UPDATE Session SET lastSeenAt = NOW(3) WHERE id = ?`, [payload.sid]).catch(() => {});
       }
     }
 

@@ -1,10 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
 export class ScimTokenGuard implements CanActivate {
-  private readonly logger = new Logger(ScimTokenGuard.name);
   constructor(private prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext) {
@@ -21,9 +20,7 @@ export class ScimTokenGuard implements CanActivate {
     );
     if (!rows[0]) throw new UnauthorizedException('Invalid or expired SCIM token');
     request.scim = rows[0];
-    await this.prisma.execute(`UPDATE ScimProvisioningToken SET lastUsedAt = NOW(3) WHERE id = ?`, [rows[0].id]).catch((error) => {
-      this.logger.warn(`Failed to update SCIM token usage for ${rows[0].id}: ${error?.message || error}`);
-    });
+    await this.prisma.execute(`UPDATE ScimProvisioningToken SET lastUsedAt = NOW(3) WHERE id = ?`, [rows[0].id]).catch(() => {});
     return true;
   }
 }
