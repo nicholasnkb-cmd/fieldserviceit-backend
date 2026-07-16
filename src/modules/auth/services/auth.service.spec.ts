@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { EmailService } from '../../notifications/services/email.service';
+import * as bcrypt from 'bcryptjs';
 
 jest.mock('bcryptjs', () => ({
   hash: jest.fn().mockResolvedValue('hashed-password'),
@@ -15,12 +16,14 @@ describe('AuthService', () => {
   let mockJwt: any;
   let mockConfig: any;
   let mockEmail: any;
+  let mockMfa: any;
   let mockSessions: any;
 
   beforeEach(() => {
     mockJwt = {
       sign: jest.fn().mockReturnValue('mock-access-token'),
       signAsync: jest.fn().mockResolvedValue('mock-access-token'),
+      verify: jest.fn(),
     };
     mockConfig = {
       get: jest.fn((key: string) => {
@@ -62,7 +65,7 @@ describe('AuthService', () => {
     };
 
     const mockLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
-    const mockMfa = {
+    mockMfa = {
       isRequired: jest.fn().mockResolvedValue(false),
       verifyUserCode: jest.fn().mockResolvedValue(true),
       beginSetup: jest.fn(),
@@ -88,6 +91,66 @@ describe('AuthService', () => {
       mockMfa as any,
       mockSessions as any,
     );
+  });
+
+  describe('MFA login challenge', () => {
+    const mfaUser = {
+      id: 'user-mfa',
+      email: 'mfa@example.com',
+      passwordHash: 'hashed-password',
+      firstName: 'Mfa',
+      lastName: 'User',
+      phone: null,
+      jobTitle: null,
+      department: null,
+      location: null,
+      preferredContactMethod: null,
+      timezone: null,
+      role: 'TENANT_ADMIN',
+      userType: 'BUSINESS',
+      companyId: 'company-1',
+      emailVerified: true,
+      isActive: true,
+      mfaEnabled: true,
+      authVersion: 0,
+    };
+
+    it('returns a short-lived challenge after password verification', async () => {
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      mockPrisma.user.findUnique.mockResolvedValue(mfaUser);
+
+      const result = await service.login(mfaUser.email, 'correct-password');
+
+      expect(result).toMatchObject({
+        mfaRequired: true,
+        challengeToken: 'mock-access-token',
+      });
+      expect(mockMfa.verifyUserCode).not.toHaveBeenCalled();
+      expect(mockPrisma.session.create).not.toHaveBeenCalled();
+    });
+
+    it('confirms an MFA challenge and creates an MFA-verified session', async () => {
+      mockJwt.verify.mockReturnValue({ sub: mfaUser.id, purpose: 'login' });
+      mockPrisma.user.findUnique.mockResolvedValue(mfaUser);
+
+      const result = await service.confirmChallengeLogin('challenge-token', '123456');
+
+      expect(mockMfa.verifyUserCode).toHaveBeenCalledWith(mfaUser.id, '123456');
+      expect(mockPrisma.execute).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM LoginAbuseState'),
+        expect.any(Array),
+      );
+      expect(mockPrisma.session.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: mfaUser.id,
+            mfaVerifiedAt: expect.any(Date),
+          }),
+        }),
+      );
+      expect(result.accessToken).toBe('mock-access-token');
+      expect(result.user.email).toBe(mfaUser.email);
+    });
   });
 
   describe('refresh token reuse', () => {

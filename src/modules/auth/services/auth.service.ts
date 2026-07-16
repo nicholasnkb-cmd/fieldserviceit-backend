@@ -15,8 +15,6 @@ const BCRYPT_ROUNDS = 12;
 const LOGIN_LOCK_THRESHOLD = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 
-const loginFailures = new Map<string, { count: number; lockedUntil?: number; lastFailureAt: number }>();
-
 type RegistrationProfile = LegalConsentInput & {
   email: string;
   password: string;
@@ -61,17 +59,17 @@ export class AuthService {
 
     const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user || !user.isActive) {
-      this.recordLoginFailure(normalizedEmail, 'unknown-or-inactive-user');
+      await this.recordLoginFailure(normalizedEmail, 'unknown-or-inactive-user');
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (!user.passwordHash) {
-      this.recordLoginFailure(normalizedEmail, 'missing-password-hash');
+      await this.recordLoginFailure(normalizedEmail, 'missing-password-hash');
       throw new UnauthorizedException('Invalid credentials');
     }
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
-      this.recordLoginFailure(normalizedEmail, 'bad-password');
+      await this.recordLoginFailure(normalizedEmail, 'bad-password');
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -94,7 +92,7 @@ export class AuthService {
       };
     }
 
-    loginFailures.delete(normalizedEmail);
+    await this.clearLoginFailures(normalizedEmail);
     const tokens = await this.generateTokens(user, context);
     await this.recordLoginSecuritySignals(user, context);
     await this.prisma.user.update({
@@ -414,7 +412,9 @@ export class AuthService {
 
   async logout(refreshToken: string) {
     if (!refreshToken) return;
-    await this.sessions.revokeByRefreshToken(refreshToken, 'logout').catch(() => {});
+    await this.sessions.revokeByRefreshToken(refreshToken, 'logout').catch((error) => {
+      this.logger.warn(`Failed to revoke refresh token during logout: ${error?.message || error}`);
+    });
   }
 
   async beginChallengeEnrollment(challengeToken: string) {
@@ -434,6 +434,19 @@ export class AuthService {
     await this.recordLoginSecuritySignals(user, context);
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     return { user: this.responseUser(user), ...tokens, ...setup };
+  }
+
+  async confirmChallengeLogin(challengeToken: string, code: string, context: SessionContext = {}) {
+    const payload = this.verifyMfaChallenge(challengeToken, 'login');
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user || !user.isActive) throw new UnauthorizedException('MFA challenge is invalid');
+    await this.mfaService.verifyUserCode(user.id, code);
+    context.mfaVerifiedAt = new Date();
+    await this.clearLoginFailures(user.email);
+    const tokens = await this.generateTokens(user, context);
+    await this.recordLoginSecuritySignals(user, context);
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    return { user: this.responseUser(user), ...tokens };
   }
 
   async beginMfaSetup(user: any) {
@@ -672,27 +685,50 @@ export class AuthService {
        (id, companyId, alertType, severity, subjectId, summary, detail, createdAt)
        VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3))`,
       [crypto.randomUUID(), companyId, alertType, severity, subjectId, summary.slice(0, 255), JSON.stringify(detail)],
-    ).catch(() => {});
+    ).catch((error) => {
+      this.logger.error(`Failed to persist security alert ${alertType} for subject ${subjectId}: ${error?.message || error}`);
+    });
   }
 
   private async enforceLoginBackoff(email: string) {
-    const failure = loginFailures.get(email);
+    const rows = await this.prisma.query<any[]>(
+      `SELECT failureCount, lockedUntil, lastFailureAt
+       FROM LoginAbuseState WHERE emailHash = ? LIMIT 1`,
+      [this.loginEmailHash(email)],
+    );
+    const failure = rows[0];
     if (!failure) return;
-    if (failure.lockedUntil && failure.lockedUntil > Date.now()) {
-      this.logger.warn(`Login locked for ${email}`);
+    const lockedUntil = failure.lockedUntil ? new Date(failure.lockedUntil).getTime() : 0;
+    if (lockedUntil > Date.now()) {
+      this.logger.warn(`Login locked for account hash ${this.loginEmailHash(email).slice(0, 12)}`);
       throw new UnauthorizedException('Invalid credentials');
     }
-    const delayMs = Math.min(2000, failure.count * 250);
+    const delayMs = Math.min(2000, Number(failure.failureCount || 0) * 250);
     if (delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
 
-  private recordLoginFailure(email: string, reason: string) {
-    const existing = loginFailures.get(email) || { count: 0, lastFailureAt: 0 };
-    const count = existing.count + 1;
-    const lockedUntil = count >= LOGIN_LOCK_THRESHOLD ? Date.now() + LOGIN_LOCK_MS : existing.lockedUntil;
-    loginFailures.set(email, { count, lockedUntil, lastFailureAt: Date.now() });
-    this.logger.warn(`Login failure for ${email}: ${reason}; count=${count}${lockedUntil ? '; locked=true' : ''}`);
+  private async recordLoginFailure(email: string, reason: string) {
+    const emailHash = this.loginEmailHash(email);
+    await this.prisma.execute(
+      `INSERT INTO LoginAbuseState (emailHash, failureCount, lockedUntil, lastFailureAt, updatedAt)
+       VALUES (?, 1, NULL, NOW(3), NOW(3))
+       ON DUPLICATE KEY UPDATE
+         failureCount = IF(lastFailureAt < DATE_SUB(NOW(3), INTERVAL ? MICROSECOND), 1, failureCount + 1),
+         lockedUntil = IF(failureCount >= ?, DATE_ADD(NOW(3), INTERVAL ? MICROSECOND),
+           IF(lockedUntil > NOW(3), lockedUntil, NULL)),
+         lastFailureAt = NOW(3), updatedAt = NOW(3)`,
+      [emailHash, LOGIN_LOCK_MS * 1000, LOGIN_LOCK_THRESHOLD, LOGIN_LOCK_MS * 1000],
+    );
+    this.logger.warn(`Login failure for account hash ${emailHash.slice(0, 12)}: ${reason}`);
+  }
+
+  private async clearLoginFailures(email: string) {
+    await this.prisma.execute(`DELETE FROM LoginAbuseState WHERE emailHash = ?`, [this.loginEmailHash(email)]);
+  }
+
+  private loginEmailHash(email: string) {
+    return crypto.createHash('sha256').update(email.toLowerCase().trim()).digest('hex');
   }
 }

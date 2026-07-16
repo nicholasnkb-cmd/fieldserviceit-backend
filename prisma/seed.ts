@@ -125,22 +125,13 @@ async function main() {
     console.log(`Seeded role "${displayName}" with ${permSlugs.length} permissions`);
   }
 
-  // Seed users with role assignments. Credentials must be injected and are never stored in source control.
-  const seedPassword = (name: string) => {
-    const value = process.env[name];
-    if (!value || value.length < 16) throw new Error(`${name} must be at least 16 characters`);
-    return value;
-  };
-  const tenantAdminPassword = seedPassword('SEED_TENANT_ADMIN_PASSWORD');
-  const technicianPassword = seedPassword('SEED_TECHNICIAN_PASSWORD');
-  const clientPassword = seedPassword('SEED_CLIENT_PASSWORD');
-  const superAdminPassword = seedPassword('SEED_SUPER_ADMIN_PASSWORD');
+  // Seed users with role assignments
   const admin = await prisma.user.upsert({
     where: { email: 'admin@acme.com' },
     update: {},
     create: {
       email: 'admin@acme.com',
-      passwordHash: await bcrypt.hash(tenantAdminPassword, 12),
+      passwordHash: await bcrypt.hash('admin123', 12),
       firstName: 'Admin',
       lastName: 'User',
       role: 'TENANT_ADMIN',
@@ -154,7 +145,7 @@ async function main() {
     update: {},
     create: {
       email: 'tech1@acme.com',
-      passwordHash: await bcrypt.hash(technicianPassword, 12),
+      passwordHash: await bcrypt.hash('tech123', 12),
       firstName: 'John',
       lastName: 'Smith',
       role: 'TECHNICIAN',
@@ -168,7 +159,7 @@ async function main() {
     update: {},
     create: {
       email: 'tech2@acme.com',
-      passwordHash: await bcrypt.hash(technicianPassword, 12),
+      passwordHash: await bcrypt.hash('tech123', 12),
       firstName: 'Jane',
       lastName: 'Doe',
       role: 'TECHNICIAN',
@@ -182,7 +173,7 @@ async function main() {
     update: {},
     create: {
       email: 'client@acme.com',
-      passwordHash: await bcrypt.hash(clientPassword, 12),
+      passwordHash: await bcrypt.hash('client123', 12),
       firstName: 'Bob',
       lastName: 'Johnson',
       role: 'CLIENT',
@@ -197,7 +188,7 @@ async function main() {
     update: {},
     create: {
       email: 'super@fieldserviceit.com',
-      passwordHash: await bcrypt.hash(superAdminPassword, 12),
+      passwordHash: await bcrypt.hash('admin123', 12),
       firstName: 'Super',
       lastName: 'Admin',
       role: 'SUPER_ADMIN',

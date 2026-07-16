@@ -50,7 +50,8 @@ export class RequestDeduplicationMiddleware implements NestMiddleware {
 
   constructor() {
     // Clean up old entries every 2 minutes
-    setInterval(() => this.cleanupCache(), 120000);
+    const interval = setInterval(() => this.cleanupCache(), 120000);
+    interval.unref();
   }
 
   use(req: Request, res: Response, next: NextFunction) {
@@ -90,14 +91,13 @@ export class RequestDeduplicationMiddleware implements NestMiddleware {
 
     // Wrap the send method to cache the response
     const originalSend = res.send;
-    const cacheResponse = this.cacheResponse.bind(this);
 
-    res.send = function (data: any) {
+    res.send = (data: any) => {
       // Cache successful responses
       if (res.statusCode >= 200 && res.statusCode < 300) {
-        cacheResponse(cacheKey, data, res.statusCode);
+        this.cacheResponse(cacheKey, data, res.statusCode);
       }
-      return originalSend.call(this, data);
+      return originalSend.call(res, data);
     };
 
     next();
