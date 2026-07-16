@@ -40,8 +40,7 @@ export class PermissionScopeCacheService {
 
   constructor() {
     // Cleanup expired entries every 1 minute
-    const interval = setInterval(() => this.cleanup(), 60000);
-    interval.unref();
+    setInterval(() => this.cleanup(), 60000);
   }
 
   /**

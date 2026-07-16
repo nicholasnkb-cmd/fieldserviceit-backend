@@ -16,8 +16,7 @@ describe('EmailService', () => {
     process.env = {
       ...originalEnv,
       NODE_ENV: 'production',
-      JWT_SECRET: 'email-service-jwt-test-key-32-characters',
-      CREDENTIAL_ENCRYPTION_KEY: 'email-service-encryption-test-key-32-characters',
+      JWT_SECRET: 'email-service-test-key',
       SMTP_HOST: '',
       SMTP_USER: '',
       SMTP_PASS: '',

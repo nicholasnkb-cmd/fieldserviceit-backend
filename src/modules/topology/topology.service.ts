@@ -23,7 +23,7 @@ export class TopologyService {
     const company = scope.companyId ? 'companyId = ? AND ' : '';
     const values = scope.companyId ? [scope.companyId] : [];
     const [nodes, sites, links, latest, alerts, orphaned, discovery, openChanges, shares, settings] = await Promise.all([
-      this.count(`SELECT COUNT(*) as count FROM Asset WHERE ${company}deletedAt IS NULL AND deviceCategory = 'NETWORK_DEVICE'`, values),
+      this.count(`SELECT COUNT(*) as count FROM Asset WHERE ${company}deletedAt IS NULL AND assetType = 'NETWORK_DEVICE'`, values),
       this.optionalCount(`SELECT COUNT(*) as count FROM NetworkSite WHERE ${company}1=1`, values),
       this.count(`SELECT COUNT(*) as count FROM NetworkTopologyLink WHERE ${company}status <> 'DOWN'`, values),
       this.db.query<any[]>(
@@ -40,7 +40,7 @@ export class TopologyService {
         `SELECT COUNT(*) as count
          FROM Asset a
          LEFT JOIN NetworkTopologyLink l ON l.sourceAssetId = a.id OR l.targetAssetId = a.id
-         WHERE ${scope.companyId ? 'a.companyId = ? AND ' : ''}a.deletedAt IS NULL AND a.deviceCategory = 'NETWORK_DEVICE' AND l.id IS NULL`,
+         WHERE ${scope.companyId ? 'a.companyId = ? AND ' : ''}a.deletedAt IS NULL AND a.assetType = 'NETWORK_DEVICE' AND l.id IS NULL`,
         values,
       ),
       this.optionalCount(`SELECT COUNT(*) as count FROM NetworkDiscoveryResult WHERE ${company}assetId IS NULL`, values),
@@ -72,7 +72,7 @@ export class TopologyService {
   async map(user: CurrentUser, query: { siteId?: string; search?: string }) {
     await this.ensureSchema();
     const scope = this.scopeFor(user);
-    const clauses: string[] = ['a.deletedAt IS NULL', "a.deviceCategory = 'NETWORK_DEVICE'"];
+    const clauses: string[] = ['a.deletedAt IS NULL', "a.assetType = 'NETWORK_DEVICE'"];
     const values: any[] = [];
     if (scope.companyId) {
       clauses.push('a.companyId = ?');
@@ -88,7 +88,7 @@ export class TopologyService {
       values.push(term, term, term, term, term);
     }
     const nodes = await this.db.query<any[]>(
-      `SELECT a.id, a.companyId, c.name as companyName, a.name, a.deviceCategory, a.manufacturer, a.model,
+      `SELECT a.id, a.companyId, c.name as companyName, a.name, a.assetType, a.deviceCategory, a.manufacturer, a.model,
         a.location, a.ipAddress, a.macAddress, a.status, a.complianceStatus, a.lastCheckInAt,
         h.status as healthStatus, h.latencyMs, h.packetLossPct, h.source as healthSource, h.createdAt as healthAt,
         fw.firmwareVersion, fw.latestVersion, fw.eolStatus,
@@ -547,7 +547,7 @@ export class TopologyService {
   }
 
   private nodeRole(node: any) {
-    const text = [node.name, node.manufacturer, node.model, node.deviceCategory].join(' ').toLowerCase();
+    const text = [node.name, node.manufacturer, node.model, node.deviceCategory, node.assetType].join(' ').toLowerCase();
     if (text.includes('firewall') || text.includes('sonicwall') || text.includes('fortinet')) return 'firewall';
     if (text.includes('router') || text.includes('gateway') || text.includes('wan')) return 'router';
     if (text.includes('switch')) return 'switch';

@@ -5,7 +5,6 @@ import { NotificationsService } from '../../notifications/services/notifications
 import { EmailService } from '../../notifications/services/email.service';
 import { TicketParticipantNotifierService } from '../../tickets/services/ticket-participant-notifier.service';
 import * as crypto from 'crypto';
-import { escapeSqlIdentifier } from '../../../common/security/sql-identifier';
 import { credentialLookupValues, credentialMatches, hashCredential } from '../../../common/security/credential-hash';
 import { credentialEncryptionKeys } from '../../../common/security/encryption';
 import { AssetRepository } from '../../../database/repositories/asset.repository';
@@ -93,16 +92,16 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     this.monitoringRunActive = true;
     try {
       const rows = await this.prisma.query<any[]>(
-        `SELECT c.assetId, c.companyId, c.pingIntervalSec, c.snmpEnabled, a.name, a.ipAddress,
+        `SELECT c.assetId, c.companyId, c.pingIntervalSec, a.name, a.ipAddress,
           MAX(h.createdAt) as lastSnapshotAt
          FROM NetworkMonitoringConfig c
          INNER JOIN Asset a ON a.id = c.assetId
          LEFT JOIN NetworkHealthSnapshot h ON h.assetId = c.assetId
          WHERE c.pingEnabled = 1
            AND a.deletedAt IS NULL
-           AND a.deviceCategory = 'NETWORK_DEVICE'
+           AND a.assetType = 'NETWORK_DEVICE'
            AND a.ipAddress IS NOT NULL
-         GROUP BY c.assetId, c.companyId, c.pingIntervalSec, c.snmpEnabled, a.name, a.ipAddress
+         GROUP BY c.assetId, c.companyId, c.pingIntervalSec, a.name, a.ipAddress
          LIMIT 100`,
       );
 
@@ -115,11 +114,9 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
         await this.runPingCheck(row.assetId, row.companyId).catch((err) => {
           this.logger.warn(`Scheduled ping failed for ${row.name}: ${err?.message || err}`);
         });
-        if (Number(row.snmpEnabled) === 1) {
-          await this.runSnmpPoll(row.assetId, row.companyId).catch((err) => {
-            this.logger.warn(`Scheduled SNMP poll failed for ${row.name}: ${err?.message || err}`);
-          });
-        }
+        await this.runSnmpPoll(row.assetId, row.companyId).catch((err) => {
+          this.logger.warn(`Scheduled SNMP poll failed for ${row.name}: ${err?.message || err}`);
+        });
       }
     } catch (err: any) {
       this.logger.warn(`Scheduled network monitoring failed: ${err?.message || err}`);
@@ -164,11 +161,9 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async create(dto: any, companyId: string, actorId?: string) {
+  async create(dto: any, companyId: string) {
     const data = this.normalizeDevicePayload(dto);
-    const asset = await this.prisma.asset.create({ data: { ...data, companyId } });
-    await this.auditNetworkChange(companyId, actorId, 'asset.create', 'Asset', asset.id, { name: asset.name, deviceCategory: data.deviceCategory });
-    return asset;
+    return this.prisma.asset.create({ data: { ...data, companyId } });
   }
 
   async findAll(companyId: string, query: { page?: number; limit?: number; assetType?: string; search?: string; deviceCategory?: string; enrollmentStatus?: string; complianceStatus?: string; ownership?: string; permissionScopes?: any[]; user?: any }) {
@@ -257,27 +252,12 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  async update(id: string, dto: any, companyId: string, actorId?: string) {
-    const updated = await this.assetRepository.updateTenantAsset(id, companyId, this.normalizeDevicePayload(dto));
-    await this.auditNetworkChange(companyId, actorId, 'asset.update', 'Asset', id, { fields: Object.keys(dto || {}) });
-    return updated;
+  async update(id: string, dto: any, companyId: string) {
+    return this.assetRepository.updateTenantAsset(id, companyId, this.normalizeDevicePayload(dto));
   }
 
-  async remove(id: string, companyId: string, actorId?: string) {
-    const retired = await this.assetRepository.retireTenantAsset(id, companyId);
-    await this.auditNetworkChange(companyId, actorId, 'asset.retire', 'Asset', id);
-    return retired;
-  }
-
-  async listRetired(companyId: string, deviceCategory?: string) {
-    const data = await this.assetRepository.listRetiredTenantAssets(companyId, deviceCategory);
-    return { data, meta: { total: data.length } };
-  }
-
-  async restore(id: string, companyId: string, actorId?: string) {
-    const restored = await this.assetRepository.restoreTenantAsset(id, companyId);
-    await this.auditNetworkChange(companyId, actorId, 'asset.restore', 'Asset', id);
-    return restored;
+  async remove(id: string, companyId: string) {
+    return this.assetRepository.retireTenantAsset(id, companyId);
   }
 
   async checkIn(id: string, dto: any, companyId: string) {
@@ -354,7 +334,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
 
   async getNetworkMonitoringSummary(companyId: string) {
     const [totalRows, onlineRows, offlineRows, latestRows, alertRows, eventRows] = await Promise.all([
-      this.prisma.query<any[]>(`SELECT COUNT(*) as count FROM Asset WHERE companyId = ? AND deletedAt IS NULL AND deviceCategory = 'NETWORK_DEVICE'`, [companyId]),
+      this.prisma.query<any[]>(`SELECT COUNT(*) as count FROM Asset WHERE companyId = ? AND deletedAt IS NULL AND assetType = 'NETWORK_DEVICE'`, [companyId]),
       this.prisma.query<any[]>(`SELECT COUNT(*) as count FROM NetworkHealthSnapshot h INNER JOIN (
         SELECT assetId, MAX(createdAt) as createdAt FROM NetworkHealthSnapshot WHERE companyId = ? GROUP BY assetId
       ) latest ON latest.assetId = h.assetId AND latest.createdAt = h.createdAt WHERE h.status = 'ONLINE'`, [companyId]),
@@ -640,7 +620,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     const data = this.normalizeAlertRule(dto, true);
     const keys = Object.keys(data);
     if (keys.length === 0) throw new BadRequestException('No alert rule fields provided');
-    const set = [...keys.map((key) => `${escapeSqlIdentifier(key)} = ?`), '`updatedAt` = ?'].join(', ');
+    const set = [...keys.map((key) => `${key} = ?`), 'updatedAt = ?'].join(', ');
     await this.prisma.execute(
       `UPDATE NetworkAlertRule SET ${set} WHERE id = ? AND companyId = ? AND (assetId = ? OR assetId IS NULL)`,
       [...keys.map((key) => data[key]), new Date(), ruleId, companyId, assetId],
@@ -680,7 +660,7 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     if (normalized !== 'RESOLVED') data.resolvedAt = null;
     const keys = Object.keys(data);
     await this.prisma.execute(
-      `UPDATE NetworkAlertEvent SET ${keys.map((key) => `${escapeSqlIdentifier(key)} = ?`).join(', ')} WHERE id = ? AND companyId = ?`,
+      `UPDATE NetworkAlertEvent SET ${keys.map((key) => `${key} = ?`).join(', ')} WHERE id = ? AND companyId = ?`,
       [...keys.map((key) => data[key]), eventId, companyId],
     );
     await this.auditNetworkChange(companyId, actorId, `network.alert.${normalized.toLowerCase()}`, 'NetworkAlertEvent', eventId);
@@ -1868,11 +1848,6 @@ export class CmdbService implements OnModuleInit, OnModuleDestroy {
     if (data.batteryLevel !== undefined && data.batteryLevel !== '') {
       data.batteryLevel = Math.max(0, Math.min(100, Number(data.batteryLevel)));
     }
-    for (const field of ['purchaseDate', 'warrantyExpiresAt']) {
-      if (data[field]) data[field] = new Date(data[field]);
-      if (data[field] === '') data[field] = null;
-    }
     return data;
   }
-
 }

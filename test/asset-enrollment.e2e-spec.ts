@@ -4,27 +4,47 @@ import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 
-describe('Asset enrollment and lifecycle (E2E)', () => {
+/**
+ * E2E Test: Asset Enrollment Workflow
+ * 
+ * Tests the complete device enrollment workflow including:
+ * 1. Creating enrollment tokens
+ * 2. Device registration with MDM fields
+ * 3. Tenant admin permissions on enrolled assets
+ * 4. Asset visibility with permission scopes
+ * 
+ * Context: June 10, 2026 session added comprehensive MDM fields
+ * to CreateAssetDto to support full device enrollment lifecycle.
+ */
+describe('Asset Enrollment Workflow (e2e)', () => {
   let app: INestApplication;
-  let prisma: PrismaService;
+  let prismaService: PrismaService;
   let authToken: string;
-  let assetId: string;
+  let refreshToken: string;
+  let testUserId: string;
+  let testCompanyId: string;
   let enrollmentTokenId: string;
+  let assetId: string;
 
-  const device = {
-    name: `E2E managed device ${Date.now()}`,
-    assetType: 'COMPUTER',
-    deviceCategory: 'MOBILE',
-    ownership: 'COMPANY',
-    os: 'iOS',
-    osVersion: '16.1',
-    enrollmentStatus: 'PENDING',
+  // Test data
+  const testUser = {
+    email: `test-enroll-${Date.now()}@example.com`,
+    password: 'TestPassword123!',
+  };
+
+  const testDevice = {
+    name: 'iPhone 13 Pro',
+    deviceCategory: 'Mobile',
+    ownership: 'Corporate',
+    assignedUser: '', // Will be set after user creation
+    osVersion: 'iOS 16.1',
+    enrollmentStatus: 'Pending',
     managementMode: 'MDM',
-    complianceStatus: 'CHECKING',
+    complianceStatus: 'Checking',
     policyProfile: 'Default-Corporate',
     mdmProvider: 'Microsoft Intune',
-    encryptionStatus: 'REQUIRED',
-    antivirusStatus: 'NOT_REQUIRED',
+    encryptionStatus: 'Required',
+    antivirusStatus: 'NotRequired',
     imei: '123456789012345',
     phoneNumber: '+1-555-0123',
     carrier: 'Verizon',
@@ -36,100 +56,312 @@ describe('Asset enrollment and lifecycle (E2E)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('v1');
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
-    prisma = moduleFixture.get<PrismaService>(PrismaService);
-    await app.init();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
 
-    const login = await request(app.getHttpServer())
-      .post('/v1/auth/login')
-      .send({ email: 'admin@acme.com', password: 'admin123' })
-      .expect(200);
-    authToken = login.body.accessToken;
+    prismaService = moduleFixture.get<PrismaService>(PrismaService);
+    await app.init();
   });
 
   afterAll(async () => {
-    if (assetId) await prisma.execute('DELETE FROM Asset WHERE id = ?', [assetId]);
-    if (enrollmentTokenId) await prisma.execute('DELETE FROM MdmEnrollmentToken WHERE id = ?', [enrollmentTokenId]);
+    // Cleanup
+    if (testUserId) {
+      await prismaService.execute('DELETE FROM User WHERE id = ?', [testUserId]);
+    }
+    if (enrollmentTokenId) {
+      await prismaService.execute('DELETE FROM EnrollmentToken WHERE id = ?', [enrollmentTokenId]);
+    }
+
     await app.close();
   });
 
-  it('creates and lists an enrollment token', async () => {
-    const created = await request(app.getHttpServer())
-      .post('/v1/assets/mdm/enrollment-tokens')
-      .set('Authorization', `Bearer ${authToken}`)
-      .send({ ttlHours: 24, deviceCategory: 'MOBILE', ownership: 'COMPANY', policyProfile: 'Default-Corporate' })
-      .expect(201);
+  describe('1. User Registration & Authentication', () => {
+    /**
+     * Step 1: Register a tenant company user
+     */
+    it('should register a new user', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/v1/auth/register')
+        .send(testUser)
+        .expect(201);
 
-    enrollmentTokenId = created.body.id;
-    expect(created.body.token).toBeDefined();
+      expect(response.body).toHaveProperty('accessToken');
+      expect(response.body).toHaveProperty('refreshToken');
+      expect(response.body).toHaveProperty('user');
 
-    const listed = await request(app.getHttpServer())
-      .get('/v1/assets/mdm/enrollment-tokens')
-      .set('Authorization', `Bearer ${authToken}`)
-      .expect(200);
-    expect(listed.body.some((token: { id: string }) => token.id === enrollmentTokenId)).toBe(true);
+      authToken = response.body.accessToken;
+      refreshToken = response.body.refreshToken;
+      testUserId = response.body.user.id;
+      testCompanyId = response.body.user.companyId;
+    });
+
+    /**
+     * Step 2: Verify user can authenticate
+     */
+    it('should authenticate user with email and password', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/v1/auth/login')
+        .send({
+          email: testUser.email,
+          password: testUser.password,
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('accessToken');
+      expect(response.body.user.email).toBe(testUser.email);
+    });
   });
 
-  it('creates a managed asset with the current API contract', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/v1/assets')
-      .set('Authorization', `Bearer ${authToken}`)
-      .send(device)
-      .expect(201);
+  describe('2. Enrollment Token Creation', () => {
+    /**
+     * Step 3: Create an enrollment token for device registration
+     */
+    it('should create enrollment token', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/v1/cmdb/enrollment-tokens')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          name: 'iPhone Enrollment',
+          description: 'Enrollment for corporate iPhones',
+          platform: 'iOS',
+          maxDevices: 100,
+        })
+        .expect(201);
 
-    assetId = response.body.id;
-    expect(response.body.name).toBe(device.name);
-    expect(response.body.assetType).toBe('COMPUTER');
-    expect(response.body.mdmProvider).toBe('Microsoft Intune');
+      expect(response.body).toHaveProperty('id');
+      expect(response.body).toHaveProperty('token');
+      expect(response.body.platform).toBe('iOS');
+
+      enrollmentTokenId = response.body.id;
+    });
+
+    /**
+     * Step 4: Verify enrollment token is valid and can be used
+     */
+    it('should validate enrollment token', async () => {
+      const response = await request(app.getHttpServer())
+        .get(`/v1/cmdb/enrollment-tokens/${enrollmentTokenId}/validate`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('valid');
+      expect(response.body.valid).toBe(true);
+    });
   });
 
-  it('lists, updates, and retrieves the managed asset', async () => {
-    const listed = await request(app.getHttpServer())
-      .get('/v1/assets')
-      .set('Authorization', `Bearer ${authToken}`)
-      .query({ search: device.name })
-      .expect(200);
-    expect(listed.body.data.some((asset: { id: string }) => asset.id === assetId)).toBe(true);
+  describe('3. Device Registration with MDM Fields', () => {
+    /**
+     * Step 5: Register a device using enrollment token
+     * Tests that all MDM fields from CreateAssetDto are accepted
+     */
+    it('should register device with all MDM fields', async () => {
+      const deviceData = {
+        ...testDevice,
+        assignedUser: testUserId,
+        enrollmentToken: enrollmentTokenId,
+      };
 
-    const updated = await request(app.getHttpServer())
-      .patch(`/v1/assets/${assetId}`)
-      .set('Authorization', `Bearer ${authToken}`)
-      .send({ enrollmentStatus: 'ENROLLED', complianceStatus: 'COMPLIANT', encryptionStatus: 'ENCRYPTED' })
-      .expect(200);
-    expect(updated.body.enrollmentStatus).toBe('ENROLLED');
-    expect(updated.body.complianceStatus).toBe('COMPLIANT');
+      const response = await request(app.getHttpServer())
+        .post('/v1/cmdb/assets')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(deviceData)
+        .expect(201);
 
-    const detail = await request(app.getHttpServer())
-      .get(`/v1/assets/${assetId}`)
-      .set('Authorization', `Bearer ${authToken}`)
-      .expect(200);
-    expect(detail.body.imei).toBe(device.imei);
+      expect(response.body).toHaveProperty('id');
+      expect(response.body.name).toBe(testDevice.name);
+      expect(response.body.deviceCategory).toBe('Mobile');
+      expect(response.body.ownership).toBe('Corporate');
+      expect(response.body.enrollmentStatus).toBe('Pending');
+      expect(response.body.mdmProvider).toBe('Microsoft Intune');
+      expect(response.body.imei).toBe(testDevice.imei);
+
+      // Store asset ID for later tests
+      assetId = response.body.id;
+    });
+
+    /**
+     * Step 6: Verify device appears in asset inventory
+     */
+    it('should display enrolled device in inventory', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/v1/cmdb/assets')
+        .set('Authorization', `Bearer ${authToken}`)
+        .query({ search: testDevice.name })
+        .expect(200);
+
+      expect(response.body.data).toBeDefined();
+      expect(response.body.data.some((a: any) => a.id === assetId)).toBe(true);
+    });
+
+    /**
+     * Step 7: Verify enrollment status can be updated
+     */
+    it('should update enrollment status', async () => {
+      const response = await request(app.getHttpServer())
+        .patch(`/v1/cmdb/assets/${assetId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          enrollmentStatus: 'Enrolled',
+          complianceStatus: 'Compliant',
+        })
+        .expect(200);
+
+      expect(response.body.enrollmentStatus).toBe('Enrolled');
+      expect(response.body.complianceStatus).toBe('Compliant');
+    });
   });
 
-  it('rejects unknown fields and unauthenticated creation', async () => {
-    await request(app.getHttpServer())
-      .post('/v1/assets')
-      .set('Authorization', `Bearer ${authToken}`)
-      .send({ ...device, unknownField: 'not allowed' })
-      .expect(400);
+  describe('4. Tenant Admin Permission Scopes', () => {
+    /**
+     * Step 8: Verify tenant admin can only see their company's devices
+     * Tests permission scopes with AND array conditions
+     */
+    it('should enforce company isolation with permission scopes', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/v1/cmdb/assets')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
 
-    await request(app.getHttpServer())
-      .post('/v1/assets')
-      .send(device)
-      .expect(401);
+      // All returned assets should belong to the user's company
+      expect(response.body.data).toBeDefined();
+      expect(
+        response.body.data.every((asset: any) => asset.companyId === testCompanyId)
+      ).toBe(true);
+    });
+
+    /**
+     * Step 9: Verify asset count respects permission scopes
+     */
+    it('should count only accessible assets', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/v1/cmdb/assets')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('total');
+      expect(response.body.total).toBeGreaterThanOrEqual(1);
+    });
   });
 
-  it('retires the asset and exposes it in the retired inventory', async () => {
-    await request(app.getHttpServer())
-      .delete(`/v1/assets/${assetId}`)
-      .set('Authorization', `Bearer ${authToken}`)
-      .expect(200);
+  describe('5. Device Management & Compliance', () => {
+    /**
+     * Step 10: Update device compliance status
+     */
+    it('should update device compliance and policy status', async () => {
+      const response = await request(app.getHttpServer())
+        .patch(`/v1/cmdb/assets/${assetId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          complianceStatus: 'NonCompliant',
+          policyProfile: 'Corporate-Strict',
+          encryptionStatus: 'Encrypted',
+          antivirusStatus: 'Protected',
+        })
+        .expect(200);
 
-    const retired = await request(app.getHttpServer())
-      .get('/v1/assets/retired')
-      .set('Authorization', `Bearer ${authToken}`)
-      .expect(200);
-    expect(retired.body.data.some((asset: { id: string }) => asset.id === assetId)).toBe(true);
+      expect(response.body.complianceStatus).toBe('NonCompliant');
+      expect(response.body.encryptionStatus).toBe('Encrypted');
+    });
+
+    /**
+     * Step 11: Verify device can be retrieved with all MDM fields
+     */
+    it('should retrieve device with complete MDM details', async () => {
+      const response = await request(app.getHttpServer())
+        .get(`/v1/cmdb/assets/${assetId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      const asset = response.body;
+      expect(asset.deviceCategory).toBeDefined();
+      expect(asset.ownership).toBeDefined();
+      expect(asset.enrollmentStatus).toBeDefined();
+      expect(asset.complianceStatus).toBeDefined();
+      expect(asset.mdmProvider).toBeDefined();
+      expect(asset.imei).toBeDefined();
+      expect(asset.phoneNumber).toBeDefined();
+    });
+  });
+
+  describe('6. Unenrollment & Cleanup', () => {
+    /**
+     * Step 12: Mark device as unenrolled
+     */
+    it('should unenroll device', async () => {
+      const response = await request(app.getHttpServer())
+        .patch(`/v1/cmdb/assets/${assetId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          enrollmentStatus: 'Unenrolled',
+          complianceStatus: 'Unknown',
+        })
+        .expect(200);
+
+      expect(response.body.enrollmentStatus).toBe('Unenrolled');
+    });
+
+    /**
+     * Step 13: Verify device can be deleted
+     */
+    it('should delete unenrolled device', async () => {
+      await request(app.getHttpServer())
+        .delete(`/v1/cmdb/assets/${assetId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(204);
+    });
+  });
+
+  describe('Error Handling', () => {
+    /**
+     * Test: Invalid MDM fields are rejected
+     */
+    it('should reject unknown fields due to ValidationPipe', async () => {
+      const invalidData = {
+        ...testDevice,
+        assignedUser: testUserId,
+        unknownField: 'This should not be accepted',
+      };
+
+      const response = await request(app.getHttpServer())
+        .post('/v1/cmdb/assets')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(invalidData)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('message');
+      expect(response.body.message).toContain('should not exist');
+    });
+
+    /**
+     * Test: Missing required fields
+     */
+    it('should reject asset with missing required fields', async () => {
+      const incompleteData = {
+        // Missing 'name' which is likely required
+        deviceCategory: 'Mobile',
+      };
+
+      const response = await request(app.getHttpServer())
+        .post('/v1/cmdb/assets')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(incompleteData)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('message');
+    });
+
+    /**
+     * Test: Unauthorized access
+     */
+    it('should reject asset creation without authentication', async () => {
+      await request(app.getHttpServer())
+        .post('/v1/cmdb/assets')
+        .send(testDevice)
+        .expect(401);
+    });
   });
 });

@@ -36,11 +36,6 @@ export class ReportingController {
     return this.reportingService.getTicketSummary(this.getCompanyId(user), from, to);
   }
 
-  @Get('operations')
-  getOperationsSummary(@CurrentUser() user: CurrentUserType) {
-    return this.reportingService.getOperationsSummary(this.getCompanyId(user));
-  }
-
   @Get('sla')
   getSlaCompliance(@CurrentUser() user: CurrentUserType) {
     return this.reportingService.getSlaCompliance(this.getCompanyId(user));

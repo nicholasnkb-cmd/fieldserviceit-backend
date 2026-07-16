@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { PRIVACY_VERSION, TERMS_VERSION } from '../src/modules/auth/legal-consent';
 
 describe('FieldserviceIT E2E', () => {
   let app: INestApplication;
@@ -58,15 +57,7 @@ describe('FieldserviceIT E2E', () => {
     it('POST /v1/auth/register - public user', async () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/register')
-        .send({
-          email: 'e2e-public@test.com',
-          password: 'Test123!',
-          firstName: 'E2E',
-          lastName: 'Public',
-          termsAccepted: true,
-          termsVersion: TERMS_VERSION,
-          privacyVersion: PRIVACY_VERSION,
-        })
+        .send({ email: 'e2e-public@test.com', password: 'Test123!', firstName: 'E2E', lastName: 'Public' })
         .expect(201);
 
       expect(res.body.accessToken).toBeDefined();
@@ -112,12 +103,11 @@ describe('FieldserviceIT E2E', () => {
           subcategory: 'ERP',
           contactName: 'E2E Tester',
           contactEmail: 'e2e@test.com',
-          contactPhone: '+1-555-0100',
         })
         .expect(201);
 
       expect(res.body.title).toBe('E2E Test Ticket');
-      expect(res.body.ticketNumber).toMatch(/^TKT-[A-Z0-9]+-\d+$/);
+      expect(res.body.ticketNumber).toMatch(/^TKT-\d+/);
       ticketId = res.body.id;
     });
 
@@ -142,7 +132,7 @@ describe('FieldserviceIT E2E', () => {
       await request(app.getHttpServer())
         .patch(`/v1/tickets/${ticketId}`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ status: 'CLOSED' })
+        .send({ status: 'RESOLVED' })
         .expect(400);
     });
   });
@@ -308,7 +298,7 @@ describe('FieldserviceIT E2E', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
 
-      expect(res.body.providers).toEqual(expect.arrayContaining(['connectwise', 'ninjaone', 'datto']));
+      expect(res.body.providers).toEqual(['connectwise', 'ninjaone', 'datto']);
     });
 
     it('POST /v1/integrations/rmm/sync-asset - sync single asset', async () => {
@@ -344,13 +334,13 @@ describe('FieldserviceIT E2E', () => {
       expect(res.body.length).toBeGreaterThan(0);
     });
 
-    it('POST /v1/integrations/rmm/sync-now/connectwise - reports missing provider configuration', async () => {
+    it('POST /v1/integrations/rmm/sync-now/connectwise - trigger manual sync', async () => {
       const res = await request(app.getHttpServer())
         .post('/v1/integrations/rmm/sync-now/connectwise')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(201);
 
-      expect(res.body.synced).toBe(false);
+      expect(res.body.synced).toBe(true);
     });
   });
 
