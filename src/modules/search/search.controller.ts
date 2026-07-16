@@ -14,18 +14,7 @@ export class SearchController {
   @Get()
   @AuthorizationExempt('SearchService performs effective permission, scope, tenant, and relationship filtering', 'security-team', '2026-09-30')
   search(@Query('q') q: string, @CurrentUser() user: CurrentUserType) {
-    if (!q || q.trim().length < 2) {
-      return {
-        pages: [],
-        tickets: [],
-        assets: [],
-        users: [],
-        companies: [],
-        articles: [],
-        catalogItems: [],
-        catalogRequests: [],
-      };
-    }
+    if (!q || q.trim().length < 2) return { tickets: [], assets: [] };
     return this.searchService.search(user, q.trim());
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, ForbiddenException, Get, NotFoundException, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, ForbiddenException, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from '../services/admin.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { BusinessOnlyGuard } from '../../../common/guards/business-only.guard';
@@ -488,7 +488,7 @@ export class AdminController {
   getRole(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.adminService.getPermissionWorkspace(user).then((workspace: any) => {
       const role = workspace.roles.find((item: any) => item.id === id);
-      if (!role) throw new NotFoundException('Role not found or outside your scope');
+      if (!role) throw new BadRequestException('Role is outside your scope');
       return role;
     });
   }
