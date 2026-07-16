@@ -1,10 +1,11 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Logger } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../database/prisma.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
 @Injectable()
 export class TenantGuard implements CanActivate {
+  private readonly logger = new Logger(TenantGuard.name);
   constructor(
     private reflector: Reflector,
     private prisma: PrismaService,
@@ -35,7 +36,10 @@ export class TenantGuard implements CanActivate {
            AND ims.expiresAt > NOW(3) AND t.isActive = 1 AND t.deletedAt IS NULL
          LIMIT 1`,
         [impersonationId, user.id],
-      ).catch(() => []);
+      ).catch((error) => {
+        this.logger.warn(`Failed to validate impersonation session ${impersonationId}: ${error?.message || error}`);
+        return [];
+      });
       const session = rows[0];
       if (!session) throw new ForbiddenException('Impersonation session is invalid or expired');
       request.user = {
