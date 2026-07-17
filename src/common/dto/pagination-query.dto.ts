@@ -38,4 +38,8 @@ export class PaginationQueryDto {
   @IsOptional()
   @IsString()
   role?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceCategory?: string;
 }

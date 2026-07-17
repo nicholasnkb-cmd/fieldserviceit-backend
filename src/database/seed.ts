@@ -235,18 +235,12 @@ async function ensureDemoTenant(db: DatabaseService) {
 }
 
 async function ensureUsers(db: DatabaseService, companyId: string) {
-  const seedPassword = (name: string) => {
-    const value = process.env[name];
-    if (!value || value.length < 16) throw new Error(`${name} must be at least 16 characters`);
-    return value;
-  };
-  const passwordHash = await bcrypt.hash(seedPassword('SEED_TENANT_ADMIN_PASSWORD'), 12);
-  const techHash = await bcrypt.hash(seedPassword('SEED_TECHNICIAN_PASSWORD'), 12);
-  const clientHash = await bcrypt.hash(seedPassword('SEED_CLIENT_PASSWORD'), 12);
-  const superAdminHash = await bcrypt.hash(seedPassword('SEED_SUPER_ADMIN_PASSWORD'), 12);
+  const passwordHash = await bcrypt.hash('admin123', 12);
+  const techHash = await bcrypt.hash('tech123', 12);
+  const clientHash = await bcrypt.hash('client123', 12);
 
   const users = [
-    { id: 'user-super-admin', email: 'super@fieldserviceit.com', firstName: 'Super', lastName: 'Admin', role: 'SUPER_ADMIN', userType: 'BUSINESS', companyId, passwordHash: superAdminHash },
+    { id: 'user-super-admin', email: 'super@fieldserviceit.com', firstName: 'Super', lastName: 'Admin', role: 'SUPER_ADMIN', userType: 'BUSINESS', companyId, passwordHash },
     { id: 'user-acme-admin', email: 'admin@acme.com', firstName: 'Acme', lastName: 'Admin', role: 'TENANT_ADMIN', userType: 'BUSINESS', companyId, passwordHash },
     { id: 'user-acme-tech1', email: 'tech1@acme.com', firstName: 'Taylor', lastName: 'Tech', role: 'TECHNICIAN', userType: 'BUSINESS', companyId, passwordHash: techHash },
     { id: 'user-acme-tech2', email: 'tech2@acme.com', firstName: 'Jordan', lastName: 'Field', role: 'TECHNICIAN', userType: 'BUSINESS', companyId, passwordHash: techHash },

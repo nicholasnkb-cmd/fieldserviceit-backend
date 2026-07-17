@@ -52,7 +52,8 @@ export class RateLimitMiddleware implements NestMiddleware {
     });
 
     // Clean up expired quotas every 5 minutes
-    setInterval(() => this.cleanupExpiredQuotas(), 300000);
+    const interval = setInterval(() => this.cleanupExpiredQuotas(), 300000);
+    interval.unref();
   }
 
   use(req: Request, res: Response, next: NextFunction) {
