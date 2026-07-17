@@ -36,7 +36,8 @@ export async function executeMigrationStatement(db: MigrationDatabase, statement
     await db.query(compatible);
   } catch (error: any) {
     const errno = Number(error?.errno);
-    const isIndexStatement = /^\s*(CREATE\s+(UNIQUE\s+)?INDEX|ALTER\s+TABLE\b.*\bADD\s+(UNIQUE\s+)?INDEX)\b/is.test(compatible);
+    const executable = compatible.replace(/^\s*(?:\/\*[\s\S]*?\*\/\s*)+/, '');
+    const isIndexStatement = /^\s*(CREATE\s+(UNIQUE\s+)?INDEX|ALTER\s+TABLE\b.*\bADD\s+(UNIQUE\s+)?INDEX)\b/is.test(executable);
     if ([1060, 1061].includes(errno)) return;
     if (errno === 1072 && isIndexStatement) return;
     // MySQL limits a table to 64 indexes. Older performance-only migrations
