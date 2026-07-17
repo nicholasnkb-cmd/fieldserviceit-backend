@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as net from 'net';
 import * as path from 'path';
 import * as zlib from 'zlib';
+import { createConnection } from 'mysql2/promise';
 import { CurrentUser } from '../../common/types';
 import { decryptBuffer, encryptBuffer, encryptSecret } from '../../common/security/encryption';
 import { DatabaseService } from '../../database/database.service';
@@ -408,6 +409,7 @@ export class PlatformSecurityService {
   }
 
   async testBackup(id: string) {
+    const startedAt = new Date();
     const run = await this.getBackupRun(id);
     if ((!run.artifactPath && !run.offsiteKey) || run.status !== 'COMPLETED') throw new BadRequestException('Backup artifact is not available');
     try {
@@ -418,19 +420,30 @@ export class PlatformSecurityService {
       if (parsed.format !== 'fieldserviceit-encrypted-json-v1' || !parsed.tables || typeof parsed.tables !== 'object') {
         throw new Error('Backup payload is invalid');
       }
+      const restored = await this.restoreIntoIsolatedSession(parsed.tables);
       await this.db.execute(
         `UPDATE BackupRun SET restoreTestStatus = 'PASS', restoreTestedAt = NOW(3), errorMessage = NULL WHERE id = ?`,
         [id],
       );
-      return { status: 'PASS', tableCount: Object.keys(parsed.tables).length, createdAt: parsed.createdAt };
+      await this.recordJob('isolated-backup-restore-drill', 'PASS', { backupId: id, ...restored }, startedAt);
+      return { status: 'PASS', tableCount: Object.keys(parsed.tables).length, createdAt: parsed.createdAt, ...restored };
     } catch (error: any) {
       const message = String(error?.message || error).slice(0, 2000);
       await this.db.execute(
         `UPDATE BackupRun SET restoreTestStatus = 'FAIL', restoreTestedAt = NOW(3), errorMessage = ? WHERE id = ?`,
         [message, id],
       );
+      await this.recordJob('isolated-backup-restore-drill', 'FAIL', { backupId: id, error: message }, startedAt);
       throw new BadRequestException(`Backup integrity test failed: ${message}`);
     }
+  }
+
+  async runLatestRestoreDrill() {
+    const rows = await this.db.query<any[]>(
+      `SELECT id FROM BackupRun WHERE status = 'COMPLETED' ORDER BY startedAt DESC LIMIT 1`,
+    );
+    if (!rows[0]) throw new BadRequestException('No completed backup is available for a restore drill');
+    return this.testBackup(rows[0].id);
   }
 
   async retentionPolicy() {
@@ -650,6 +663,58 @@ export class PlatformSecurityService {
        ORDER BY TABLE_NAME`,
     );
     return rows.map((row) => String(row.tableName)).filter((name) => /^[A-Za-z0-9_]+$/.test(name));
+  }
+
+  private async restoreIntoIsolatedSession(tables: Record<string, any[]>) {
+    const databaseUrl = this.config.get<string>('DATABASE_URL');
+    if (!databaseUrl) throw new Error('DATABASE_URL is not configured for the restore drill');
+    const connection = await createConnection(databaseUrl);
+    const suffix = crypto.randomBytes(6).toString('hex');
+    const temporaryTables: string[] = [];
+    let restoredRows = 0;
+    try {
+      let index = 0;
+      for (const [table, rawRows] of Object.entries(tables)) {
+        if (!/^[A-Za-z0-9_]+$/.test(table) || !Array.isArray(rawRows)) throw new Error(`Backup table ${table} is invalid`);
+        const temporary = `_restore_${suffix}_${index++}`;
+        temporaryTables.push(temporary);
+        await connection.query(`CREATE TEMPORARY TABLE \`${temporary}\` LIKE \`${table}\``);
+        if (rawRows.length) {
+          const columns = Object.keys(rawRows[0]);
+          if (!columns.length || columns.some((column) => !/^[A-Za-z0-9_]+$/.test(column))) throw new Error(`Backup columns for ${table} are invalid`);
+          const batchSize = Math.max(1, Math.min(100, Math.floor(5000 / columns.length)));
+          for (let offset = 0; offset < rawRows.length; offset += batchSize) {
+            const batch = rawRows.slice(offset, offset + batchSize);
+            const placeholders = batch.map(() => `(${columns.map(() => '?').join(',')})`).join(',');
+            const values = batch.flatMap((row) => columns.map((column) => this.restoreValue(row[column])));
+            await connection.query(
+              `INSERT INTO \`${temporary}\` (${columns.map((column) => `\`${column}\``).join(',')}) VALUES ${placeholders}`,
+              values,
+            );
+          }
+        }
+        const [countRows] = await connection.query<any[]>(`SELECT COUNT(*) count FROM \`${temporary}\``);
+        const restoredCount = Number(countRows[0]?.count || 0);
+        if (restoredCount !== rawRows.length) throw new Error(`Restore row count mismatch for ${table}: expected ${rawRows.length}, received ${restoredCount}`);
+        restoredRows += restoredCount;
+      }
+      return { restoredTables: temporaryTables.length, restoredRows, isolation: 'mysql-temporary-session' };
+    } finally {
+      for (const table of temporaryTables.reverse()) {
+        await connection.query(`DROP TEMPORARY TABLE IF EXISTS \`${table}\``).catch(() => undefined);
+      }
+      await connection.end().catch(() => undefined);
+    }
+  }
+
+  private restoreValue(value: any) {
+    if (value === undefined || value === null) return null;
+    if (Buffer.isBuffer(value)) return value;
+    if (typeof value === 'object' && value.type === 'Buffer') {
+      return Buffer.from(value.data || [], typeof value.data === 'string' ? 'base64' : undefined);
+    }
+    if (typeof value === 'object') return JSON.stringify(value);
+    return value;
   }
 
   private async getBackupRun(id: string) {
