@@ -1,7 +1,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { GENERATED_RELEASE_COMMIT } from './generated-release';
 
 export function deployedCommit() {
+  const generated = GENERATED_RELEASE_COMMIT.trim();
+  if (generated && generated !== 'development') return generated;
   const candidates = [
     path.join(process.cwd(), 'release.json'),
     path.resolve(__dirname, '..', '..', 'release.json'),
