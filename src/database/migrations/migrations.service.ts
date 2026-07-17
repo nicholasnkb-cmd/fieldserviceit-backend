@@ -2,11 +2,14 @@ import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DatabaseService } from '../database.service';
+import { ensureMigrationFailureTable, executeMigrationStatement, MigrationStatus, readMigrationStatus, recordMigrationFailure } from './migration-state';
 
 interface Migration {
   name: string;
   sql: string;
 }
+
+export { MigrationStatus } from './migration-state';
 
 @Injectable()
 export class MigrationsService {
@@ -36,6 +39,7 @@ export class MigrationsService {
         applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB
     `);
+    await ensureMigrationFailureTable(this.db);
 
     const migrations = this.loadMigrations();
 
@@ -49,37 +53,27 @@ export class MigrationsService {
         continue;
       }
 
-      const statements = migration.sql
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
+      try {
+        const statements = migration.sql
+          .split(';')
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
 
-      for (const stmt of statements) {
-        await this.executeStatement(stmt);
+        for (const stmt of statements) await executeMigrationStatement(this.db, stmt);
+
+        await this.db.query('INSERT IGNORE INTO _migrations (name) VALUES (?)', [migration.name]);
+        await this.db.query('DELETE FROM _migration_failures WHERE name = ?', [migration.name]);
+        this.logger.log(`Migration ${migration.name} applied successfully`);
+      } catch (error: any) {
+        const message = String(error?.message || error || 'Unknown migration error').slice(0, 2000);
+        await recordMigrationFailure(this.db, migration.name, message);
+        this.logger.error(`Migration ${migration.name} failed; continuing with later migrations: ${message}`);
       }
-
-      await this.db.query(
-        'INSERT IGNORE INTO _migrations (name) VALUES (?)',
-        [migration.name],
-      );
-
-      this.logger.log(`Migration ${migration.name} applied successfully`);
     }
   }
 
-  private async executeStatement(statement: string) {
-    const compatibleStatement = statement
-      .replace(/\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b/gi, 'ADD COLUMN')
-      .replace(/\bADD\s+(UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b/gi, (_match, unique) => `ADD ${unique || ''}INDEX`)
-      .replace(/\bCREATE\s+(UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b/gi, (_match, unique) => `CREATE ${unique || ''}INDEX`);
-    try {
-      await this.db.query(compatibleStatement);
-    } catch (error: any) {
-      // MySQL reports these when an idempotent ALTER has already been applied.
-      if ([1060, 1061].includes(Number(error?.errno))) return;
-      if (Number(error?.errno) === 1072 && /^\s*CREATE\s+(UNIQUE\s+)?INDEX\b/i.test(compatibleStatement)) return;
-      throw error;
-    }
+  async getStatus(): Promise<MigrationStatus> {
+    return readMigrationStatus(this.db, this.loadMigrations().map((migration) => migration.name));
   }
 
   private loadMigrations(): Migration[] {
