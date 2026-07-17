@@ -16,16 +16,20 @@ describe('deployedCommit', () => {
     }
   });
 
-  it('prefers explicitly injected deployment metadata', () => {
-    process.env.BACKEND_COMMIT = 'release-from-environment';
-    expect(deployedCommit()).toBe('release-from-environment');
-  });
-
-  it('reads the deployment repository release file', () => {
-    delete process.env.BACKEND_COMMIT;
-    delete process.env.GITHUB_SHA;
-    delete process.env.GIT_COMMIT;
+  it('prefers the deployment release file over stale platform metadata', () => {
+    process.env.GIT_COMMIT = 'stale-platform-commit';
     const release = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'release.json'), 'utf8'));
     expect(deployedCommit()).toBe(release.commit);
+  });
+
+  it('falls back to explicitly injected metadata when no release file exists', () => {
+    const cwd = process.cwd();
+    process.env.BACKEND_COMMIT = 'release-from-environment';
+    try {
+      process.chdir(path.join(cwd, 'src'));
+      expect(deployedCommit()).toBe('release-from-environment');
+    } finally {
+      process.chdir(cwd);
+    }
   });
 });
