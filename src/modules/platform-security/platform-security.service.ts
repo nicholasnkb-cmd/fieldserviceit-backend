@@ -442,7 +442,14 @@ export class PlatformSecurityService {
     const rows = await this.db.query<any[]>(
       `SELECT id FROM BackupRun WHERE status = 'COMPLETED' ORDER BY startedAt DESC LIMIT 1`,
     );
-    const backup = rows[0] || await this.runBackup();
+    if (rows[0]) {
+      try {
+        return await this.testBackup(rows[0].id);
+      } catch (error: any) {
+        this.logger.warn(`Latest backup could not be restored; creating a fresh drill backup: ${String(error?.message || error)}`);
+      }
+    }
+    const backup = await this.runBackup();
     return this.testBackup(backup.id);
   }
 
