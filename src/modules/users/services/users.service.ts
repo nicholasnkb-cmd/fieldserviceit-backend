@@ -1,5 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
+import { AuthorizationRepository } from '../../../database/repositories/authorization.repository';
+import { TENANT_ADMIN_DEFAULT_PERMISSIONS } from '../../../common/authorization/tenant-admin-defaults';
 import * as bcrypt from 'bcryptjs';
 
 const BCRYPT_ROUNDS = 12;
@@ -15,7 +17,12 @@ enum UserRole {
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(UsersService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private authorizationRepository: AuthorizationRepository,
+  ) {}
 
   async create(dto: { email: string; password: string; firstName: string; lastName: string; role?: UserRole }, companyId: string) {
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
@@ -81,7 +88,38 @@ export class UsersService {
       },
     });
     if (!user) throw new NotFoundException('User not found');
-    return user;
+    return { ...user, permissions: await this.getEffectivePermissions(user.id, user.role) };
+  }
+
+  private async getEffectivePermissions(userId: string, role: string): Promise<string[]> {
+    if (role === UserRole.SUPER_ADMIN) return ['*'];
+
+    const permissions = new Set<string>();
+    if (role === UserRole.TENANT_ADMIN) {
+      for (const permission of TENANT_ADMIN_DEFAULT_PERMISSIONS) permissions.add(permission);
+    }
+
+    try {
+      const [assigned, system, temporary] = await Promise.all([
+        this.authorizationRepository.findUserRolePermissions(userId),
+        this.authorizationRepository.findSystemRolePermissions(role),
+        this.prisma.query<Array<{ slug: string }>>(
+          `SELECT p.slug
+           FROM TemporaryPermissionGrant tpg
+           JOIN Permission p ON p.id = tpg.permissionId
+           WHERE tpg.userId = ?
+             AND tpg.revokedAt IS NULL
+             AND tpg.startsAt <= NOW(3)
+             AND tpg.expiresAt > NOW(3)`,
+          [userId],
+        ),
+      ]);
+      for (const permission of [...assigned, ...system, ...temporary]) permissions.add(permission.slug);
+    } catch (error: any) {
+      this.logger.warn(`Unable to hydrate all effective permissions for user ${userId}: ${error?.message || error}`);
+    }
+
+    return [...permissions].sort();
   }
 
   async getEffectiveFeatures(userId: string) {

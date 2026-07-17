@@ -74,3 +74,14 @@ if (uncovered.length) {
   process.exit(1);
 }
 console.log('Authorization coverage gate passed. Every authenticated route is explicit.');
+const exemptionMatches = walk(root).flatMap((file) => {
+  const source = fs.readFileSync(file, 'utf8');
+  return [...source.matchAll(/@AuthorizationExempt\(\s*['"`]([^'"`]+)['"`]\s*,\s*['"`]([^'"`]+)['"`]\s*,\s*['"`](\d{4}-\d{2}-\d{2})['"`]\s*\)/g)]
+    .map((match) => ({ owner: match[2], reviewBy: match[3] }));
+});
+const byOwner = Object.entries(exemptionMatches.reduce((counts, item) => {
+  counts[item.owner] = (counts[item.owner] || 0) + 1;
+  return counts;
+}, {})).sort(([left], [right]) => left.localeCompare(right));
+console.log(`Authorization exemptions: ${exemptionMatches.length}`);
+byOwner.forEach(([owner, count]) => console.log(`- ${owner}: ${count}`));

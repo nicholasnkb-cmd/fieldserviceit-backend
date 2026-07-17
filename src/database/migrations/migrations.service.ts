@@ -70,12 +70,14 @@ export class MigrationsService {
   private async executeStatement(statement: string) {
     const compatibleStatement = statement
       .replace(/\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b/gi, 'ADD COLUMN')
-      .replace(/\bADD\s+(UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b/gi, (_match, unique) => `ADD ${unique || ''}INDEX`);
+      .replace(/\bADD\s+(UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b/gi, (_match, unique) => `ADD ${unique || ''}INDEX`)
+      .replace(/\bCREATE\s+(UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\b/gi, (_match, unique) => `CREATE ${unique || ''}INDEX`);
     try {
       await this.db.query(compatibleStatement);
     } catch (error: any) {
       // MySQL reports these when an idempotent ALTER has already been applied.
       if ([1060, 1061].includes(Number(error?.errno))) return;
+      if (Number(error?.errno) === 1072 && /^\s*CREATE\s+(UNIQUE\s+)?INDEX\b/i.test(compatibleStatement)) return;
       throw error;
     }
   }
@@ -426,6 +428,27 @@ export class MigrationsService {
             (UUID(), 'Run network actions', 'network.actions.run', 'Network', 'Run network device actions', NOW(3)),
             (UUID(), 'View network credentials', 'network.credentials.view', 'Network', 'View network credential metadata', NOW(3)),
             (UUID(), 'Manage network credentials', 'network.credentials.manage', 'Network', 'Create, rotate, and test network credentials', NOW(3));
+        `),
+      },
+      {
+        name: '021_network_inventory_safety',
+        sql: stripComments(`
+          CREATE TABLE IF NOT EXISTS NetworkDiscoverySchedule (
+            id VARCHAR(191) PRIMARY KEY,
+            companyId VARCHAR(191) NOT NULL UNIQUE,
+            subnet VARCHAR(64) NOT NULL,
+            intervalMinutes INT NOT NULL DEFAULT 1440,
+            hostLimit INT NOT NULL DEFAULT 64,
+            enabled TINYINT(1) NOT NULL DEFAULT 0,
+            lastRunAt DATETIME(3),
+            nextRunAt DATETIME(3),
+            lastResultCount INT,
+            lastError VARCHAR(500),
+            createdAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            updatedAt DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+            INDEX(enabled, nextRunAt),
+            INDEX(companyId)
+          ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
         `),
       },
       {
