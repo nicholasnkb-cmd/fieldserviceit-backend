@@ -45,6 +45,21 @@ jobs:
           release=$(jq -r .commit release.json)
           pr_url=$(gh pr create --base master --head "$GITHUB_REF_NAME" --title "Deploy backend ${release:0:12}" --body "Validated automated deployment of monorepo release $release.")
           pr_number="${pr_url##*/}"
+          for attempt in {1..60}; do
+            state=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs" --jq '[.check_runs[] | select(.name == "validate")][0] | .conclusion // .status // ""')
+            if [ "$state" = "success" ]; then
+              break
+            fi
+            if [ "$state" = "failure" ] || [ "$state" = "cancelled" ] || [ "$state" = "timed_out" ]; then
+              echo "Required validate check failed: $state" >&2
+              exit 1
+            fi
+            if [ "$attempt" = "60" ]; then
+              echo "Required validate check did not complete in time" >&2
+              exit 1
+            fi
+            sleep 10
+          done
           gh pr merge "$pr_number" --squash --delete-branch
           echo "release=$release" >> "$GITHUB_OUTPUT"
           echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
