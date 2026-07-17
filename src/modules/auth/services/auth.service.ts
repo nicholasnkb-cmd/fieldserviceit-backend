@@ -691,11 +691,18 @@ export class AuthService {
   }
 
   private async enforceLoginBackoff(email: string) {
-    const rows = await this.prisma.query<any[]>(
-      `SELECT failureCount, lockedUntil, lastFailureAt
-       FROM LoginAbuseState WHERE emailHash = ? LIMIT 1`,
-      [this.loginEmailHash(email)],
-    );
+    let rows: any[];
+    try {
+      rows = await this.prisma.query<any[]>(
+        `SELECT failureCount, lockedUntil, lastFailureAt
+         FROM LoginAbuseState WHERE emailHash = ? LIMIT 1`,
+        [this.loginEmailHash(email)],
+      );
+    } catch (error) {
+      if (!this.isMissingLoginAbuseTable(error)) throw error;
+      this.logger.warn('Login abuse state is unavailable; request throttling remains active');
+      return;
+    }
     const failure = rows[0];
     if (!failure) return;
     const lockedUntil = failure.lockedUntil ? new Date(failure.lockedUntil).getTime() : 0;
@@ -711,21 +718,33 @@ export class AuthService {
 
   private async recordLoginFailure(email: string, reason: string) {
     const emailHash = this.loginEmailHash(email);
-    await this.prisma.execute(
-      `INSERT INTO LoginAbuseState (emailHash, failureCount, lockedUntil, lastFailureAt, updatedAt)
-       VALUES (?, 1, NULL, NOW(3), NOW(3))
-       ON DUPLICATE KEY UPDATE
-         failureCount = IF(lastFailureAt < DATE_SUB(NOW(3), INTERVAL ? MICROSECOND), 1, failureCount + 1),
-         lockedUntil = IF(failureCount >= ?, DATE_ADD(NOW(3), INTERVAL ? MICROSECOND),
-           IF(lockedUntil > NOW(3), lockedUntil, NULL)),
-         lastFailureAt = NOW(3), updatedAt = NOW(3)`,
-      [emailHash, LOGIN_LOCK_MS * 1000, LOGIN_LOCK_THRESHOLD, LOGIN_LOCK_MS * 1000],
-    );
+    try {
+      await this.prisma.execute(
+        `INSERT INTO LoginAbuseState (emailHash, failureCount, lockedUntil, lastFailureAt, updatedAt)
+         VALUES (?, 1, NULL, NOW(3), NOW(3))
+         ON DUPLICATE KEY UPDATE
+           failureCount = IF(lastFailureAt < DATE_SUB(NOW(3), INTERVAL ? MICROSECOND), 1, failureCount + 1),
+           lockedUntil = IF(failureCount >= ?, DATE_ADD(NOW(3), INTERVAL ? MICROSECOND),
+             IF(lockedUntil > NOW(3), lockedUntil, NULL)),
+           lastFailureAt = NOW(3), updatedAt = NOW(3)`,
+        [emailHash, LOGIN_LOCK_MS * 1000, LOGIN_LOCK_THRESHOLD, LOGIN_LOCK_MS * 1000],
+      );
+    } catch (error) {
+      if (!this.isMissingLoginAbuseTable(error)) throw error;
+    }
     this.logger.warn(`Login failure for account hash ${emailHash.slice(0, 12)}: ${reason}`);
   }
 
   private async clearLoginFailures(email: string) {
-    await this.prisma.execute(`DELETE FROM LoginAbuseState WHERE emailHash = ?`, [this.loginEmailHash(email)]);
+    try {
+      await this.prisma.execute(`DELETE FROM LoginAbuseState WHERE emailHash = ?`, [this.loginEmailHash(email)]);
+    } catch (error) {
+      if (!this.isMissingLoginAbuseTable(error)) throw error;
+    }
+  }
+
+  private isMissingLoginAbuseTable(error: any) {
+    return Number(error?.errno) === 1146 || error?.code === 'ER_NO_SUCH_TABLE';
   }
 
   private loginEmailHash(email: string) {
