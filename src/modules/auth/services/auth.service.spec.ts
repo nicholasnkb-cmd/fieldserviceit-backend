@@ -93,6 +93,24 @@ describe('AuthService', () => {
     );
   });
 
+  it('returns invalid credentials when the login abuse table is unavailable', async () => {
+    const missingTable = Object.assign(new Error('LoginAbuseState does not exist'), {
+      errno: 1146,
+      code: 'ER_NO_SUCH_TABLE',
+    });
+    mockPrisma.query.mockRejectedValueOnce(missingTable);
+    mockPrisma.user.findUnique.mockResolvedValue(null);
+    mockPrisma.execute.mockRejectedValueOnce(missingTable);
+
+    await expect(service.login('missing@example.com', 'invalid-password')).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('allows successful-login cleanup when the login abuse table is unavailable', async () => {
+    mockPrisma.execute.mockRejectedValueOnce(Object.assign(new Error('missing table'), { errno: 1146 }));
+
+    await expect((service as any).clearLoginFailures('user@example.com')).resolves.toBeUndefined();
+  });
+
   describe('MFA login challenge', () => {
     const mfaUser = {
       id: 'user-mfa',
