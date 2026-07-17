@@ -2,6 +2,7 @@ import { Injectable, ServiceUnavailableException, Logger } from '@nestjs/common'
 import { execFileSync } from 'node:child_process';
 import { PrismaService } from '../../database/prisma.service';
 import { StructuredLogger } from '../../common/logger/structured-logger.service';
+import { deployedCommit } from '../../common/release-metadata';
 
 export interface HealthCheckResponse {
   status: 'ok' | 'degraded' | 'error';
@@ -69,7 +70,7 @@ export interface HealthDashboard {
 export class HealthService {
   private readonly logger = new Logger(HealthService.name);
   private readonly version = process.env.BACKEND_VERSION || process.env.APP_VERSION || process.env.npm_package_version || 'unknown';
-  private readonly commit = process.env.BACKEND_COMMIT || process.env.GITHUB_SHA || process.env.GIT_COMMIT || this.gitCommit();
+  private readonly commit = deployedCommit() || this.gitCommit();
   private startTime = new Date();
 
   constructor(
