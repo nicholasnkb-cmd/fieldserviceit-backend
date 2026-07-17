@@ -22,12 +22,13 @@ describe('deployedCommit', () => {
     expect(deployedCommit()).toBe(release.commit);
   });
 
-  it('falls back to explicitly injected metadata when no release file exists', () => {
+  it('resolves the release file independently of the process working directory', () => {
     const cwd = process.cwd();
-    process.env.BACKEND_COMMIT = 'release-from-environment';
+    process.env.GIT_COMMIT = 'stale-platform-commit';
+    const release = JSON.parse(fs.readFileSync(path.join(cwd, 'release.json'), 'utf8'));
     try {
       process.chdir(path.join(cwd, 'src'));
-      expect(deployedCommit()).toBe('release-from-environment');
+      expect(deployedCommit()).toBe(release.commit);
     } finally {
       process.chdir(cwd);
     }
