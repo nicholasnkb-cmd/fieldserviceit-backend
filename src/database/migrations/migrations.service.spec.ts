@@ -11,6 +11,15 @@ describe('MigrationsService', () => {
     )).resolves.toBeUndefined();
   });
 
+  it('recognizes a performance index after a leading SQL block comment', async () => {
+    const query = jest.fn().mockRejectedValue(Object.assign(new Error('Too many keys specified; max 64 keys allowed'), { errno: 1069 }));
+
+    await expect(executeMigrationStatement(
+      { query },
+      '/** performance index */\nCREATE INDEX idx_asset_company_status ON Asset(companyId, status)',
+    )).resolves.toBeUndefined();
+  });
+
   it('does not suppress the MySQL key limit for schema statements', async () => {
     const error = Object.assign(new Error('Too many keys specified; max 64 keys allowed'), { errno: 1069 });
     const query = jest.fn().mockRejectedValue(error);
