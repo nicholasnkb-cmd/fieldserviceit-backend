@@ -35,8 +35,13 @@ export async function executeMigrationStatement(db: MigrationDatabase, statement
   try {
     await db.query(compatible);
   } catch (error: any) {
-    if ([1060, 1061].includes(Number(error?.errno))) return;
-    if (Number(error?.errno) === 1072 && /^\s*CREATE\s+(UNIQUE\s+)?INDEX\b/i.test(compatible)) return;
+    const errno = Number(error?.errno);
+    const isIndexStatement = /^\s*(CREATE\s+(UNIQUE\s+)?INDEX|ALTER\s+TABLE\b.*\bADD\s+(UNIQUE\s+)?INDEX)\b/is.test(compatible);
+    if ([1060, 1061].includes(errno)) return;
+    if (errno === 1072 && isIndexStatement) return;
+    // MySQL limits a table to 64 indexes. Older performance-only migrations
+    // must not block later schema migrations when a legacy table is saturated.
+    if (errno === 1069 && isIndexStatement) return;
     throw error;
   }
 }

@@ -442,8 +442,8 @@ export class PlatformSecurityService {
     const rows = await this.db.query<any[]>(
       `SELECT id FROM BackupRun WHERE status = 'COMPLETED' ORDER BY startedAt DESC LIMIT 1`,
     );
-    if (!rows[0]) throw new BadRequestException('No completed backup is available for a restore drill');
-    return this.testBackup(rows[0].id);
+    const backup = rows[0] || await this.runBackup();
+    return this.testBackup(backup.id);
   }
 
   async retentionPolicy() {

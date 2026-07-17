@@ -1,6 +1,26 @@
 import { MigrationsService } from './migrations.service';
+import { executeMigrationStatement } from './migration-state';
 
 describe('MigrationsService', () => {
+  it('continues when a performance index hits the MySQL key limit', async () => {
+    const query = jest.fn().mockRejectedValue(Object.assign(new Error('Too many keys specified; max 64 keys allowed'), { errno: 1069 }));
+
+    await expect(executeMigrationStatement(
+      { query },
+      'CREATE INDEX idx_asset_company_status ON Asset(companyId, status)',
+    )).resolves.toBeUndefined();
+  });
+
+  it('does not suppress the MySQL key limit for schema statements', async () => {
+    const error = Object.assign(new Error('Too many keys specified; max 64 keys allowed'), { errno: 1069 });
+    const query = jest.fn().mockRejectedValue(error);
+
+    await expect(executeMigrationStatement(
+      { query },
+      'CREATE TABLE UnsafeTable (id INT PRIMARY KEY)',
+    )).rejects.toBe(error);
+  });
+
   it('records a failed migration and continues applying later migrations', async () => {
     const query = jest.fn(async (sql: string, _params?: unknown[]) => {
       if (sql === 'BROKEN STATEMENT') throw new Error('synthetic migration failure');
