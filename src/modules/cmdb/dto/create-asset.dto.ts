@@ -1,4 +1,4 @@
-import { IsDateString, IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsEnum } from 'class-validator';
 
 enum AssetType {
   COMPUTER = 'COMPUTER',
@@ -63,14 +63,6 @@ export class CreateAssetDto {
   @IsOptional()
   @IsString()
   storage?: string;
-
-  @IsOptional()
-  @IsDateString()
-  purchaseDate?: string;
-
-  @IsOptional()
-  @IsDateString()
-  warrantyExpiresAt?: string;
 
   @IsOptional()
   @IsString()

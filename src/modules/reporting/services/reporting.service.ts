@@ -175,69 +175,6 @@ export class ReportingService {
     });
   }
 
-  async getOperationsSummary(companyId: string) {
-    const [slaRows, offlineRows, warrantyRows, securityRows, workloadRows] = await Promise.all([
-      this.prisma.query<any[]>(
-        `SELECT
-           SUM(CASE WHEN TIMESTAMPADD(MINUTE, s.resolutionTimeMin, t.createdAt) < NOW() THEN 1 ELSE 0 END) overdue,
-           SUM(CASE WHEN TIMESTAMPADD(MINUTE, s.resolutionTimeMin, t.createdAt) BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 60 MINUTE) THEN 1 ELSE 0 END) atRisk
-         FROM Ticket t
-         INNER JOIN SLA s ON s.id = t.slaId
-         WHERE t.companyId = ? AND t.deletedAt IS NULL
-           AND t.status NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')`,
-        [companyId],
-      ),
-      this.prisma.query<any[]>(
-        `SELECT COUNT(*) count FROM NetworkHealthSnapshot h
-         INNER JOIN (
-           SELECT assetId, MAX(createdAt) latestAt FROM NetworkHealthSnapshot WHERE companyId = ? GROUP BY assetId
-         ) latest ON latest.assetId = h.assetId AND latest.latestAt = h.createdAt
-         INNER JOIN Asset a ON a.id = h.assetId AND a.deletedAt IS NULL
-         WHERE h.companyId = ? AND h.status = 'OFFLINE'`,
-        [companyId, companyId],
-      ),
-      this.prisma.query<any[]>(
-        `SELECT COUNT(*) count FROM Asset
-         WHERE companyId = ? AND deletedAt IS NULL
-           AND warrantyExpiresAt BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 90 DAY)`,
-        [companyId],
-      ),
-      this.prisma.query<any[]>(
-        `SELECT COUNT(*) count FROM SecurityFinding
-         WHERE companyId = ? AND status <> 'RESOLVED' AND severity IN ('HIGH', 'CRITICAL')`,
-        [companyId],
-      ),
-      this.prisma.query<any[]>(
-        `SELECT u.id, CONCAT(u.firstName, ' ', u.lastName) name,
-           COUNT(DISTINCT t.id) activeTickets, COUNT(DISTINCT d.id) activeDispatches
-         FROM User u
-         LEFT JOIN Ticket t ON t.assignedToId = u.id AND t.deletedAt IS NULL
-           AND t.status IN ('ASSIGNED', 'IN_PROGRESS', 'ON_HOLD')
-         LEFT JOIN Dispatch d ON d.technicianId = u.id AND d.status IN ('DISPATCHED', 'EN_ROUTE', 'ON_SITE')
-         WHERE u.companyId = ? AND u.deletedAt IS NULL AND u.isActive = 1
-           AND u.role IN ('TECHNICIAN', 'TENANT_ADMIN')
-         GROUP BY u.id, u.firstName, u.lastName
-         ORDER BY (COUNT(DISTINCT t.id) + COUNT(DISTINCT d.id)) DESC, name ASC
-         LIMIT 8`,
-        [companyId],
-      ),
-    ]);
-
-    return {
-      overdueTickets: Number(slaRows[0]?.overdue || 0),
-      slaAtRisk: Number(slaRows[0]?.atRisk || 0),
-      offlineDevices: Number(offlineRows[0]?.count || 0),
-      warrantiesExpiring: Number(warrantyRows[0]?.count || 0),
-      highSecurityFindings: Number(securityRows[0]?.count || 0),
-      technicianWorkload: workloadRows.map((row) => ({
-        ...row,
-        activeTickets: Number(row.activeTickets || 0),
-        activeDispatches: Number(row.activeDispatches || 0),
-      })),
-      generatedAt: new Date().toISOString(),
-    };
-  }
-
   async getServiceOutcomes(companyId: string) {
     const [visitRows, timeRows, responseRows] = await Promise.all([
       this.prisma.query<any[]>(

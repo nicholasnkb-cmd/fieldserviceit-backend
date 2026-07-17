@@ -237,8 +237,6 @@ model Asset {
   cpu          String?
   ram          String?
   storage      String?
-  purchaseDate DateTime?
-  warrantyExpiresAt DateTime?
   status       String     @default("active")
   mdmDeviceTokenHash String?
   notes        String?
@@ -252,7 +250,6 @@ model Asset {
 
   @@index([companyId])
   @@index([assetType])
-  @@index([warrantyExpiresAt])
   @@index([mdmDeviceTokenHash])
 }
 

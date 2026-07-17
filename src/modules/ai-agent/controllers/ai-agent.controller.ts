@@ -25,19 +25,19 @@ export class AiAgentController {
 
   @AuthorizationExempt('AI planning is tenant-scoped and restricted to supported operational roles', 'platform-operations', '2026-12-31')
   @Post('plan')
-  plan(@Body() body: { goal: string; history?: AgentHistoryItem[]; currentPage?: string }, @CurrentUser() user: any) {
-    return this.aiAgentService.plan(body.goal, user, body.history || [], body.currentPage);
+  plan(@Body() body: { goal: string; history?: AgentHistoryItem[] }, @CurrentUser() user: any) {
+    return this.aiAgentService.plan(body.goal, user, body.history || []);
   }
 
   @AuthorizationExempt('AI answers use tenant-scoped read tools and supported operational roles', 'platform-operations', '2026-12-31')
   @Post('ask')
-  ask(@Body() body: { question: string; history?: AgentHistoryItem[]; currentPage?: string }, @CurrentUser() user: any) {
-    return this.aiAgentService.ask(body.question, user, body.history || [], body.currentPage);
+  ask(@Body() body: { question: string; history?: AgentHistoryItem[] }, @CurrentUser() user: any) {
+    return this.aiAgentService.ask(body.question, user, body.history || []);
   }
 
   @AuthorizationExempt('AI execution is tenant-scoped, role-restricted, and separately approval-gated for writes', 'platform-operations', '2026-12-31')
   @Post('execute')
-  execute(@Body() body: { goal: string; approvedActions?: string[]; history?: AgentHistoryItem[]; currentPage?: string }, @CurrentUser() user: any) {
-    return this.aiAgentService.execute(body.goal, user, body.approvedActions || [], body.history || [], body.currentPage);
+  execute(@Body() body: { goal: string; approvedActions?: string[]; history?: AgentHistoryItem[] }, @CurrentUser() user: any) {
+    return this.aiAgentService.execute(body.goal, user, body.approvedActions || [], body.history || []);
   }
 }
