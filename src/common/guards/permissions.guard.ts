@@ -1,4 +1,4 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Logger } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { PrismaService } from '../../database/prisma.service';
@@ -22,6 +22,8 @@ import { TENANT_ADMIN_DEFAULT_PERMISSIONS } from '../authorization/tenant-admin-
  */
 @Injectable()
 export class PermissionsGuard implements CanActivate {
+  private readonly logger = new Logger(PermissionsGuard.name);
+
   constructor(
     private reflector: Reflector,
     private prisma: PrismaService,
@@ -48,7 +50,7 @@ export class PermissionsGuard implements CanActivate {
     // Fast path: Super admins bypass all permission checks
     if (user.role === 'SUPER_ADMIN') {
       user.superAdminOverride = true;
-      this.recordUsage(user, requiredPermissions, request).catch(() => {});
+      this.recordUsage(user, requiredPermissions, request).catch((error) => this.logBestEffortFailure('record permission usage', error));
       return true;
     }
 
@@ -58,7 +60,7 @@ export class PermissionsGuard implements CanActivate {
       request.permissionScopes = user.permissionScopes || [];
       const hasAll = requiredPermissions.every((permission) => servicePermissions.has(permission));
       if (!hasAll) throw new ForbiddenException('Insufficient permissions');
-      this.recordUsage(user, requiredPermissions, request).catch(() => {});
+      this.recordUsage(user, requiredPermissions, request).catch((error) => this.logBestEffortFailure('record service-account permission usage', error));
       return true;
     }
 
@@ -76,7 +78,10 @@ export class PermissionsGuard implements CanActivate {
     }
 
     // Load system role permissions (e.g., "TENANT_ADMIN" role gets specific default permissions)
-    const primaryRolePermissions = await this.authorizationRepository.findSystemRolePermissions(user.role).catch(() => []);
+    const primaryRolePermissions = await this.authorizationRepository.findSystemRolePermissions(user.role).catch((error) => {
+      this.logBestEffortFailure('load system-role permissions', error);
+      return [];
+    });
     for (const permission of primaryRolePermissions) {
       userPermissionSlugs.add(permission.slug);
       if (!effectiveRoleIds.includes(permission.roleId)) effectiveRoleIds.push(permission.roleId);
@@ -92,7 +97,10 @@ export class PermissionsGuard implements CanActivate {
          AND tpg.startsAt <= NOW(3)
          AND tpg.expiresAt > NOW(3)`,
       [user.id],
-    ).catch(() => []);
+    ).catch((error) => {
+      this.logBestEffortFailure('load temporary permission grants', error);
+      return [];
+    });
     for (const grant of temporaryGrants) userPermissionSlugs.add(grant.slug);
 
     // Load permission scopes (CRITICAL): Defines fine-grained access boundaries
@@ -104,7 +112,10 @@ export class PermissionsGuard implements CanActivate {
        WHERE (userId = ? OR roleId IN (${effectiveRoleIds.length ? effectiveRoleIds.map(() => '?').join(',') : "''"}))
          AND (companyId IS NULL OR companyId = ?)`,
       [user.id, ...effectiveRoleIds, user.companyId || null],
-    ).catch(() => []);
+    ).catch((error) => {
+      this.logBestEffortFailure('load permission scopes', error);
+      return [];
+    });
     user.permissionScopes = request.permissionScopes;
     user.permissionSlugs = [...userPermissionSlugs];
 
@@ -116,7 +127,7 @@ export class PermissionsGuard implements CanActivate {
 
     // Apply contextual access policies (IP whitelisting, MFA requirement, time-of-day restrictions, etc.)
     await this.enforceContextualPolicies(user, requiredPermissions, request);
-    this.recordUsage(user, requiredPermissions, request).catch(() => {});
+    this.recordUsage(user, requiredPermissions, request).catch((error) => this.logBestEffortFailure('record permission usage', error));
     return true;
   }
 
@@ -134,7 +145,10 @@ export class PermissionsGuard implements CanActivate {
          AND targetValue IN (${placeholders})
          AND (companyId IS NULL OR companyId = ?)`,
       [...permissions, user.companyId || null],
-    ).catch(() => []);
+    ).catch((error) => {
+      this.logBestEffortFailure('load contextual access policies', error);
+      return [];
+    });
 
     for (const policy of policies) {
       const conditions = this.parseConditions(policy.conditions);
@@ -192,6 +206,15 @@ export class PermissionsGuard implements CanActivate {
     if (!value) return {};
     if (typeof value === 'object') return value;
     try { return JSON.parse(value); } catch { return {}; }
+  }
+
+  private logBestEffortFailure(operation: string, error: any) {
+    this.logger.warn(JSON.stringify({
+      event: 'best_effort_failure',
+      component: PermissionsGuard.name,
+      operation,
+      error: error?.message || String(error),
+    }));
   }
 
   /**

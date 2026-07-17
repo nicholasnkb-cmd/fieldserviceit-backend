@@ -12,10 +12,10 @@ export interface ApiResponse<T> {
 }
 
 @Injectable()
-export class ResponseInterceptor<T> implements NestInterceptor<T, ApiResponse<T>> {
+export class ResponseInterceptor<T> implements NestInterceptor<T, ApiResponse<T> | T> {
   constructor(private reflector: Reflector) {}
 
-  intercept(context: ExecutionContext, next: CallHandler): Observable<ApiResponse<T>> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<ApiResponse<T> | T> {
     const rawContentType = this.reflector.getAllAndOverride<string>(RAW_RESPONSE_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -27,11 +27,16 @@ export class ResponseInterceptor<T> implements NestInterceptor<T, ApiResponse<T>
     const now = new Date().toISOString();
     return next.handle().pipe(
       map((data) => {
+        // Preserve the legacy array contract while clients migrate to envelopes.
+        if (Array.isArray(data)) return data;
         if (data && typeof data === 'object' && 'success' in data && 'timestamp' in data) {
           return data;
         }
         if (data && typeof data === 'object' && 'data' in data && 'meta' in data) {
           return { success: true, data: data.data, meta: data.meta, timestamp: now };
+        }
+        if (data && typeof data === 'object') {
+          return { ...data, success: true, data, timestamp: now };
         }
         return { success: true, data, timestamp: now };
       }),
