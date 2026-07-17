@@ -42,6 +42,7 @@ import { TopologyModule } from './modules/topology/topology.module';
 import { CatalogRequestsModule } from './modules/catalog-requests/catalog-requests.module';
 import { PlatformSecurityModule } from './modules/platform-security/platform-security.module';
 import { EndpointOperationsModule } from './modules/endpoint-operations/endpoint-operations.module';
+import { DeploymentsModule } from './modules/deployments/deployments.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -147,6 +148,7 @@ import { AppController } from './app.controller';
     CatalogRequestsModule,
     PlatformSecurityModule,
     EndpointOperationsModule,
+    DeploymentsModule,
   ],
   controllers: [AppController],
   providers: [
