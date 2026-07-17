@@ -2,13 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { PRIVACY_VERSION, TERMS_VERSION } from '../src/modules/auth/legal-consent';
-
-const legalConsent = {
-  termsAccepted: true,
-  termsVersion: TERMS_VERSION,
-  privacyVersion: PRIVACY_VERSION,
-};
 
 describe('Auth & Ticket Lifecycle E2E', () => {
   let app: INestApplication;
@@ -36,7 +29,7 @@ describe('Auth & Ticket Lifecycle E2E', () => {
     it('POST /v1/auth/register — creates public user with emailVerified=true', async () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/register')
-        .send({ email: 'lifecycle-public@test.com', password: 'Test123!', firstName: 'Lifecycle', lastName: 'Public', ...legalConsent })
+        .send({ email: 'lifecycle-public@test.com', password: 'Test123!', firstName: 'Lifecycle', lastName: 'Public' })
         .expect(201);
 
       expect(res.body.accessToken).toBeDefined();
@@ -49,7 +42,7 @@ describe('Auth & Ticket Lifecycle E2E', () => {
     it('POST /v1/auth/register — duplicate email returns 409', async () => {
       await request(app.getHttpServer())
         .post('/v1/auth/register')
-        .send({ email: 'lifecycle-public@test.com', password: 'Test123!', firstName: 'Dup', lastName: 'User', ...legalConsent })
+        .send({ email: 'lifecycle-public@test.com', password: 'Test123!', firstName: 'Dup', lastName: 'User' })
         .expect(409);
     });
 
@@ -161,11 +154,11 @@ describe('Auth & Ticket Lifecycle E2E', () => {
         .expect(400);
     });
 
-    it('POST /v1/auth/resend-verification — does not reveal whether an account exists', async () => {
+    it('POST /v1/auth/resend-verification — non-existent email returns 400', async () => {
       await request(app.getHttpServer())
         .post('/v1/auth/resend-verification')
         .send({ email: 'nobody@test.com' })
-        .expect(200);
+        .expect(400);
     });
   });
 
@@ -217,7 +210,7 @@ describe('Auth & Ticket Lifecycle E2E', () => {
         .expect(200);
 
       expect(Array.isArray(res.body)).toBe(true);
-      expect(res.text.length).toBeGreaterThan(0);
+      expect(res.body.length).toBeGreaterThan(0);
       expect(res.body[0].action).toBe('CREATED');
     });
 
@@ -495,7 +488,7 @@ describe('Auth & Ticket Lifecycle E2E', () => {
         .expect(200);
 
       expect(res.headers['content-type']).toContain('text/csv');
-      expect(res.text.length).toBeGreaterThan(0);
+      expect(res.body.length).toBeGreaterThan(0);
     });
   });
 

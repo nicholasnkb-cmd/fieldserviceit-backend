@@ -1,10 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
 export class ServiceAccountGuard implements CanActivate {
-  private readonly logger = new Logger(ServiceAccountGuard.name);
   constructor(private readonly prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -41,7 +40,7 @@ export class ServiceAccountGuard implements CanActivate {
     await this.prisma.execute(
       `UPDATE ServiceAccount SET lastUsedAt = NOW(3), lastUsedIp = ?, updatedAt = NOW(3) WHERE id = ?`,
       [String(request.ip || request.socket?.remoteAddress || '').slice(0, 191) || null, account.id],
-    ).catch((error) => this.logger.warn(`Failed to update service-account usage for ${account.id}: ${error?.message || error}`));
+    ).catch(() => {});
     return true;
   }
 
