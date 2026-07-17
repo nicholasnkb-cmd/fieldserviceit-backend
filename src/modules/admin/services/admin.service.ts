@@ -9,6 +9,9 @@ import * as path from 'path';
 import { CurrentUser } from '../../../common/types';
 import { CRITICAL_PERMISSION_SLUGS, PERMISSION_DEPENDENCIES, PERMISSION_PRESETS, PERMISSION_RISK_RULES, PERMISSION_SCOPE_TYPES } from '../permissions.config';
 import { assertTenantRoleChange, tenantAssignableRoles } from './tenant-role-governance';
+import { MigrationsService } from '../../../database/migrations/migrations.service';
+import { deployedCommit } from '../../../common/release-metadata';
+import { migrationReadiness } from './migration-readiness';
 
 const BCRYPT_ROUNDS = 12;
 const VALID_ROLES = ['SUPER_ADMIN', 'GLOBAL_TECH', 'TENANT_ADMIN', 'TECHNICIAN', 'CLIENT', 'READ_ONLY'];
@@ -21,6 +24,7 @@ export class AdminService {
     private prisma: PrismaService,
     private auditLogService: AuditLogService,
     private accessGovernance: AccessGovernanceService,
+    private migrationsService: MigrationsService,
   ) {}
 
   private normalizeRole(role: any) {
@@ -1751,6 +1755,8 @@ export class AdminService {
       add('Monitoring worker', false, 'Monitoring tables have not been initialized yet.', 'warning');
     }
 
+    const migrations = await migrationReadiness(this.migrationsService, add);
+
     const status = checks.some((check) => check.status === 'critical')
       ? 'blocked'
       : checks.some((check) => check.status === 'warning')
@@ -1767,6 +1773,7 @@ export class AdminService {
       deployment: {
         frontendVersion: process.env.FRONTEND_VERSION || process.env.APP_VERSION || 'unknown',
         backendVersion: process.env.BACKEND_VERSION || process.env.APP_VERSION || process.env.npm_package_version || 'unknown',
+        backendCommit: deployedCommit() || 'unknown',
         nodeEnv: process.env.NODE_ENV || 'development',
         corsOrigin: process.env.CORS_ORIGIN || null,
         lastNetworkPoll,
@@ -1780,6 +1787,7 @@ export class AdminService {
         paypalPriceConfigured: paypalPriceKeys.has(`${plan.id}:MONTH`) || paypalPriceKeys.has(`${plan.id}:YEAR`),
       })),
       mdm: { pendingCommands },
+      migrations,
       checks,
     };
   }
