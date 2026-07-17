@@ -63,29 +63,15 @@ jobs:
           gh pr merge "$pr_number" --squash --delete-branch
           echo "release=$release" >> "$GITHUB_OUTPUT"
           echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
-      - name: Verify Hostinger deployment and roll back on failure
+      - name: Verify protected deployment publication
         shell: bash
         env:
           RELEASE: ${{ steps.publish.outputs.release }}
         run: |
-          set -uo pipefail
-          for attempt in {1..60}; do
-            live=$(curl -fsS --max-time 20 https://api.fieldserviceit.com/v1/health/live | jq -r .commit 2>/dev/null || true)
-            if [ "$live" = "$RELEASE" ]; then
-              echo "Backend release $RELEASE is live."
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Backend release $RELEASE did not become healthy; creating rollback." >&2
-          git fetch origin master
-          failed_commit=$(git rev-parse origin/master)
-          rollback_branch="rollback/backend-${GITHUB_RUN_ID}"
-          git config user.name "FieldServiceIT Deploy Bot"
-          git config user.email "deploy-bot@fieldserviceit.com"
-          git checkout -b "$rollback_branch" origin/master
-          git revert --no-edit "$failed_commit"
-          git push --set-upstream origin "$rollback_branch"
-          rollback_url=$(gh pr create --base master --head "$rollback_branch" --title "Rollback failed backend release ${RELEASE:0:12}" --body "Automatic rollback because the Hostinger health check did not report release $RELEASE within 10 minutes.")
-          gh pr merge "${rollback_url##*/}" --squash --delete-branch
-          exit 1
+          set -euo pipefail
+          deployed=$(gh api "repos/$GITHUB_REPOSITORY/contents/release.json?ref=master" --jq .content | base64 -d | jq -r .commit)
+          if [ "$deployed" != "$RELEASE" ]; then
+            echo "Protected master contains $deployed, expected $RELEASE" >&2
+            exit 1
+          fi
+          echo "Backend release $RELEASE is published to protected master. The monorepo production orchestrator will wait for the Hostinger build, restart Node.js, and verify the live SHA."
