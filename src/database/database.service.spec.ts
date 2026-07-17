@@ -68,7 +68,7 @@ describe('DatabaseService production controls', () => {
     await service.readOnlyTransaction(async () => 'snapshot');
 
     expect(connection.query).toHaveBeenNthCalledWith(1, 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
-    expect(connection.query).toHaveBeenNthCalledWith(2, 'START TRANSACTION READ ONLY WITH CONSISTENT SNAPSHOT');
+    expect(connection.query).toHaveBeenNthCalledWith(2, 'START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
     expect(connection.commit).toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalled();
   });

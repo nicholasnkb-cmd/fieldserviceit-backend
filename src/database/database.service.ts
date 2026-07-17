@@ -2745,7 +2745,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     const conn = await this.pool.getConnection();
     try {
       await conn.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
-      await conn.query('START TRANSACTION READ ONLY WITH CONSISTENT SNAPSHOT');
+      await conn.query('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
       const result = await fn(new TransactionClient(conn));
       await conn.commit();
       return result;
