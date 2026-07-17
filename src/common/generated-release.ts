@@ -1,1 +1,1 @@
-export const GENERATED_RELEASE_COMMIT = 'ef74a6cfe9dbe5a45af0f79ca236f0dfd233004d';
+export const GENERATED_RELEASE_COMMIT = '1c7f15fd3ac6894223f3c348c58d17e7c35bfddb';
