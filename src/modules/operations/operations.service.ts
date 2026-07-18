@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../../database/database.service';
 import { CurrentUser } from '../../common/types';
@@ -46,6 +46,79 @@ export class OperationsService {
       label: MODULE_LABELS[key],
       path: `/${key}`,
     }));
+  }
+
+  async publicStatusNotices() {
+    return this.db.query<any[]>(
+      `SELECT id, title, message, noticeType, status, startsAt, endsAt, publishedAt, resolvedAt, updatedAt
+       FROM StatusNotice
+       WHERE publishedAt IS NOT NULL
+         AND (endsAt IS NULL OR endsAt >= DATE_SUB(NOW(3), INTERVAL 7 DAY))
+       ORDER BY CASE status WHEN 'INVESTIGATING' THEN 0 WHEN 'IDENTIFIED' THEN 1 WHEN 'MONITORING' THEN 2 WHEN 'SCHEDULED' THEN 3 ELSE 4 END,
+                COALESCE(startsAt, publishedAt) DESC
+       LIMIT 20`,
+    ).catch(() => []);
+  }
+
+  async workspaceSetup(user: CurrentUser) {
+    const companyId = this.requireCompany(user);
+    const [companyRows, technicians, customers, devices, emailRows, backupRows] = await Promise.all([
+      this.db.query<any[]>(`SELECT id, name, domain, logo, settings FROM Company WHERE id = ? AND deletedAt IS NULL LIMIT 1`, [companyId]),
+      this.count(`SELECT COUNT(*) count FROM User WHERE companyId = ? AND role IN ('TECHNICIAN', 'GLOBAL_TECH') AND isActive = 1 AND deletedAt IS NULL`, [companyId]),
+      this.count(`SELECT COUNT(*) count FROM User WHERE companyId = ? AND role = 'CLIENT' AND isActive = 1 AND deletedAt IS NULL`, [companyId]),
+      this.count(`SELECT COUNT(*) count FROM Asset WHERE companyId = ? AND deletedAt IS NULL`, [companyId]),
+      this.db.query<any[]>(`SELECT isActive, lastTestStatus FROM EmailProviderConfig WHERE id = 'global-smtp' LIMIT 1`).catch(() => []),
+      this.db.query<any[]>(`SELECT status, completedAt FROM BackupRun WHERE status = 'COMPLETED' ORDER BY completedAt DESC LIMIT 1`).catch(() => []),
+    ]);
+    const company = companyRows[0] || {};
+    const profileComplete = Boolean(company.name && (company.domain || company.logo || company.settings));
+    const steps = [
+      { id: 'company', label: 'Complete company profile', href: '/settings', complete: profileComplete },
+      { id: 'technician', label: 'Add the first technician', href: '/admin/company', complete: technicians > 0 },
+      { id: 'customer', label: 'Add the first customer', href: '/admin/company', complete: customers > 0 },
+      { id: 'device', label: 'Add the first managed device', href: '/assets/new', complete: devices > 0 },
+      { id: 'email', label: 'Test outbound email', href: '/admin/email-operations', complete: Boolean(emailRows[0]?.isActive && emailRows[0]?.lastTestStatus === 'PASS') },
+      { id: 'backup', label: 'Complete an encrypted off-site backup', href: '/admin/security-operations', complete: Boolean(backupRows[0]) },
+    ];
+    const complete = steps.filter((step) => step.complete).length;
+    return { steps, complete, total: steps.length, progress: Math.round((complete / steps.length) * 100) };
+  }
+
+  async listSavedViews(resourceKey: string, user: CurrentUser) {
+    this.assertSavedViewResource(resourceKey);
+    const companyId = this.savedViewCompany(user);
+    const rows = await this.db.query<any[]>(
+      `SELECT id, resourceKey, name, filters, isDefault, createdAt, updatedAt
+       FROM SavedView WHERE companyId = ? AND userId = ? AND resourceKey = ?
+       ORDER BY isDefault DESC, name`,
+      [companyId, user.id, resourceKey],
+    );
+    return rows.map((row) => ({ ...row, isDefault: Boolean(row.isDefault), filters: this.parseJson(row.filters, {}) }));
+  }
+
+  async saveView(resourceKey: string, body: { name: string; filters: Record<string, unknown>; isDefault?: boolean }, user: CurrentUser) {
+    this.assertSavedViewResource(resourceKey);
+    const companyId = this.savedViewCompany(user);
+    const name = String(body.name || '').trim().slice(0, 120);
+    if (!name) throw new BadRequestException('View name is required');
+    if (!body.filters || typeof body.filters !== 'object' || Array.isArray(body.filters)) throw new BadRequestException('View filters must be an object');
+    if (body.isDefault) await this.db.execute(`UPDATE SavedView SET isDefault = 0, updatedAt = NOW(3) WHERE userId = ? AND resourceKey = ?`, [user.id, resourceKey]);
+    const id = randomUUID();
+    await this.db.execute(
+      `INSERT INTO SavedView (id, companyId, userId, resourceKey, name, filters, isDefault, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3), NOW(3))
+       ON DUPLICATE KEY UPDATE filters = VALUES(filters), isDefault = VALUES(isDefault), updatedAt = NOW(3)`,
+      [id, companyId, user.id, resourceKey, name, JSON.stringify(body.filters), body.isDefault ? 1 : 0],
+    );
+    return { saved: true, resourceKey, name };
+  }
+
+  async deleteSavedView(resourceKey: string, id: string, user: CurrentUser) {
+    this.assertSavedViewResource(resourceKey);
+    const companyId = this.savedViewCompany(user);
+    const result = await this.db.execute(`DELETE FROM SavedView WHERE id = ? AND companyId = ? AND userId = ? AND resourceKey = ?`, [id, companyId, user.id, resourceKey]);
+    if (!result.affectedRows) throw new NotFoundException('Saved view not found');
+    return { id, deleted: true };
   }
 
   async summary(user: CurrentUser) {
@@ -162,6 +235,26 @@ export class OperationsService {
     const companyId = user.effectiveCompanyId || user.companyId;
     if (!companyId) throw new ForbiddenException('Select a company context first');
     return companyId;
+  }
+
+  private async count(sql: string, values: any[] = []) {
+    const rows = await this.db.query<any[]>(sql, values);
+    return Number(rows[0]?.count || 0);
+  }
+
+  private assertSavedViewResource(resourceKey: string) {
+    if (!['tickets', 'assets', 'network', 'users', 'dispatch'].includes(resourceKey)) {
+      throw new NotFoundException('Saved-view resource not found');
+    }
+  }
+
+  private savedViewCompany(user: CurrentUser) {
+    return user.effectiveCompanyId || user.companyId || 'platform';
+  }
+
+  private parseJson(value: any, fallback: any) {
+    if (typeof value !== 'string') return value ?? fallback;
+    try { return JSON.parse(value); } catch { return fallback; }
   }
 
   private assertModule(moduleKey: string): asserts moduleKey is OperationModuleKey {

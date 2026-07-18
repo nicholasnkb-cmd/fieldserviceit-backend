@@ -188,6 +188,7 @@ export class AuthService {
     }
 
     let companyId: string | null = null;
+    let createsCompany = false;
 
     if (dto.companyName && !dto.inviteCode && !dto.domain) {
       const slug = dto.companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now();
@@ -201,6 +202,7 @@ export class AuthService {
         },
       });
       companyId = company.id;
+      createsCompany = true;
 
     } else if (dto.inviteCode) {
       const company = await this.prisma.company.findUnique({
@@ -234,7 +236,7 @@ export class AuthService {
         jobTitle: dto.jobTitle?.trim() || null,
         department: dto.department?.trim() || null,
         passwordHash,
-        role: 'CLIENT',
+        role: createsCompany ? 'TENANT_ADMIN' : 'CLIENT',
         userType: 'BUSINESS',
         companyId,
         emailVerified: true,

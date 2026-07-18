@@ -23,6 +23,7 @@ import { AuthorizationExempt } from '../../../common/decorators/authorization-ex
 import { TicketsService } from '../../tickets/services/tickets.service';
 import { TicketTimelineService } from '../../tickets/services/ticket-timeline.service';
 import { EmailDeliveryService } from '../../notifications/services/email-delivery.service';
+import { PlatformOperationsService } from '../services/platform-operations.service';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, BusinessOnlyGuard, RolesGuard, PermissionsGuard, StepUpGuard)
@@ -34,6 +35,7 @@ export class AdminController {
     private ticketsService: TicketsService,
     private ticketTimelineService: TicketTimelineService,
     private emailDeliveryService: EmailDeliveryService,
+    private platformOperations: PlatformOperationsService,
   ) {}
 
   private getCompanyId(user: CurrentUserType): string {
@@ -429,7 +431,42 @@ export class AdminController {
   @Get('system-readiness')
   @Roles('SUPER_ADMIN')
   getSystemReadiness() {
-    return this.adminService.getSystemReadiness();
+    return this.platformOperations.getSystemReadiness();
+  }
+
+  @RequirePermissions('platform-security.view')
+  @Get('operations-overview')
+  @Roles('SUPER_ADMIN')
+  getOperationsOverview() {
+    return this.platformOperations.overview();
+  }
+
+  @RequirePermissions('platform-security.manage')
+  @Post('status-notices')
+  @Roles('SUPER_ADMIN')
+  createStatusNotice(@Body() body: any, @CurrentUser() user: CurrentUserType) {
+    return this.platformOperations.createNotice(body, user);
+  }
+
+  @RequirePermissions('platform-security.manage')
+  @Patch('status-notices/:id')
+  @Roles('SUPER_ADMIN')
+  updateStatusNotice(@Param('id') id: string, @Body() body: any, @CurrentUser() user: CurrentUserType) {
+    return this.platformOperations.updateNotice(id, body, user);
+  }
+
+  @RequirePermissions('platform-security.manage')
+  @Delete('status-notices/:id')
+  @Roles('SUPER_ADMIN')
+  deleteStatusNotice(@Param('id') id: string) {
+    return this.platformOperations.deleteNotice(id);
+  }
+
+  @RequirePermissions('companies.manage')
+  @Post('companies/cleanup-abandoned')
+  @Roles('SUPER_ADMIN')
+  cleanupAbandonedTenants(@Body('dryRun') dryRun?: boolean) {
+    return this.platformOperations.cleanupAbandonedTenants(dryRun !== false);
   }
 
   @RequirePermissions('billing.view')
@@ -619,6 +656,14 @@ export class AdminController {
   async getTicketEmailDeliveries(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     await this.ticketsService.findOne(id, { ...user, companyId: null, effectiveCompanyId: null }, false);
     return this.emailDeliveryService.ticketHistory(id);
+  }
+
+  @RequirePermissions('users.manage')
+  @Post('users/bulk/status')
+  @Roles('SUPER_ADMIN')
+  @RequireStepUp()
+  bulkUserStatus(@Body() body: { ids: string[]; isActive: boolean }, @CurrentUser() user: CurrentUserType) {
+    return this.platformOperations.bulkUserStatus(body.ids, body.isActive, user);
   }
 
   @RequirePermissions('users.view')

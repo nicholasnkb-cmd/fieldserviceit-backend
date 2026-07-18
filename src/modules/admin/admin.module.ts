@@ -9,11 +9,12 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
 import { ScimTokenGuard } from '../../common/guards/scim-token.guard';
 import { TicketsModule } from '../tickets/tickets.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PlatformOperationsService } from './services/platform-operations.service';
 
 @Module({
   imports: [AuditLogModule, TicketsModule, NotificationsModule],
   controllers: [AdminController, ScimController, AccessRequestsController],
-  providers: [AdminService, AccessGovernanceService, ScimService, ScimTokenGuard],
+  providers: [AdminService, PlatformOperationsService, AccessGovernanceService, ScimService, ScimTokenGuard],
   exports: [AdminService],
 })
 export class AdminModule {}

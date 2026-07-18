@@ -278,13 +278,15 @@ export class AccessGovernanceService {
 
   async createSecurityDestination(dto: any, actor: CurrentUser) {
     this.assertWebhookUrl(dto.endpointUrl);
+    const destinationType = String(dto.destinationType || 'WEBHOOK').toUpperCase();
+    if (!['WEBHOOK', 'SLACK', 'TEAMS', 'SIEM'].includes(destinationType)) throw new BadRequestException('Destination type is not supported');
     const id = crypto.randomUUID();
     await this.prisma.execute(
       `INSERT INTO SecurityEventDestination
        (id, companyId, name, destinationType, endpointUrl, secretEncrypted, minimumSeverity, isActive, createdById, createdAt, updatedAt)
        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, NOW(3), NOW(3))`,
       [
-        id, actor.companyId, dto.name, String(dto.destinationType || 'WEBHOOK').toUpperCase(),
+        id, actor.companyId, dto.name, destinationType,
         dto.endpointUrl, dto.secret ? encryptSecret(dto.secret) : null, dto.minimumSeverity || 'info', actor.id,
       ],
     );
@@ -305,12 +307,14 @@ export class AccessGovernanceService {
   async testSecurityDestination(id: string, actor: CurrentUser) {
     const destination = await this.getScopedRow('SecurityEventDestination', id, actor);
     this.assertWebhookUrl(destination.endpointUrl);
-    const payload = JSON.stringify({
+    const event = {
       eventType: 'FIELD_SERVICE_IT_SECURITY_TEST',
       severity: 'info',
+      summary: 'FieldserviceIT operations alert test',
       timestamp: new Date().toISOString(),
       destinationId: id,
-    });
+    };
+    const payload = this.destinationPayload(destination, event);
     const headers: Record<string, string> = { 'content-type': 'application/json', 'user-agent': 'FieldserviceIT-Security-Events/1.0' };
     if (destination.secretEncrypted) {
       headers['x-fsit-signature'] = crypto.createHmac('sha256', decryptSecret(destination.secretEncrypted)).update(payload).digest('hex');
@@ -819,7 +823,7 @@ export class AccessGovernanceService {
 
   private async deliverSecurityEvent(destination: any, event: any) {
     this.assertWebhookUrl(destination.endpointUrl);
-    const payload = JSON.stringify(event);
+    const payload = this.destinationPayload(destination, event);
     const headers: Record<string, string> = { 'content-type': 'application/json', 'user-agent': 'FieldserviceIT-Security-Events/1.0' };
     if (destination.secretEncrypted) {
       headers['x-fsit-signature'] = crypto.createHmac('sha256', decryptSecret(destination.secretEncrypted)).update(payload).digest('hex');
@@ -854,6 +858,30 @@ export class AccessGovernanceService {
     if (host === 'localhost' || host === '::1' || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host)) {
       throw new BadRequestException('Private network webhook destinations are not allowed');
     }
+  }
+
+  private destinationPayload(destination: any, event: any) {
+    const type = String(destination.destinationType || 'WEBHOOK').toUpperCase();
+    const summary = String(event.summary || event.eventType || event.alertType || 'FieldserviceIT operations alert');
+    const severity = String(event.severity || 'info').toUpperCase();
+    if (type === 'SLACK') {
+      return JSON.stringify({
+        text: `[${severity}] ${summary}`,
+        blocks: [
+          { type: 'header', text: { type: 'plain_text', text: `FieldserviceIT ${severity}`, emoji: true } },
+          { type: 'section', text: { type: 'mrkdwn', text: `*${summary}*\n${event.detail ? `\`${JSON.stringify(event.detail).slice(0, 1000)}\`` : 'Review the operations console for details.'}` } },
+        ],
+      });
+    }
+    if (type === 'TEAMS') {
+      return JSON.stringify({
+        '@type': 'MessageCard', '@context': 'https://schema.org/extensions',
+        summary, themeColor: severity === 'CRITICAL' ? 'B91C1C' : severity === 'WARNING' ? 'D97706' : '2563EB',
+        title: `FieldserviceIT ${severity}`, text: summary,
+        sections: [{ facts: [{ name: 'Event', value: String(event.eventType || event.alertType || 'operations') }, { name: 'Time', value: String(event.timestamp || event.createdAt || new Date().toISOString()) }] }],
+      });
+    }
+    return JSON.stringify(event);
   }
 
   private hash(value: string) {

@@ -42,6 +42,12 @@ export class FieldServiceController {
     return this.fieldService.getDispatchBoard(this.readCompanyId(user));
   }
 
+  @Post('bulk/status')
+  @RequirePermissions('dispatch.edit')
+  bulkStatus(@Body() body: { ids: string[]; status: string }, @CurrentUser() user: CurrentUserType) {
+    return this.fieldService.bulkUpdateStatus(body.ids, body.status, this.companyId(user), user.id);
+  }
+
   @Get(':id/offline-packet')
   @RequirePermissions('dispatch.view')
   offlinePacket(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {

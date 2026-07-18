@@ -265,7 +265,7 @@ describe('AuthService', () => {
     it('should create company without assigning a Free company plan when companyName is provided', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
       const mockCompany = { id: 'company-1', name: 'Test Corp', slug: 'test-corp', inviteCode: 'ABCD1234' };
-      const mockUser = { id: 'user-1', email: 'new@company.com', firstName: 'John', lastName: 'Doe', companyId: 'company-1', role: 'CLIENT', userType: 'BUSINESS', emailVerified: true };
+      const mockUser = { id: 'user-1', email: 'new@company.com', firstName: 'John', lastName: 'Doe', companyId: 'company-1', role: 'TENANT_ADMIN', userType: 'BUSINESS', emailVerified: true };
 
       mockPrisma.company.create.mockResolvedValue(mockCompany);
       mockPrisma.user.create.mockResolvedValue(mockUser);
@@ -278,7 +278,7 @@ describe('AuthService', () => {
       expect(mockPrisma.plan.findUnique).not.toHaveBeenCalled();
       expect(mockPrisma.companyPlan.upsert).not.toHaveBeenCalled();
       expect(mockPrisma.user.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ companyId: 'company-1', email: 'new@company.com' }) }),
+        expect.objectContaining({ data: expect.objectContaining({ companyId: 'company-1', email: 'new@company.com', role: 'TENANT_ADMIN' }) }),
       );
       expect(mockPrisma.execute).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO UserLegalConsent'),
