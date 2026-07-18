@@ -17,6 +17,7 @@ import { RequireFeature } from '../../../common/decorators/feature.decorator';
 import { FeatureAccessGuard } from '../../../common/guards/feature-access.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { NetworkInventoryService } from '../services/network-inventory.service';
+import { AssetLifecycleService } from '../services/asset-lifecycle.service';
 
 @Controller('assets')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
@@ -24,7 +25,7 @@ import { NetworkInventoryService } from '../services/network-inventory.service';
 @RequireFeature('assets')
 @RequirePermissions('assets.view')
 export class CmdbController {
-  constructor(private cmdbService: CmdbService, private networkInventory: NetworkInventoryService) {}
+  constructor(private cmdbService: CmdbService, private networkInventory: NetworkInventoryService, private assetLifecycle: AssetLifecycleService) {}
 
   private getCompanyId(user: CurrentUserType) {
     const companyId = user.effectiveCompanyId || user.companyId;
@@ -47,6 +48,24 @@ export class CmdbController {
   @RequirePermissions('assets.delete')
   restore(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
     return this.cmdbService.restore(id, this.getCompanyId(user), user.id);
+  }
+
+  @Delete('retired/:id')
+  @RequirePermissions('assets.delete')
+  purgeRetired(@Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.assetLifecycle.purge(id, this.getCompanyId(user), user.id);
+  }
+
+  @Post('bulk/retire')
+  @RequirePermissions('assets.delete')
+  bulkRetireAssets(@Body('ids') ids: string[], @CurrentUser() user: CurrentUserType) {
+    return this.assetLifecycle.bulkRetire(ids, this.getCompanyId(user), user.id);
+  }
+
+  @Post('bulk/restore')
+  @RequirePermissions('assets.delete')
+  bulkRestoreAssets(@Body('ids') ids: string[], @CurrentUser() user: CurrentUserType) {
+    return this.assetLifecycle.bulkRestore(ids, this.getCompanyId(user), user.id);
   }
 
   @Post('network/bulk/retire')

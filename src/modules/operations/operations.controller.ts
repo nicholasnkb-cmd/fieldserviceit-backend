@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { BusinessOnlyGuard } from '../../common/guards/business-only.guard';
@@ -29,6 +29,30 @@ export class OperationsController {
   @Get('summary')
   summary(@CurrentUser() user: CurrentUserType) {
     return this.operationsService.summary(user);
+  }
+
+  @RequirePermissions('operations.view')
+  @Get('workspace-setup')
+  workspaceSetup(@CurrentUser() user: CurrentUserType) {
+    return this.operationsService.workspaceSetup(user);
+  }
+
+  @RequirePermissions('operations.view')
+  @Get('saved-views/:resourceKey')
+  savedViews(@Param('resourceKey') resourceKey: string, @CurrentUser() user: CurrentUserType) {
+    return this.operationsService.listSavedViews(resourceKey, user);
+  }
+
+  @RequirePermissions('operations.view')
+  @Post('saved-views/:resourceKey')
+  saveView(@Param('resourceKey') resourceKey: string, @Body() body: { name: string; filters: Record<string, unknown>; isDefault?: boolean }, @CurrentUser() user: CurrentUserType) {
+    return this.operationsService.saveView(resourceKey, body, user);
+  }
+
+  @RequirePermissions('operations.view')
+  @Delete('saved-views/:resourceKey/:id')
+  deleteSavedView(@Param('resourceKey') resourceKey: string, @Param('id') id: string, @CurrentUser() user: CurrentUserType) {
+    return this.operationsService.deleteSavedView(resourceKey, id, user);
   }
 
   @RequirePermissions('operations.view')

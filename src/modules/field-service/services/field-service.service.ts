@@ -209,6 +209,14 @@ export class FieldServiceService {
     return result;
   }
 
+  async bulkUpdateStatus(ids: string[], status: string, companyId: string, actorUserId?: string) {
+    const uniqueIds = [...new Set((ids || []).map(String))].slice(0, 100);
+    if (!uniqueIds.length) throw new BadRequestException('Select at least one dispatch');
+    const updated = [];
+    for (const id of uniqueIds) updated.push(await this.updateStatus(id, status, companyId, actorUserId));
+    return { updated: updated.length };
+  }
+
   async addNotes(id: string, notes: string, companyId: string, actorUserId?: string) {
     const dispatch = await this.prisma.dispatch.findFirst({ where: { id, companyId } });
     if (!dispatch) throw new NotFoundException('Dispatch not found');

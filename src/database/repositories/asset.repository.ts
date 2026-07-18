@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
 @Injectable()
@@ -45,5 +45,21 @@ export class AssetRepository {
     if (!retired[0]) throw new NotFoundException('Retired asset not found');
     await this.prisma.asset.update({ where: { id, companyId }, data: { deletedAt: null } });
     return this.findTenantAsset(id, companyId);
+  }
+
+  async purgeRetiredTenantAsset(id: string, companyId: string, minimumAgeDays = 30) {
+    const rows = await this.prisma.query<Array<{ id: string; deletedAt: Date }>>(
+      `SELECT id, deletedAt FROM Asset
+       WHERE id = ? AND companyId = ? AND deletedAt IS NOT NULL
+       LIMIT 1`,
+      [id, companyId],
+    );
+    if (!rows[0]) throw new NotFoundException('Retired asset not found');
+    const ageMs = Date.now() - new Date(rows[0].deletedAt).getTime();
+    if (ageMs < minimumAgeDays * 24 * 60 * 60 * 1000) {
+      throw new BadRequestException(`Retired assets remain recoverable for ${minimumAgeDays} days`);
+    }
+    await this.prisma.execute(`DELETE FROM Asset WHERE id = ? AND companyId = ? AND deletedAt IS NOT NULL`, [id, companyId]);
+    return { id, purged: true };
   }
 }
