@@ -1,5 +1,6 @@
 import { Injectable, Logger as NestLogger } from '@nestjs/common';
 import { Request } from 'express';
+import { createHmac } from 'crypto';
 
 /**
  * Structured Logger Service
@@ -49,6 +50,7 @@ export class StructuredLogger {
   private performanceMetrics: Map<string, { count: number; totalTime: number; slowCount: number }> = new Map();
   private readonly METRICS_INTERVAL = 300000; // Report every 5 minutes
   private readonly SLOW_QUERY_THRESHOLD = 1000; // 1 second
+  private shipFailureReportedAt = 0;
 
   constructor() {
     // Report metrics every 5 minutes
@@ -123,10 +125,10 @@ export class StructuredLogger {
     error?: Error,
     metadata?: Record<string, any>,
   ) {
-    this.errorCount++;
     const log = this.buildLog(message, 'error', context, request, metadata, error);
     console.error(JSON.stringify(log));
     this.logger.error(message, { ...log, stack: error?.stack });
+    this.ship(log);
   }
 
   /**
@@ -140,6 +142,7 @@ export class StructuredLogger {
   ) {
     const log = this.buildLog(message, 'warn', context, request, metadata);
     console.warn(JSON.stringify(log));
+    this.ship(log);
   }
 
   /**
@@ -153,6 +156,7 @@ export class StructuredLogger {
   ) {
     const log = this.buildLog(message, 'info', context, request, metadata);
     console.log(JSON.stringify(log));
+    this.ship(log);
   }
 
   trackRequest(latencyMs: number, statusCode: number) {
@@ -264,6 +268,30 @@ export class StructuredLogger {
     };
 
     console.log(JSON.stringify(metricsLog));
+    this.ship(metricsLog);
+  }
+
+  private ship(event: Record<string, any>) {
+    const endpoint = process.env.SIEM_INGEST_URL;
+    const secret = process.env.SIEM_INGEST_SECRET;
+    if (!endpoint || !secret || typeof fetch !== 'function') return;
+    const body = JSON.stringify(event);
+    const signature = createHmac('sha256', secret).update(body).digest('hex');
+    fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-fieldserviceit-signature': `sha256=${signature}`,
+      },
+      body,
+      signal: AbortSignal.timeout(5000),
+    }).then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    }).catch((error) => {
+      if (Date.now() - this.shipFailureReportedAt < 60 * 60 * 1000) return;
+      this.shipFailureReportedAt = Date.now();
+      console.warn(JSON.stringify({ timestamp: new Date().toISOString(), event: 'siem_log_shipping_failed', error: error?.message || String(error) }));
+    });
   }
 
   /**

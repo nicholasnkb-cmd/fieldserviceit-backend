@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PRIVACY_VERSION, TERMS_VERSION } from '../src/modules/auth/legal-consent';
+import { authCookieValue } from './auth-cookie.helper';
 
 describe('FieldserviceIT E2E', () => {
   let app: INestApplication;
@@ -34,9 +35,9 @@ describe('FieldserviceIT E2E', () => {
         .send({ email: 'admin@acme.com', password: 'admin123' })
         .expect(200);
 
-      expect(res.body.accessToken).toBeDefined();
+      expect(res.body.accessToken).toBeUndefined();
       expect(res.body.user.email).toBe('admin@acme.com');
-      adminToken = res.body.accessToken;
+      adminToken = authCookieValue(res, 'fsit_access');
     });
 
     it('POST /v1/auth/login - super admin login', async () => {
@@ -45,7 +46,7 @@ describe('FieldserviceIT E2E', () => {
         .send({ email: 'super@fieldserviceit.com', password: 'admin123' })
         .expect(200);
 
-      superToken = res.body.accessToken;
+      superToken = authCookieValue(res, 'fsit_access');
     });
 
     it('POST /v1/auth/login - bad password returns 401', async () => {
@@ -60,7 +61,7 @@ describe('FieldserviceIT E2E', () => {
         .post('/v1/auth/register')
         .send({
           email: 'e2e-public@test.com',
-          password: 'Test123!',
+          password: 'Test-password-123!',
           firstName: 'E2E',
           lastName: 'Public',
           termsAccepted: true,
@@ -69,7 +70,8 @@ describe('FieldserviceIT E2E', () => {
         })
         .expect(201);
 
-      expect(res.body.accessToken).toBeDefined();
+      expect(res.body.accessToken).toBeUndefined();
+      expect(authCookieValue(res, 'fsit_access')).toBeTruthy();
     });
   });
 

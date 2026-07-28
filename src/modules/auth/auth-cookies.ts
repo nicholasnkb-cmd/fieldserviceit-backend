@@ -10,6 +10,7 @@ function cookieOptions(req?: Request) {
     httpOnly: true,
     secure,
     sameSite: 'lax' as const,
+    priority: 'high' as const,
     path: '/',
     ...(domain ? { domain } : {}),
   };

@@ -12,6 +12,7 @@ import { assertTenantRoleChange, tenantAssignableRoles } from './tenant-role-gov
 import { MigrationsService } from '../../../database/migrations/migrations.service';
 import { deployedCommit } from '../../../common/release-metadata';
 import { migrationReadiness } from './migration-readiness';
+import { assertPasswordPolicy } from '../../../common/security/password-policy';
 
 const BCRYPT_ROUNDS = 12;
 const VALID_ROLES = ['SUPER_ADMIN', 'GLOBAL_TECH', 'TENANT_ADMIN', 'TECHNICIAN', 'CLIENT', 'READ_ONLY'];
@@ -1271,6 +1272,7 @@ export class AdminService {
   }
 
   async createUser(dto: { email: string; password: string; firstName: string; lastName: string; role?: string; companyId?: string }) {
+    assertPasswordPolicy(dto.password, [dto.email, dto.firstName, dto.lastName]);
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('Email already in use');
 
@@ -1648,6 +1650,7 @@ export class AdminService {
     companyId: string,
     actor?: CurrentUser,
   ) {
+    assertPasswordPolicy(dto.password, [dto.email, dto.firstName, dto.lastName]);
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new BadRequestException('Email already in use');
 

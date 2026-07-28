@@ -10,6 +10,7 @@ import { join } from 'path';
 import { json } from 'express';
 import { AppModule } from './app.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
+import { browserOriginProtection } from './common/middleware/browser-origin-protection.middleware';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
@@ -23,6 +24,12 @@ async function bootstrap() {
 
   app.use(json({ verify: (req: any, _res, buf) => { req.rawBody = buf.toString(); } }));
 
+  app.use(browserOriginProtection({
+    frontendUrl: configService.get<string>('FRONTEND_URL'),
+    corsOrigin: configService.get<string>('CORS_ORIGIN'),
+    production: nodeEnv === 'production',
+  }));
+
   // Add correlation ID middleware early in the chain for request tracing
   app.use(CorrelationIdMiddleware.prototype.use.bind(new CorrelationIdMiddleware()));
 
@@ -33,12 +40,14 @@ async function bootstrap() {
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'"],
-        fontSrc: ["'self'"],
+        defaultSrc: ["'none'"],
+        scriptSrc: ["'none'"],
+        styleSrc: ["'none'"],
+        imgSrc: ["'none'"],
+        connectSrc: ["'none'"],
+        fontSrc: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
         upgradeInsecureRequests: [],

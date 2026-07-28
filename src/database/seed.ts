@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from '@nestjs/common';
 import { DatabaseService } from './database.service';
+import { PRODUCT_CATALOG } from '../config/product-catalog.generated';
 
 const logger = new Logger('Seed');
 
@@ -19,6 +20,10 @@ type PlanSeed = {
   name: string;
   description: string;
   monthlyPrice: number;
+  annualPrice: number;
+  seatMonthlyPrice: number;
+  seatAnnualPrice: number;
+  trialDays: number;
   maxUsers: number;
   maxTickets: number;
   sortOrder: number;
@@ -73,55 +78,10 @@ async function upsertByUnique(db: DatabaseService, table: string, uniqueColumn: 
 }
 
 async function ensurePlans(db: DatabaseService) {
-  const plans: PlanSeed[] = [
-    {
-      id: 'plan-free',
-      name: 'Free',
-      description: 'Basic ticket tracking for individuals',
-      monthlyPrice: 0,
-      maxUsers: 1,
-      maxTickets: 50,
-      sortOrder: 0,
-      features: { tickets: true, emailNotifications: true, publicSubmit: true },
-    },
-    {
-      id: 'plan-starter',
-      name: 'Starter',
-      description: 'For individuals who need higher-volume support tracking',
-      monthlyPrice: 29,
-      maxUsers: 1,
-      maxTickets: -1,
-      sortOrder: 1,
-      features: { tickets: true, dispatch: true, assets: true, emailNotifications: true, publicSubmit: true, csvExport: true, apiAccess: true },
-    },
-    {
-      id: 'plan-business',
-      name: 'Business',
-      description: 'The single company plan with ITSM, MDM, RMM, SLA, workflows, and reporting',
-      monthlyPrice: 79,
-      maxUsers: -1,
-      maxTickets: -1,
-      sortOrder: 2,
-      features: {
-        tickets: true,
-        dispatch: true,
-        assets: true,
-        emailNotifications: true,
-        publicSubmit: true,
-        csvExport: true,
-        apiAccess: true,
-        rmmIntegration: true,
-        slaManagement: true,
-        workflows: true,
-        reporting: true,
-        auditLogs: true,
-        branding: true,
-        timeTracking: true,
-        contracts: true,
-        kb: true,
-      },
-    },
-  ];
+  const plans: PlanSeed[] = PRODUCT_CATALOG.plans.map(({ slug: _slug, audience: _audience, ...plan }) => ({
+    ...plan,
+    features: { ...plan.features },
+  }));
 
   for (const plan of plans) {
     await upsertByUnique(db, 'Plan', 'name', plan.name, {

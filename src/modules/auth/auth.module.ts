@@ -9,6 +9,9 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { MfaService } from './services/mfa.service';
 import { OidcAuthService } from './services/oidc-auth.service';
 import { ServiceAccountGuard } from '../../common/guards/service-account.guard';
+import { PasskeyService } from './services/passkey.service';
+import { MfaResetController } from './controllers/mfa-reset.controller';
+import { MfaResetService } from './services/mfa-reset.service';
 
 @Module({
   imports: [
@@ -22,8 +25,8 @@ import { ServiceAccountGuard } from '../../common/guards/service-account.guard';
       }),
     }),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, MfaService, OidcAuthService, JwtStrategy, ServiceAccountGuard],
+  controllers: [AuthController, MfaResetController],
+  providers: [AuthService, MfaService, PasskeyService, MfaResetService, OidcAuthService, JwtStrategy, ServiceAccountGuard],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

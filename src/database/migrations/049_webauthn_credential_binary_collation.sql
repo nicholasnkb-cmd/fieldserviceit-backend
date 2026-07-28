@@ -1,0 +1,2 @@
+ALTER TABLE WebAuthnCredential
+  MODIFY COLUMN credentialId VARCHAR(512) CHARACTER SET ascii COLLATE ascii_bin NOT NULL;

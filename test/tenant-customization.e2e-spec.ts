@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { authCookieValue } from './auth-cookie.helper';
 
 describe('Tenant customization E2E', () => {
   let app: INestApplication;
@@ -22,7 +23,7 @@ describe('Tenant customization E2E', () => {
       .post('/v1/auth/login')
       .send({ email: 'admin@acme.com', password: 'admin123' })
       .expect(200);
-    adminToken = login.body.accessToken;
+    adminToken = authCookieValue(login, 'fsit_access');
   });
 
   afterAll(async () => {

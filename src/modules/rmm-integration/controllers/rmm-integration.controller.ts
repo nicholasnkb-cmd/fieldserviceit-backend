@@ -14,6 +14,12 @@ import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import * as crypto from 'crypto';
 import { credentialEncryptionKeys } from '../../../common/security/encryption';
+import {
+  CreateRmmAlertDto,
+  SaveRmmConfigDto,
+  SyncRmmAssetDto,
+  TestRmmConfigDto,
+} from '../dto/rmm-integration.dto';
 
 @Controller('integrations/rmm')
 @UseGuards(JwtAuthGuard, TenantGuard, BusinessOnlyGuard, FeatureAccessGuard, PermissionsGuard)
@@ -37,14 +43,14 @@ export class RmmIntegrationController {
 
   @Post('sync-asset')
   @RequirePermissions('assets.edit')
-  syncAsset(@Body() body: { provider: string; assetData: any }, @CurrentUser() user: CurrentUserType) {
+  syncAsset(@Body() body: SyncRmmAssetDto, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     return this.rmmIntegration.syncAsset(body.provider, body.assetData, companyId);
   }
 
   @Post('alert')
   @RequirePermissions('tickets.create')
-  createFromAlert(@Body() body: { provider: string; alert: any }, @CurrentUser() user: CurrentUserType) {
+  createFromAlert(@Body() body: CreateRmmAlertDto, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     return this.rmmIntegration.createTicketFromAlert(body.provider, body.alert, companyId);
   }
@@ -67,12 +73,13 @@ export class RmmIntegrationController {
 
   @Post('configs/test')
   @RequirePermissions('assets.edit')
-  async testUnsavedConfig(@Body() body: { provider: string; credentials: any }, @CurrentUser() user: CurrentUserType) {
+  async testUnsavedConfig(@Body() body: TestRmmConfigDto, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     const provider = this.normalizeProvider(body.provider);
     const rmmProvider = this.providerFactory.getProvider(provider);
     const existing = await this.prisma.rmmProviderConfig.findFirst({ where: { companyId, provider } });
-    const credentials = this.mergeCredentials(existing?.credentials, body.credentials || {});
+    const incoming = this.providerFactory.sanitizeCredentialInput(provider, body.credentials);
+    const credentials = this.mergeCredentials(existing?.credentials, incoming);
     const result = rmmProvider.testConnection
       ? await rmmProvider.testConnection(credentials)
       : { valid: await rmmProvider.validateCredentials(credentials), message: 'Connection test completed.' };
@@ -86,14 +93,15 @@ export class RmmIntegrationController {
 
   @Post('configs')
   @RequirePermissions('assets.edit')
-  async saveConfig(@Body() body: { provider: string; credentials: any; syncIntervalMin?: number }, @CurrentUser() user: CurrentUserType) {
+  async saveConfig(@Body() body: SaveRmmConfigDto, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     const provider = this.normalizeProvider(body.provider);
     this.providerFactory.getProvider(provider);
 
     const existing = await this.prisma.rmmProviderConfig.findFirst({ where: { companyId, provider } });
     const syncIntervalMin = Math.min(10080, Math.max(5, Number(body.syncIntervalMin) || 60));
-    const credentials = this.encryptSecret(JSON.stringify(this.mergeCredentials(existing?.credentials, body.credentials || {})));
+    const incoming = this.providerFactory.sanitizeCredentialInput(provider, body.credentials);
+    const credentials = this.encryptSecret(JSON.stringify(this.mergeCredentials(existing?.credentials, incoming)));
     const config = existing
       ? await this.prisma.rmmProviderConfig.update({
           where: { id: existing.id },
@@ -156,6 +164,13 @@ export class RmmIntegrationController {
   syncNow(@Param('provider') provider: string, @CurrentUser() user: CurrentUserType) {
     const companyId = this.requireCompanyId(user);
     return this.rmmSync.syncProviderNow(companyId, this.normalizeProvider(provider));
+  }
+
+  @Post('sync-history/:runId/replay')
+  @RequirePermissions('assets.edit')
+  replaySync(@Param('runId') runId: string, @CurrentUser() user: CurrentUserType) {
+    const companyId = this.requireCompanyId(user);
+    return this.rmmSync.replaySyncRun(companyId, runId);
   }
 
   private requireCompanyId(user: CurrentUserType) {

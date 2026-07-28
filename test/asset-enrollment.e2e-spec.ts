@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
+import { authCookieValue } from './auth-cookie.helper';
 
 describe('Asset enrollment and lifecycle (E2E)', () => {
   let app: INestApplication;
@@ -45,7 +46,7 @@ describe('Asset enrollment and lifecycle (E2E)', () => {
       .post('/v1/auth/login')
       .send({ email: 'admin@acme.com', password: 'admin123' })
       .expect(200);
-    authToken = login.body.accessToken;
+    authToken = authCookieValue(login, 'fsit_access');
   });
 
   afterAll(async () => {

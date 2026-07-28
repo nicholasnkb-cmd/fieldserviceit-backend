@@ -30,9 +30,9 @@ describe('StepUpGuard', () => {
     await expect(guard.canActivate(context({ id: 'u1', sessionId: 's1' }))).rejects.toThrow(ForbiddenException);
   });
 
-  it('allows a recently verified MFA session', async () => {
+  it('allows a recently verified strong-authentication session', async () => {
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true);
-    prisma.query.mockResolvedValue([{ mfaEnabled: 1, mfaVerifiedAt: new Date() }]);
+    prisma.query.mockResolvedValue([{ mfaVerifiedAt: new Date() }]);
     await expect(guard.canActivate(context({ id: 'u1', sessionId: 's1' }))).resolves.toBe(true);
   });
 });

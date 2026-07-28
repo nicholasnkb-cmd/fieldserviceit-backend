@@ -11,19 +11,24 @@ import { ResetPasswordDto } from '../dto/reset-password.dto';
 import { RefreshDto } from '../dto/refresh.dto';
 import { TrackTicketDto } from '../dto/track-ticket.dto';
 import { ResendVerificationDto } from '../dto/resend-verification.dto';
-import { clearAuthCookies, readRefreshCookie, setAuthCookies } from '../auth-cookies';
+import { clearAuthCookies, readRefreshCookie, setAuthCookies, stripTokens } from '../auth-cookies';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { CurrentUser as CurrentUserType } from '../../../common/types';
 import { OidcAuthService } from '../services/oidc-auth.service';
 import { ServiceAccountGuard } from '../../../common/guards/service-account.guard';
 import { AuthorizationExempt } from '../../../common/decorators/authorization-exempt.decorator';
+import { PasskeyService } from '../services/passkey.service';
+import { PasskeyVerificationDto, RecoveryCodesDto, RenamePasskeyDto } from '../dto/passkey.dto';
+import { StepUpGuard } from '../../../common/guards/step-up.guard';
+import { RequireStepUp } from '../../../common/decorators/step-up.decorator';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
     private oidcAuthService: OidcAuthService,
+    private passkeys: PasskeyService,
   ) {}
 
   @Public()
@@ -33,7 +38,7 @@ export class AuthController {
   async login(@Body() body: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(body.email, body.password, body.mfaCode, this.clientContext(req));
     if ('accessToken' in result && 'refreshToken' in result) setAuthCookies(res, result as any, req);
-    return result;
+    return 'accessToken' in result ? stripTokens(result as any) : result;
   }
 
   @Public()
@@ -43,7 +48,7 @@ export class AuthController {
   async register(@Body() body: RegisterDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.registerPublic(body, this.clientContext(req));
     setAuthCookies(res, result, req);
-    return result;
+    return stripTokens(result);
   }
 
   @Public()
@@ -53,7 +58,7 @@ export class AuthController {
   async registerBusiness(@Body() body: RegisterBusinessDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.registerBusiness(body, this.clientContext(req));
     setAuthCookies(res, result, req);
-    return result;
+    return stripTokens(result);
   }
 
   @Public()
@@ -89,7 +94,7 @@ export class AuthController {
     if (!refreshToken) throw new UnauthorizedException('Refresh token is required');
     const result = await this.authService.refresh(refreshToken);
     setAuthCookies(res, result, req);
-    return result;
+    return stripTokens(result);
   }
 
   @Throttle({ default: { limit: 60, ttl: 60000 } })
@@ -159,7 +164,7 @@ export class AuthController {
     const login = await this.oidcAuthService.consumeLoginCode(body.code);
     const result = await this.authService.completeSsoLogin(login.userId, this.clientContext(req), true);
     if ('accessToken' in result && 'refreshToken' in result) setAuthCookies(res, result as any, req);
-    return result;
+    return 'accessToken' in result ? stripTokens(result as any) : result;
   }
 
   @Public()
@@ -179,7 +184,7 @@ export class AuthController {
   ) {
     const result = await this.authService.confirmChallengeEnrollment(body.challengeToken, body.code, this.clientContext(req));
     setAuthCookies(res, result, req);
-    return result;
+    return stripTokens(result);
   }
 
   @Public()
@@ -192,7 +197,66 @@ export class AuthController {
   ) {
     const result = await this.authService.confirmChallengeLogin(body.challengeToken, body.code, this.clientContext(req));
     setAuthCookies(res, result, req);
-    return result;
+    return stripTokens(result);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('passkeys/authentication-options')
+  passkeyAuthenticationOptions() {
+    return this.passkeys.authenticationOptions();
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('passkeys/authenticate')
+  async authenticatePasskey(
+    @Body() body: PasskeyVerificationDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const verified = await this.passkeys.verifyAuthentication(body.challengeId, body.response as any);
+    const result = await this.authService.completePasskeyLogin(verified.userId, this.clientContext(req));
+    setAuthCookies(res, result, req);
+    return stripTokens(result);
+  }
+
+  @Post('passkeys/registration-options')
+  @UseGuards(JwtAuthGuard, StepUpGuard)
+  @RequireStepUp()
+  @AuthorizationExempt('Authenticated users may enroll passkeys only for their own account', 'identity-team', '2027-01-31')
+  passkeyRegistrationOptions(@CurrentUser() user: CurrentUserType) {
+    return this.passkeys.registrationOptions(user);
+  }
+
+  @Post('passkeys/register')
+  @UseGuards(JwtAuthGuard, StepUpGuard)
+  @RequireStepUp()
+  @AuthorizationExempt('Authenticated users may verify passkeys only for their own account', 'identity-team', '2027-01-31')
+  registerPasskey(@CurrentUser() user: CurrentUserType, @Body() body: PasskeyVerificationDto) {
+    return this.passkeys.verifyRegistration(user, body.challengeId, body.response as any, body.name);
+  }
+
+  @Get('passkeys')
+  @UseGuards(JwtAuthGuard)
+  @AuthorizationExempt('Authenticated users may inspect passkeys associated with their own account', 'identity-team', '2027-01-31')
+  listPasskeys(@CurrentUser() user: CurrentUserType) {
+    return this.passkeys.list(user.id);
+  }
+
+  @Post('passkeys/:id/name')
+  @UseGuards(JwtAuthGuard)
+  @AuthorizationExempt('Authenticated users may rename passkeys associated with their own account', 'identity-team', '2027-01-31')
+  renamePasskey(@CurrentUser() user: CurrentUserType, @Param('id') id: string, @Body() body: RenamePasskeyDto) {
+    return this.passkeys.rename(user.id, id, body.name);
+  }
+
+  @Delete('passkeys/:id')
+  @UseGuards(JwtAuthGuard, StepUpGuard)
+  @RequireStepUp()
+  @AuthorizationExempt('Authenticated users may remove passkeys associated with their own account', 'identity-team', '2027-01-31')
+  removePasskey(@CurrentUser() user: CurrentUserType, @Param('id') id: string) {
+    return this.passkeys.remove(user.id, id);
   }
 
   @Get('mfa/status')
@@ -221,6 +285,13 @@ export class AuthController {
   @AuthorizationExempt('Authenticated users may disable their own MFA after credential verification', 'identity-team', '2026-09-30')
   disableMfa(@CurrentUser() user: CurrentUserType, @Body() body: { code: string; password: string }) {
     return this.authService.disableMfa(user.id, body.code, body.password);
+  }
+
+  @Post('mfa/recovery-codes')
+  @UseGuards(JwtAuthGuard)
+  @AuthorizationExempt('Authenticated users may rotate their recovery codes after password and MFA verification', 'identity-team', '2027-01-31')
+  regenerateRecoveryCodes(@CurrentUser() user: CurrentUserType, @Body() body: RecoveryCodesDto) {
+    return this.authService.regenerateRecoveryCodes(user.id, body.code, body.password);
   }
 
   @AuthorizationExempt('Authenticated users manage only their own MFA and session state', 'identity-team', '2026-09-30')
