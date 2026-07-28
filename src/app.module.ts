@@ -44,6 +44,7 @@ import { PlatformSecurityModule } from './modules/platform-security/platform-sec
 import { EndpointOperationsModule } from './modules/endpoint-operations/endpoint-operations.module';
 import { DeploymentsModule } from './modules/deployments/deployments.module';
 import { AppController } from './app.controller';
+import { PrivacyRequestsModule } from './modules/privacy-requests/privacy-requests.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { AppController } from './app.controller';
         JWT_SECRET: Joi.string().required().min(16),
         JWT_REFRESH_SECRET: Joi.string().optional(),
         CORS_ORIGIN: Joi.string().optional(),
+        FRONTEND_URL: Joi.string().uri().optional(),
         PORT: Joi.number().port().default(4000),
         NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
         TRUST_PROXY_HOPS: Joi.number().integer().min(1).max(5).default(1),
@@ -100,10 +102,14 @@ import { AppController } from './app.controller';
         CLAMAV_PORT: Joi.number().port().optional().default(3310),
         CLAMAV_REQUIRED: Joi.boolean().optional().default(false),
         OIDC_ALLOW_PRIVATE_ISSUERS: Joi.boolean().optional().default(false),
+        WEBAUTHN_RP_ID: Joi.string().hostname().optional(),
+        WEBAUTHN_ORIGINS: Joi.string().optional(),
         MONITORING_API_KEY: Joi.string().min(24).optional(),
         SENTRY_DSN: Joi.string().uri().optional(),
         SENTRY_ENABLED: Joi.boolean().optional().default(true),
         SENTRY_TRACES_SAMPLE_RATE: Joi.number().min(0).max(1).optional().default(0.05),
+        SIEM_INGEST_URL: Joi.string().uri().optional(),
+        SIEM_INGEST_SECRET: Joi.string().min(32).optional(),
       }),
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),
@@ -121,6 +127,7 @@ import { AppController } from './app.controller';
     AuditLogModule,
     AuthModule,
     UsersModule,
+    PrivacyRequestsModule,
     CompaniesModule,
     TicketsModule,
     CmdbModule,

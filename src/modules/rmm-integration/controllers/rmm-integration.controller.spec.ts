@@ -3,6 +3,7 @@ import { RmmIntegrationController } from './rmm-integration.controller';
 describe('RmmIntegrationController configuration tests', () => {
   it('merges saved secrets into an edited draft before testing', async () => {
     const validateCredentials = jest.fn().mockResolvedValue(true);
+    const sanitizeCredentialInput = jest.fn().mockReturnValue({ scope: 'monitoring management' });
     const prisma = {
       rmmProviderConfig: {
         findFirst: jest.fn().mockResolvedValue({
@@ -17,7 +18,7 @@ describe('RmmIntegrationController configuration tests', () => {
     const controller = new RmmIntegrationController(
       {} as any,
       {} as any,
-      { getProvider: () => ({ validateCredentials }) } as any,
+      { getProvider: () => ({ validateCredentials }), sanitizeCredentialInput } as any,
       prisma as any,
     );
 
@@ -36,6 +37,7 @@ describe('RmmIntegrationController configuration tests', () => {
       clientSecret: 'saved-secret',
       scope: 'monitoring management',
     });
+    expect(sanitizeCredentialInput).toHaveBeenCalledWith('ninjaone', { scope: 'monitoring management' });
   });
 
   it('uses the effective tenant context for super administrators', async () => {

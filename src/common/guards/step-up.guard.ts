@@ -25,8 +25,8 @@ export class StepUpGuard implements CanActivate {
     }
 
     const rows = await this.prisma.query<any[]>(
-      `SELECT s.mfaVerifiedAt, u.mfaEnabled
-       FROM Session s JOIN User u ON u.id = s.userId
+      `SELECT s.mfaVerifiedAt
+       FROM Session s
        WHERE s.id = ? AND s.userId = ? AND s.revokedAt IS NULL
        LIMIT 1`,
       [user.sessionId, user.id],
@@ -35,9 +35,6 @@ export class StepUpGuard implements CanActivate {
       return [];
     });
     const row = rows[0];
-    if (!row?.mfaEnabled) {
-      throw new ForbiddenException({ code: 'STEP_UP_REQUIRED', message: 'MFA must be enabled before this action' });
-    }
     const verifiedAt = row.mfaVerifiedAt ? new Date(row.mfaVerifiedAt).getTime() : 0;
     if (Date.now() - verifiedAt > 10 * 60 * 1000) {
       throw new ForbiddenException({ code: 'STEP_UP_REQUIRED', message: 'Recent MFA verification is required' });

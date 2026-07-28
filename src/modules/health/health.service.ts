@@ -3,6 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { PrismaService } from '../../database/prisma.service';
 import { StructuredLogger } from '../../common/logger/structured-logger.service';
 import { deployedCommit } from '../../common/release-metadata';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { randomUUID } from 'crypto';
 
 export interface HealthCheckResponse {
   status: 'ok' | 'degraded' | 'error';
@@ -215,6 +217,53 @@ export class HealthService {
       database: {
         status: 'ok',
       },
+    };
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async recordSloMeasurement() {
+    const started = Date.now();
+    let healthy = true;
+    try {
+      await this.prisma.query<any>('SELECT 1 as healthy');
+    } catch {
+      healthy = false;
+    }
+    const metrics = this.structuredLogger.getMetrics();
+    await this.prisma.execute(
+      `INSERT INTO SloMeasurement (id, serviceName, healthy, latencyMs, errorRate, releaseCommit, measuredAt)
+       VALUES (?, 'api', ?, ?, ?, ?, NOW(3))`,
+      [randomUUID(), healthy ? 1 : 0, Date.now() - started, parseFloat(metrics.requests.errorRate) || 0, this.commit],
+    ).catch((error) => this.logger.warn(`SLO measurement could not be stored: ${error?.message || error}`));
+  }
+
+  async slo() {
+    const rows = await this.prisma.query<any[]>(
+      `SELECT COUNT(*) AS samples,
+              SUM(CASE WHEN healthy = 1 THEN 1 ELSE 0 END) AS healthySamples,
+              AVG(latencyMs) AS averageLatencyMs,
+              AVG(errorRate) AS averageErrorRate
+       FROM SloMeasurement WHERE serviceName = 'api' AND measuredAt >= DATE_SUB(NOW(3), INTERVAL 30 DAY)`,
+    );
+    const row = rows[0] || {};
+    const samples = Number(row.samples || 0);
+    const availability = samples ? (Number(row.healthySamples || 0) / samples) * 100 : null;
+    const targets = { availabilityPercent: 99.9, averageLatencyMs: 750, errorRatePercent: 1 };
+    return {
+      windowDays: 30,
+      samples,
+      targets,
+      actual: {
+        availabilityPercent: availability === null ? null : Number(availability.toFixed(4)),
+        averageLatencyMs: row.averageLatencyMs === null ? null : Number(Number(row.averageLatencyMs).toFixed(2)),
+        errorRatePercent: row.averageErrorRate === null ? null : Number(Number(row.averageErrorRate).toFixed(4)),
+      },
+      meeting: samples === 0 ? null : {
+        availability: availability! >= targets.availabilityPercent,
+        latency: Number(row.averageLatencyMs || 0) <= targets.averageLatencyMs,
+        errorRate: Number(row.averageErrorRate || 0) <= targets.errorRatePercent,
+      },
+      generatedAt: new Date().toISOString(),
     };
   }
 

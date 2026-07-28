@@ -1,8 +1,7 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import { PrismaService } from '../../../database/prisma.service';
 import { RmmProviderFactory } from './rmm-provider-factory.service';
-import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { credentialEncryptionKeys } from '../../../common/security/encryption';
 
@@ -40,7 +39,7 @@ export class RmmSyncService implements OnModuleInit {
 
       const interval = setInterval(async () => {
         try {
-          await this.syncProviderAssets(config as any);
+          await this.runSyncWithRetry(config as any);
         } catch (err: any) {
           this.logger.error(`Dynamic sync failed for ${config.provider}/${config.companyId}: ${err.message}`);
         }
@@ -111,6 +110,42 @@ export class RmmSyncService implements OnModuleInit {
     }
   }
 
+  private async runSyncWithRetry(
+    config: { id: string; companyId: string; provider: string; credentials: string },
+    maxAttempts = 3,
+  ) {
+    const lockName = `rmm:${config.companyId}:${config.provider}`.slice(0, 64);
+    return this.prisma.transaction(async (connection) => {
+      const lockRows = await connection.query<any[]>(`SELECT GET_LOCK(?, 0) AS acquired`, [lockName]);
+      if (Number(lockRows[0]?.acquired) !== 1) {
+        throw new ConflictException(`A ${config.provider} synchronization is already running`);
+      }
+
+      try {
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          try {
+            const result = await this.syncProviderAssets(config);
+            return { ...result, attempts: attempt };
+          } catch (error) {
+            lastError = error;
+            if (attempt === maxAttempts) break;
+            const delayMs = Math.min(4_000, 250 * 2 ** (attempt - 1));
+            this.logger.warn(
+              `RMM sync attempt ${attempt}/${maxAttempts} failed for ${config.provider}/${config.companyId}; retrying in ${delayMs}ms`,
+            );
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+        }
+        throw lastError;
+      } finally {
+        await connection.query(`SELECT RELEASE_LOCK(?) AS released`, [lockName]).catch((error) => {
+          this.logger.error(`Failed to release RMM sync lock ${lockName}: ${error instanceof Error ? error.message : error}`);
+        });
+      }
+    });
+  }
+
   private async finishSyncRun(runId: string, configId: string, status: string, assetsCreated: number, assetsUpdated: number, assetsSkipped: number, errorMessage?: string) {
     const completedAt = new Date();
     await this.prisma.execute(
@@ -144,7 +179,7 @@ export class RmmSyncService implements OnModuleInit {
       const intervalMs = (config.syncIntervalMin || 60) * 60 * 1000;
       const interval = setInterval(async () => {
         try {
-          await this.syncProviderAssets(config as any);
+          await this.runSyncWithRetry(config as any);
         } catch (err: any) {
           this.logger.error(`Dynamic sync failed for ${provider}/${companyId}: ${err.message}`);
         }
@@ -166,8 +201,21 @@ export class RmmSyncService implements OnModuleInit {
     if (!config.isActive) {
       return { synced: false, error: `${provider} configuration is inactive` };
     }
-    const result = await this.syncProviderAssets(config as any);
+    const result = await this.runSyncWithRetry(config as any);
     return { ...result, provider, companyId };
+  }
+
+  async replaySyncRun(companyId: string, runId: string) {
+    const rows = await this.prisma.query<any[]>(
+      `SELECT id, provider, status FROM RmmSyncRun WHERE id = ? AND companyId = ? LIMIT 1`,
+      [runId, companyId],
+    );
+    const priorRun = rows[0];
+    if (!priorRun) throw new NotFoundException('RMM synchronization run not found');
+    if (String(priorRun.status).toUpperCase() === 'RUNNING') {
+      throw new ConflictException('A running synchronization cannot be replayed');
+    }
+    return this.syncProviderNow(companyId, String(priorRun.provider).toLowerCase());
   }
 
   private encryptionKey() {

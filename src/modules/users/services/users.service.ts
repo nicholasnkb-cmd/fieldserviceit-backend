@@ -3,6 +3,9 @@ import { PrismaService } from '../../../database/prisma.service';
 import { AuthorizationRepository } from '../../../database/repositories/authorization.repository';
 import { TENANT_ADMIN_DEFAULT_PERMISSIONS } from '../../../common/authorization/tenant-admin-defaults';
 import * as bcrypt from 'bcryptjs';
+import { assertPasswordPolicy } from '../../../common/security/password-policy';
+import { PRODUCT_CATALOG } from '../../../config/product-catalog.generated';
+import { parseFeatureMap, resolveFeatureMap } from '../../../common/authorization/feature-entitlements';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -25,6 +28,7 @@ export class UsersService {
   ) {}
 
   async create(dto: { email: string; password: string; firstName: string; lastName: string; role?: UserRole }, companyId: string) {
+    assertPasswordPolicy(dto.password, [dto.email, dto.firstName, dto.lastName]);
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     return this.prisma.user.create({
@@ -126,17 +130,33 @@ export class UsersService {
     const user = await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null } });
     if (!user) throw new NotFoundException('User not found');
     const company = user.companyId ? await this.prisma.company.findUnique({ where: { id: user.companyId } }) : null;
-    const companySettings = company?.settings ? JSON.parse(company.settings) : {};
-    const userOverrides = user.featureOverrides ? JSON.parse(user.featureOverrides) : {};
+    const companySettings = this.parseJsonObject(company?.settings);
+    const userOverrides = parseFeatureMap(user.featureOverrides);
+    const companyOverrides = parseFeatureMap(companySettings.featureOverrides);
+    const companyPlan = user.companyId
+      ? await this.prisma.companyPlan.findUnique({ where: { companyId: user.companyId }, include: { plan: true } })
+      : null;
+    const knownFeatures = [...new Set(PRODUCT_CATALOG.plans.flatMap((plan) => Object.keys(plan.features)))];
+    const features = companyPlan?.plan
+      ? resolveFeatureMap(companyPlan.plan.features, companyOverrides, userOverrides, knownFeatures)
+      : { ...companyOverrides, ...userOverrides };
     return {
       companyId: user.companyId,
-      features: {
-        ...(companySettings.featureOverrides || {}),
-        ...userOverrides,
-      },
+      plan: companyPlan?.plan?.name || null,
+      features,
       userOverrides,
-      companyOverrides: companySettings.featureOverrides || {},
+      companyOverrides,
     };
+  }
+
+  private parseJsonObject(value?: string | null): Record<string, any> {
+    if (!value) return {};
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
   }
 
   async listFavorites(userId: string) {
@@ -204,6 +224,7 @@ export class UsersService {
     if (!user.passwordHash) throw new BadRequestException('Password not set');
     const valid = await bcrypt.compare(oldPassword, user.passwordHash);
     if (!valid) throw new BadRequestException('Current password is incorrect');
+    assertPasswordPolicy(newPassword, [user.email, user.firstName, user.lastName]);
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     await this.prisma.user.update({ where: { id }, data: { passwordHash } });
     await this.prisma.session.deleteMany({ where: { userId: id } });

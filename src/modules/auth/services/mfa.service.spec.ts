@@ -39,4 +39,15 @@ describe('MfaService', () => {
       [expect.not.stringContaining(result.secret), 'user-1'],
     );
   });
+
+  it('rotates recovery codes after verifying an existing factor', async () => {
+    jest.spyOn(service, 'verifyUserCode').mockResolvedValue(true);
+    db.execute.mockResolvedValue({ affectedRows: 1 });
+
+    const result = await service.regenerateRecoveryCodes('user-1', '123456');
+
+    expect(result.recoveryCodes).toHaveLength(10);
+    expect(new Set(result.recoveryCodes).size).toBe(10);
+    expect(db.execute).toHaveBeenCalledWith(expect.stringContaining('mfaRecoveryCodes'), [expect.not.stringContaining(result.recoveryCodes[0]), 'user-1']);
+  });
 });

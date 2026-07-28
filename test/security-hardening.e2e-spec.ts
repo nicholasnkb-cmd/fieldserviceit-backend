@@ -3,8 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
-
-const data = (body: any) => body?.data ?? body;
+import { authCookie, authCookieValue } from './auth-cookie.helper';
 
 describe('Security hardening (e2e)', () => {
   let app: INestApplication;
@@ -51,13 +50,15 @@ describe('Security hardening (e2e)', () => {
       .post('/v1/auth/login')
       .send({ email: 'admin@acme.com', password: 'admin123' })
       .expect(200);
-    const first = data(login.body).refreshToken;
+    expect(login.body.accessToken).toBeUndefined();
+    const first = authCookieValue(login, 'fsit_refresh');
 
     const refresh = await request(app.getHttpServer())
       .post('/v1/auth/refresh')
-      .send({ refreshToken: first })
+      .set('Cookie', authCookie(login))
+      .send({})
       .expect(200);
-    const second = data(refresh.body).refreshToken;
+    const second = authCookieValue(refresh, 'fsit_refresh');
 
     await request(app.getHttpServer())
       .post('/v1/auth/refresh')
@@ -84,11 +85,9 @@ describe('Security hardening (e2e)', () => {
       .post('/v1/auth/login')
       .send({ email: 'admin@acme.com', password: 'admin123' })
       .expect(200);
-    const accessToken = data(login.body).accessToken;
-
     await request(app.getHttpServer())
       .get(`/v1/assets/${foreignAssetId}`)
-      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', authCookie(login))
       .expect(404);
   });
 });

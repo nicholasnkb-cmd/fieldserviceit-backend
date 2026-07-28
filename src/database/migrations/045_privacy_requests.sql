@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS PrivacyRequest (
+  id VARCHAR(191) PRIMARY KEY,
+  companyId VARCHAR(191),
+  userId VARCHAR(191),
+  email VARCHAR(191) NOT NULL,
+  requestType VARCHAR(32) NOT NULL,
+  jurisdiction VARCHAR(80),
+  details TEXT,
+  status VARCHAR(32) NOT NULL DEFAULT 'RECEIVED',
+  identityVerifiedAt DATETIME(3),
+  assignedToId VARCHAR(191),
+  resolutionNotes TEXT,
+  dueAt DATETIME(3) NOT NULL,
+  completedAt DATETIME(3),
+  createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX PrivacyRequest_company_status_idx (companyId, status, dueAt),
+  INDEX PrivacyRequest_user_created_idx (userId, createdAt),
+  INDEX PrivacyRequest_email_created_idx (email, createdAt)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

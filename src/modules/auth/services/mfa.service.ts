@@ -105,6 +105,16 @@ export class MfaService {
     return { enabled: false };
   }
 
+  async regenerateRecoveryCodes(userId: string, code: string) {
+    await this.verifyUserCode(userId, code);
+    const recoveryCodes = Array.from({ length: 10 }, () => this.generateRecoveryCode());
+    await this.db.execute(
+      `UPDATE User SET mfaRecoveryCodes = ?, updatedAt = NOW(3) WHERE id = ?`,
+      [JSON.stringify(recoveryCodes.map((item) => this.hashRecoveryCode(item))), userId],
+    );
+    return { recoveryCodes };
+  }
+
   verifyTotp(secret: string, code: string, now = Date.now()) {
     const counter = Math.floor(now / 30_000);
     return [-1, 0, 1].some((offset) => this.safeEqual(this.hotp(secret, counter + offset), String(code || '').trim()));

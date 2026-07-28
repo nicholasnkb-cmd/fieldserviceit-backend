@@ -460,7 +460,7 @@ export class PlatformSecurityService {
   async updateRetentionPolicy(user: CurrentUser, dto: any) {
     this.assertSuperAdmin(user);
     const fields = ['sessionDays', 'auditLogDays', 'errorReportDays', 'emailEventDays', 'networkSnapshotDays', 'syslogDays'];
-    const values = fields.map((field) => this.integer(dto[field], 7, 3650, field === 'auditLogDays' ? 365 : 90));
+    const values = fields.map((field) => this.integer(dto[field], 7, 3650, field === 'auditLogDays' ? 2190 : 90));
     await this.db.execute(
       `UPDATE DataRetentionPolicy SET enabled = ?, sessionDays = ?, auditLogDays = ?, errorReportDays = ?,
        emailEventDays = ?, networkSnapshotDays = ?, syslogDays = ?, updatedById = ?, updatedAt = NOW(3)

@@ -80,4 +80,12 @@ export class HealthController {
   async dashboard(): Promise<HealthDashboard> {
     return this.healthService.dashboard();
   }
+
+  @Get('slo')
+  @Public()
+  @UseGuards(JwtAuthGuard, MonitoringAccessGuard)
+  @AuthorizationExempt('Restricted to monitoring credentials or authenticated administrators', 'security-team', '2027-01-31')
+  async slo() {
+    return this.healthService.slo();
+  }
 }

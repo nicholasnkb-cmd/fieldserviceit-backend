@@ -10,6 +10,7 @@ import * as crypto from 'crypto';
 import { hashCredential } from '../../../common/security/credential-hash';
 import { SessionRepository } from '../../../database/repositories/session.repository';
 import { LegalConsentInput, PRIVACY_VERSION, TERMS_VERSION } from '../legal-consent';
+import { assertPasswordPolicy } from '../../../common/security/password-policy';
 
 const BCRYPT_ROUNDS = 12;
 const LOGIN_LOCK_THRESHOLD = 5;
@@ -147,6 +148,7 @@ export class AuthService {
   }
 
   async registerPublic(dto: RegistrationProfile, context: SessionContext = {}) {
+    assertPasswordPolicy(dto.password, [dto.email, dto.firstName, dto.lastName]);
     this.assertCurrentLegalConsent(dto);
     dto.email = dto.email.toLowerCase().trim();
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
@@ -177,6 +179,7 @@ export class AuthService {
   }
 
   async registerBusiness(dto: BusinessRegistrationProfile, context: SessionContext = {}) {
+    assertPasswordPolicy(dto.password, [dto.email, dto.firstName, dto.lastName, dto.companyName || '']);
     this.assertCurrentLegalConsent(dto);
     dto.email = dto.email.toLowerCase().trim();
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
@@ -346,6 +349,7 @@ export class AuthService {
   }
 
   async resetPassword(token: string, password: string) {
+    assertPasswordPolicy(password);
     const user = await this.findUserByCredential('resetToken', token, 'resetTokenExpiresAt');
     if (!user) throw new BadRequestException('Invalid or expired reset token');
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
@@ -531,6 +535,25 @@ export class AuthService {
     await this.recordLoginSecuritySignals(user, context);
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     return { user: this.responseUser(user), ...tokens };
+  }
+
+  async completePasskeyLogin(userId: string, context: SessionContext = {}) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive) throw new UnauthorizedException('Passkey authentication failed');
+    context.mfaVerifiedAt = new Date();
+    await this.clearLoginFailures(user.email);
+    const tokens = await this.generateTokens(user, context);
+    await this.recordLoginSecuritySignals(user, context);
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    return { user: this.responseUser(user), ...tokens };
+  }
+
+  async regenerateRecoveryCodes(userId: string, code: string, password: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
+      throw new UnauthorizedException('Password confirmation is invalid');
+    }
+    return this.mfaService.regenerateRecoveryCodes(userId, code);
   }
 
   private async generateTokens(user: any, context: SessionContext = {}, existingSessionId?: string, previousRefreshToken?: string) {

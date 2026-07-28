@@ -1,4 +1,4 @@
-import { clearAuthCookies, setAuthCookies } from './auth-cookies';
+import { clearAuthCookies, setAuthCookies, stripTokens } from './auth-cookies';
 
 describe('auth cookies', () => {
   const originalEnv = process.env;
@@ -34,12 +34,18 @@ describe('auth cookies', () => {
       domain: '.fieldserviceit.com',
       httpOnly: true,
       path: '/',
+      priority: 'high',
       sameSite: 'lax',
       secure: true,
     }));
     expect(res.cookie).toHaveBeenCalledWith('fsit_refresh', 'refresh', expect.objectContaining({
       domain: '.fieldserviceit.com',
     }));
+  });
+
+  it('removes raw credentials from browser response bodies', () => {
+    expect(stripTokens({ accessToken: 'access', refreshToken: 'refresh', expiresIn: 900, user: { id: 'user-1' } }))
+      .toEqual({ expiresIn: 900, user: { id: 'user-1' } });
   });
 
   it('uses an explicit cookie domain override for clearing too', () => {

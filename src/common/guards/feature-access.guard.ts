@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@
 import { Reflector } from '@nestjs/core';
 import { FEATURE_KEY } from '../decorators/feature.decorator';
 import { PrismaService } from '../../database/prisma.service';
+import { isFeatureEnabled, parseFeatureMap } from '../authorization/feature-entitlements';
 
 @Injectable()
 export class FeatureAccessGuard implements CanActivate {
@@ -26,7 +27,10 @@ export class FeatureAccessGuard implements CanActivate {
       this.prisma.user.findUnique({ where: { id: user.id }, select: { featureOverrides: true } }),
     ]);
 
-    const companyPlan = await this.prisma.companyPlan.findUnique({ where: { companyId: user.companyId } });
+    const companyPlan = await this.prisma.companyPlan.findUnique({
+      where: { companyId: user.companyId },
+      include: { plan: true },
+    });
     if (companyPlan) {
       const status = String(companyPlan.status || 'ACTIVE').toUpperCase();
       const graceEndsAt = companyPlan.gracePeriodEndsAt ? new Date(companyPlan.gracePeriodEndsAt).getTime() : 0;
@@ -38,10 +42,13 @@ export class FeatureAccessGuard implements CanActivate {
 
     const companySettings = this.parseJson(company?.settings);
     const companyOverrides = companySettings.featureOverrides || {};
-    const userOverrides = this.parseJson(fullUser?.featureOverrides);
-    const explicit = userOverrides[feature] ?? companyOverrides[feature];
+    const userOverrides = parseFeatureMap(fullUser?.featureOverrides);
 
-    if (explicit === false) {
+    if (companyPlan?.plan && !isFeatureEnabled(feature, companyPlan.plan.features, companyOverrides, userOverrides)) {
+      throw new ForbiddenException(`${this.label(feature)} is not included or is disabled for this account`);
+    }
+
+    if (!companyPlan?.plan && (userOverrides[feature] === false || companyOverrides[feature] === false)) {
       throw new ForbiddenException(`${this.label(feature)} is disabled for this account`);
     }
 

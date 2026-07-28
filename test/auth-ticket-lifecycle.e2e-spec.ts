@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PRIVACY_VERSION, TERMS_VERSION } from '../src/modules/auth/legal-consent';
+import { authCookieValue } from './auth-cookie.helper';
 
 const legalConsent = {
   termsAccepted: true,
@@ -36,27 +37,27 @@ describe('Auth & Ticket Lifecycle E2E', () => {
     it('POST /v1/auth/register — creates public user with emailVerified=true', async () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/register')
-        .send({ email: 'lifecycle-public@test.com', password: 'Test123!', firstName: 'Lifecycle', lastName: 'Public', ...legalConsent })
+        .send({ email: 'lifecycle-public@test.com', password: 'Test-password-123!', firstName: 'Lifecycle', lastName: 'Public', ...legalConsent })
         .expect(201);
 
-      expect(res.body.accessToken).toBeDefined();
+      expect(res.body.accessToken).toBeUndefined();
       expect(res.body.user.email).toBe('lifecycle-public@test.com');
       expect(res.body.user.userType).toBe('PUBLIC');
       expect(res.body.user.emailVerified).toBe(true);
-      publicToken = res.body.accessToken;
+      publicToken = authCookieValue(res, 'fsit_access');
     });
 
     it('POST /v1/auth/register — duplicate email returns 409', async () => {
       await request(app.getHttpServer())
         .post('/v1/auth/register')
-        .send({ email: 'lifecycle-public@test.com', password: 'Test123!', firstName: 'Dup', lastName: 'User', ...legalConsent })
+        .send({ email: 'lifecycle-public@test.com', password: 'Test-password-123!', firstName: 'Dup', lastName: 'User', ...legalConsent })
         .expect(409);
     });
 
     it('POST /v1/auth/register — missing fields returns 400', async () => {
       await request(app.getHttpServer())
         .post('/v1/auth/register')
-        .send({ email: 'incomplete@test.com', password: 'Test123!' })
+        .send({ email: 'incomplete@test.com', password: 'Test-password-123!' })
         .expect(400);
     });
   });
@@ -68,10 +69,10 @@ describe('Auth & Ticket Lifecycle E2E', () => {
         .send({ email: 'admin@acme.com', password: 'admin123' })
         .expect(200);
 
-      expect(res.body.accessToken).toBeDefined();
-      expect(res.body.refreshToken).toBeDefined();
+      expect(res.body.accessToken).toBeUndefined();
+      expect(res.body.refreshToken).toBeUndefined();
       expect(res.body.user.email).toBe('admin@acme.com');
-      adminToken = res.body.accessToken;
+      adminToken = authCookieValue(res, 'fsit_access');
     });
 
     it('POST /v1/auth/login — wrong password returns 401', async () => {
@@ -84,7 +85,7 @@ describe('Auth & Ticket Lifecycle E2E', () => {
     it('POST /v1/auth/login — non-existent email returns 401', async () => {
       await request(app.getHttpServer())
         .post('/v1/auth/login')
-        .send({ email: 'nobody@test.com', password: 'Test123!' })
+        .send({ email: 'nobody@test.com', password: 'Test-password-123!' })
         .expect(401);
     });
   });
@@ -125,7 +126,7 @@ describe('Auth & Ticket Lifecycle E2E', () => {
         .send({ email: 'admin@acme.com', password: 'admin123' })
         .expect(200);
 
-      refreshToken = res.body.refreshToken;
+      refreshToken = authCookieValue(res, 'fsit_refresh');
     });
 
     it('POST /v1/auth/refresh — valid refresh token returns new tokens', async () => {
@@ -134,9 +135,9 @@ describe('Auth & Ticket Lifecycle E2E', () => {
         .send({ refreshToken })
         .expect(200);
 
-      expect(res.body.accessToken).toBeDefined();
-      expect(res.body.refreshToken).toBeDefined();
-      refreshToken = res.body.refreshToken;
+      expect(res.body.accessToken).toBeUndefined();
+      expect(res.body.refreshToken).toBeUndefined();
+      refreshToken = authCookieValue(res, 'fsit_refresh');
     });
 
     it('POST /v1/auth/logout — invalidates refresh token', async () => {

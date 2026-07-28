@@ -239,7 +239,7 @@ describe('AuthService', () => {
   describe('registerBusiness', () => {
     const baseDto = {
       email: 'new@company.com',
-      password: 'Test1234!',
+      password: 'Correct-Horse-2026!',
       firstName: 'John',
       lastName: 'Doe',
       termsAccepted: true,

@@ -72,4 +72,5 @@ describe('DatabaseService production controls', () => {
     expect(connection.commit).toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalled();
   });
+
 });

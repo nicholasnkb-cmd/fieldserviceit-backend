@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { LoggerService } from '../../../common/logger/logger.service';
+import { PRODUCT_CATALOG } from '../../../config/product-catalog.generated';
 
 @Injectable()
 export class PlansService implements OnModuleInit {
@@ -21,41 +22,10 @@ export class PlansService implements OnModuleInit {
     const existing = await this.prisma.plan.findMany({});
     if (existing.length > 0) return;
 
-      const plans = [
-        {
-          name: 'Free',
-          description: 'Basic ticket tracking for individuals',
-          monthlyPrice: 0,
-          maxUsers: 1,
-          maxTickets: 50,
-          sortOrder: 0,
-          features: JSON.stringify({ tickets: true, emailNotifications: true, publicSubmit: true }),
-        },
-        {
-          name: 'Starter',
-          description: 'For individuals who need higher-volume support tracking',
-          monthlyPrice: 29,
-          annualPrice: 290,
-          trialDays: 7,
-          maxUsers: 1,
-          maxTickets: -1,
-          sortOrder: 1,
-          features: JSON.stringify({ tickets: true, dispatch: true, assets: true, emailNotifications: true, publicSubmit: true, csvExport: true, apiAccess: true }),
-        },
-        {
-          name: 'Business',
-          description: 'The single company plan with ITSM, RMM, SLA, workflows, and reporting',
-          monthlyPrice: 79,
-          annualPrice: 790,
-          seatMonthlyPrice: 12,
-          seatAnnualPrice: 120,
-          trialDays: 14,
-          maxUsers: -1,
-          maxTickets: -1,
-          sortOrder: 2,
-          features: JSON.stringify({ tickets: true, dispatch: true, assets: true, emailNotifications: true, publicSubmit: true, csvExport: true, apiAccess: true, rmmIntegration: true, slaManagement: true, workflows: true, reporting: true, auditLogs: true, branding: true, timeTracking: true, contracts: true, kb: true }),
-        },
-      ];
+      const plans = PRODUCT_CATALOG.plans.map(({ id: _id, slug: _slug, audience: _audience, ...plan }) => ({
+        ...plan,
+        features: JSON.stringify(plan.features),
+      }));
 
     for (const plan of plans) {
       await this.prisma.plan.create({ data: plan });
