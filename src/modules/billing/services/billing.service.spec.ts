@@ -2,7 +2,7 @@ import { BadRequestException, ServiceUnavailableException } from '@nestjs/common
 import { BillingService } from './billing.service';
 
 describe('BillingService', () => {
-  const consent = { userId: 'user-1', termsAccepted: true, termsVersion: '2026-06-21', privacyVersion: '2026-06-21' };
+  const consent = { userId: 'user-1', termsAccepted: true, termsVersion: '2026-07-29', privacyVersion: '2026-07-29' };
   let service: BillingService;
   let prisma: any;
   let plans: any;

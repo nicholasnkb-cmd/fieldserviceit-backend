@@ -48,7 +48,7 @@ describe('Security hardening (e2e)', () => {
   it('rotates refresh tokens and revokes the family when an old token is replayed', async () => {
     const login = await request(app.getHttpServer())
       .post('/v1/auth/login')
-      .send({ email: 'admin@acme.com', password: 'admin123' })
+      .send({ email: 'admin@acme.com', password: 'River-Cobalt-7284!' })
       .expect(200);
     expect(login.body.accessToken).toBeUndefined();
     const first = authCookieValue(login, 'fsit_refresh');
@@ -83,7 +83,7 @@ describe('Security hardening (e2e)', () => {
   it('does not return an asset belonging to another tenant', async () => {
     const login = await request(app.getHttpServer())
       .post('/v1/auth/login')
-      .send({ email: 'admin@acme.com', password: 'admin123' })
+      .send({ email: 'admin@acme.com', password: 'River-Cobalt-7284!' })
       .expect(200);
     await request(app.getHttpServer())
       .get(`/v1/assets/${foreignAssetId}`)

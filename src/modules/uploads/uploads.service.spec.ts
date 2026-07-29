@@ -3,9 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import sharp = require('sharp');
+import type { Sharp } from 'sharp';
 import { UploadsService } from './uploads.service';
 import { MalwareScannerService } from './malware-scanner.service';
+
+const sharp = require('sharp') as (input?: string | Buffer | object, options?: object) => Sharp;
 
 jest.mock('crypto', () => ({
   ...jest.requireActual('crypto'),

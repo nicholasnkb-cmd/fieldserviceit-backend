@@ -37,7 +37,7 @@ describe('Auth & Ticket Lifecycle E2E', () => {
     it('POST /v1/auth/register — creates public user with emailVerified=true', async () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/register')
-        .send({ email: 'lifecycle-public@test.com', password: 'Test-password-123!', firstName: 'Lifecycle', lastName: 'Public', ...legalConsent })
+        .send({ email: 'lifecycle-public@test.com', password: 'River-Cobalt-7284!', firstName: 'Lifecycle', lastName: 'Public', ...legalConsent })
         .expect(201);
 
       expect(res.body.accessToken).toBeUndefined();
@@ -50,14 +50,14 @@ describe('Auth & Ticket Lifecycle E2E', () => {
     it('POST /v1/auth/register — duplicate email returns 409', async () => {
       await request(app.getHttpServer())
         .post('/v1/auth/register')
-        .send({ email: 'lifecycle-public@test.com', password: 'Test-password-123!', firstName: 'Dup', lastName: 'User', ...legalConsent })
+        .send({ email: 'lifecycle-public@test.com', password: 'River-Cobalt-7284!', firstName: 'Dup', lastName: 'User', ...legalConsent })
         .expect(409);
     });
 
     it('POST /v1/auth/register — missing fields returns 400', async () => {
       await request(app.getHttpServer())
         .post('/v1/auth/register')
-        .send({ email: 'incomplete@test.com', password: 'Test-password-123!' })
+        .send({ email: 'incomplete@test.com', password: 'River-Cobalt-7284!' })
         .expect(400);
     });
   });
@@ -66,7 +66,7 @@ describe('Auth & Ticket Lifecycle E2E', () => {
     it('POST /v1/auth/login — admin login', async () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/login')
-        .send({ email: 'admin@acme.com', password: 'admin123' })
+        .send({ email: 'admin@acme.com', password: 'River-Cobalt-7284!' })
         .expect(200);
 
       expect(res.body.accessToken).toBeUndefined();
@@ -85,7 +85,7 @@ describe('Auth & Ticket Lifecycle E2E', () => {
     it('POST /v1/auth/login — non-existent email returns 401', async () => {
       await request(app.getHttpServer())
         .post('/v1/auth/login')
-        .send({ email: 'nobody@test.com', password: 'Test-password-123!' })
+        .send({ email: 'nobody@test.com', password: 'River-Cobalt-7284!' })
         .expect(401);
     });
   });
@@ -123,7 +123,7 @@ describe('Auth & Ticket Lifecycle E2E', () => {
     it('POST /v1/auth/login — capture refresh token', async () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/login')
-        .send({ email: 'admin@acme.com', password: 'admin123' })
+        .send({ email: 'admin@acme.com', password: 'River-Cobalt-7284!' })
         .expect(200);
 
       refreshToken = authCookieValue(res, 'fsit_refresh');
