@@ -243,8 +243,8 @@ describe('AuthService', () => {
       firstName: 'John',
       lastName: 'Doe',
       termsAccepted: true,
-      termsVersion: '2026-06-21',
-      privacyVersion: '2026-06-21',
+      termsVersion: '2026-07-29',
+      privacyVersion: '2026-07-29',
     };
 
     it('rejects missing or stale legal consent', async () => {
@@ -282,7 +282,7 @@ describe('AuthService', () => {
       );
       expect(mockPrisma.execute).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO UserLegalConsent'),
-        expect.arrayContaining(['user-1', '2026-06-21', '2026-06-21']),
+        expect.arrayContaining(['user-1', '2026-07-29', '2026-07-29']),
       );
       expect(result.user.companyId).toBe('company-1');
       expect(result.user.email).toBe('new@company.com');

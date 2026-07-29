@@ -907,6 +907,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy, OnApplica
     }
   }
 
+  async withConnection<T>(fn: (connection: TransactionClient) => Promise<T>): Promise<T> {
+    const conn = await this.pool.getConnection();
+    try {
+      return await fn(new TransactionClient(conn));
+    } finally {
+      conn.release();
+    }
+  }
+
   user = {
     findUnique: async ({ where, select }: { where: Record<string, any>; select?: Record<string, any> }) => {
       if (Object.values(where).some(v => v === undefined)) return null;

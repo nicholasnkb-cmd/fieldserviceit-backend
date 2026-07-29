@@ -73,4 +73,20 @@ describe('DatabaseService production controls', () => {
     expect(connection.release).toHaveBeenCalled();
   });
 
+  it('keeps a dedicated connection for the callback and always releases it', async () => {
+    const connection = {
+      query: jest.fn().mockResolvedValue([[{ acquired: 1 }], []]),
+      execute: jest.fn(),
+      release: jest.fn(),
+    };
+    mockPool.getConnection.mockResolvedValueOnce(connection);
+    const service = new DatabaseService();
+
+    await service.withConnection(async (client) => {
+      await client.query('SELECT GET_LOCK(?, 0)', ['lock-name']);
+    });
+
+    expect(connection.query).toHaveBeenCalledWith('SELECT GET_LOCK(?, 0)', ['lock-name']);
+    expect(connection.release).toHaveBeenCalledTimes(1);
+  });
 });

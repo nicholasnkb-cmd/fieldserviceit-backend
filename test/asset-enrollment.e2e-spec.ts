@@ -44,7 +44,7 @@ describe('Asset enrollment and lifecycle (E2E)', () => {
 
     const login = await request(app.getHttpServer())
       .post('/v1/auth/login')
-      .send({ email: 'admin@acme.com', password: 'admin123' })
+      .send({ email: 'admin@acme.com', password: 'River-Cobalt-7284!' })
       .expect(200);
     authToken = authCookieValue(login, 'fsit_access');
   });

@@ -21,7 +21,7 @@ describe('Tenant customization E2E', () => {
 
     const login = await request(app.getHttpServer())
       .post('/v1/auth/login')
-      .send({ email: 'admin@acme.com', password: 'admin123' })
+      .send({ email: 'admin@acme.com', password: 'River-Cobalt-7284!' })
       .expect(200);
     adminToken = authCookieValue(login, 'fsit_access');
   });

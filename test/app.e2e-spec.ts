@@ -32,7 +32,7 @@ describe('FieldserviceIT E2E', () => {
     it('POST /v1/auth/login - admin login', async () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/login')
-        .send({ email: 'admin@acme.com', password: 'admin123' })
+        .send({ email: 'admin@acme.com', password: 'River-Cobalt-7284!' })
         .expect(200);
 
       expect(res.body.accessToken).toBeUndefined();
@@ -43,7 +43,7 @@ describe('FieldserviceIT E2E', () => {
     it('POST /v1/auth/login - super admin login', async () => {
       const res = await request(app.getHttpServer())
         .post('/v1/auth/login')
-        .send({ email: 'super@fieldserviceit.com', password: 'admin123' })
+        .send({ email: 'super@fieldserviceit.com', password: 'River-Cobalt-7284!' })
         .expect(200);
 
       superToken = authCookieValue(res, 'fsit_access');
@@ -61,7 +61,7 @@ describe('FieldserviceIT E2E', () => {
         .post('/v1/auth/register')
         .send({
           email: 'e2e-public@test.com',
-          password: 'Test-password-123!',
+          password: 'River-Cobalt-7284!',
           firstName: 'E2E',
           lastName: 'Public',
           termsAccepted: true,

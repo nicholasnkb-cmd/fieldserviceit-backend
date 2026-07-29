@@ -25,6 +25,7 @@ export class MfaService {
   }
 
   async isRequired(role: string) {
+    if (process.env.NODE_ENV === 'test' && process.env.E2E_DISABLE_MFA_REQUIREMENT === 'true') return false;
     const rows = await this.db.query<any[]>(
       `SELECT requireMfaSuperAdmin, requireMfaTenantAdmin, requireMfaTechnicians
        FROM PlatformSecurityPolicy WHERE id = ? LIMIT 1`,

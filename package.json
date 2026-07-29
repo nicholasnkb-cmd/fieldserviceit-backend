@@ -62,7 +62,7 @@
     "prisma": "^4.16.2",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.3",
     "socket.io": "^4.7.5",
     "swagger-ui-express": "^5.0.1",
     "typescript": "^5.4.0",
@@ -89,6 +89,7 @@
     "tsconfig-paths": "^4.2.0"
   },
   "overrides": {
+    "body-parser": "^2.3.0",
     "js-yaml": "^4.1.2",
     "multer": "^2.2.0"
   },

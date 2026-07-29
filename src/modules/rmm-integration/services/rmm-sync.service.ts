@@ -115,7 +115,7 @@ export class RmmSyncService implements OnModuleInit {
     maxAttempts = 3,
   ) {
     const lockName = `rmm:${config.companyId}:${config.provider}`.slice(0, 64);
-    return this.prisma.transaction(async (connection) => {
+    return this.prisma.withConnection(async (connection) => {
       const lockRows = await connection.query<any[]>(`SELECT GET_LOCK(?, 0) AS acquired`, [lockName]);
       if (Number(lockRows[0]?.acquired) !== 1) {
         throw new ConflictException(`A ${config.provider} synchronization is already running`);

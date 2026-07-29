@@ -195,9 +195,14 @@ async function ensureDemoTenant(db: DatabaseService) {
 }
 
 async function ensureUsers(db: DatabaseService, companyId: string) {
-  const passwordHash = await bcrypt.hash('admin123', 12);
+  const adminPassword = 'River-Cobalt-7284!';
+  const passwordHash = await bcrypt.hash(adminPassword, 12);
   const techHash = await bcrypt.hash('tech123', 12);
   const clientHash = await bcrypt.hash('client123', 12);
+
+  if (!(await bcrypt.compare(adminPassword, passwordHash))) {
+    throw new Error('Failed to generate the seeded administrator password hash');
+  }
 
   const users = [
     { id: 'user-super-admin', email: 'super@fieldserviceit.com', firstName: 'Super', lastName: 'Admin', role: 'SUPER_ADMIN', userType: 'BUSINESS', companyId, passwordHash },
